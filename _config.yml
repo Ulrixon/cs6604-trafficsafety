@@ -1,0 +1,16 @@
+# GitHub Pages configuration
+# This file ensures GitHub Pages deployment works correctly
+
+# Enable GitHub Pages
+github_pages:
+  enabled: true
+  
+# Theme: using custom HTML/CSS instead of Jekyll themes
+theme: none
+
+# Include all necessary files
+include:
+  - index.html
+  - styles.css
+  - README.md
+  - CNAME

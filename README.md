@@ -1,6 +1,6 @@
 # Virginia Transportation Safety Index (VTSI)
 
-📄 [**Project Proposal**](proposal.pdf)
+📄 [**Project Proposal**](files/proposal.pdf)
 
 ---
 

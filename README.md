@@ -1,4 +1,4 @@
-# Project Proposal: Developing a Safety Index Based on Intersections
+# ![Project Proposal](files/proposal.pdf): Virginia Transportation Safety Index (VTSI)
 
 ## Team Members
 

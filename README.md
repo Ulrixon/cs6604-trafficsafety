@@ -1,4 +1,4 @@
-# ![Project Proposal](files/proposal.pdf): Virginia Transportation Safety Index (VTSI)
+# [Project Proposal](files/proposal.pdf): Virginia Transportation Safety Index (VTSI)
 
 ## Team Members
 

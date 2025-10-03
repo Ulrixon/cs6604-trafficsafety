@@ -27,4 +27,4 @@ USER appuser
 EXPOSE 8080
 
 # Command to run the FastAPI app. Fly.io provides the PORT env variable.
-CMD ["sh", "-c", "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 2"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 2"]

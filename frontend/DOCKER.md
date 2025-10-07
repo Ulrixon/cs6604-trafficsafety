@@ -178,6 +178,7 @@ ab -n 1000 -c 10 http://localhost:8501/
 ### 1. Layer Caching
 
 The Dockerfile is optimized with:
+
 - UV for faster package installation
 - Requirements copied before code (better caching)
 - Multi-stage pattern
@@ -270,7 +271,7 @@ docker push YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/traffic-safety-dashb
 ✅ **Security**: No secrets in image  
 ✅ **Size optimized**: Slim base image + UV  
 ✅ **Layer caching**: Requirements before code  
-✅ **Graceful shutdown**: Streamlit handles SIGTERM  
+✅ **Graceful shutdown**: Streamlit handles SIGTERM
 
 ## Ready for Production
 

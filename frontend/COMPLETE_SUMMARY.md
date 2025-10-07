@@ -127,15 +127,17 @@ heroku create && git push heroku main
 ## ✨ Key Features Implemented
 
 ### Application Features
+
 ✅ Interactive Folium map with click-to-view details  
 ✅ Visual encoding: size by traffic volume, color by risk  
 ✅ Advanced filtering (name, safety index, traffic volume)  
 ✅ KPI dashboard with real-time metrics  
 ✅ Sortable data table with CSV export  
 ✅ Responsive details panel  
-✅ Legend and tooltips  
+✅ Legend and tooltips
 
 ### Technical Features
+
 ✅ MVC architecture (maintainable)  
 ✅ Pydantic data validation  
 ✅ API caching (5-minute TTL)  
@@ -143,9 +145,10 @@ heroku create && git push heroku main
 ✅ Graceful fallback to sample data  
 ✅ Error handling throughout  
 ✅ Type hints everywhere  
-✅ Comprehensive documentation  
+✅ Comprehensive documentation
 
 ### DevOps Features
+
 ✅ Docker containerization  
 ✅ Multi-stage builds  
 ✅ UV for 10-100x faster installs  
@@ -153,13 +156,14 @@ heroku create && git push heroku main
 ✅ Non-root container user  
 ✅ Environment variable support  
 ✅ 8 cloud platform configs  
-✅ Interactive deployment script  
+✅ Interactive deployment script
 
 ---
 
 ## 📊 API Integration
 
 ### Your Backend API
+
 ```
 URL: https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safety/index/
 Method: GET
@@ -169,6 +173,7 @@ Cache: 5 minutes
 ```
 
 ### How It Works
+
 1. App starts → API call
 2. Data cached for 5 minutes
 3. Next 5 minutes → Served from cache (no API call)
@@ -177,6 +182,7 @@ Cache: 5 minutes
 6. If API fails → Use sample.json fallback
 
 ### Verify API Calls
+
 ```bash
 # Method 1: Interactive tester
 streamlit run test_app_api.py
@@ -195,6 +201,7 @@ See [VERIFY_API.md](VERIFY_API.md) for complete verification guide.
 ## 🐳 Docker Quick Reference
 
 ### Build & Test Locally
+
 ```bash
 # Build
 docker build -t traffic-safety-dashboard .
@@ -207,6 +214,7 @@ docker-compose up
 ```
 
 ### Deploy to Cloud
+
 ```bash
 # Google Cloud Run (easiest)
 gcloud run deploy traffic-safety-dashboard \
@@ -229,30 +237,34 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for 8 platform guides!
 
 ## 📚 Documentation Map
 
-| File | What It Covers | Read When |
-|------|----------------|-----------|
-| **README.md** | Full docs, setup, features | Getting started |
-| **QUICKSTART.md** | Quick commands & reference | Need quick answer |
-| **ARCHITECTURE.md** | System design, data flows | Understanding codebase |
-| **DEPLOYMENT.md** | 8 cloud platforms | Ready to deploy |
-| **DOCKER.md** | Docker build & test | Containerizing |
-| **UV_GUIDE.md** | UV package manager | Want speed boost |
-| **VERIFY_API.md** | Test API connection | Verify backend calls |
-| **API_TESTING.md** | Complete API testing | Deep API testing |
-| **PROJECT_SUMMARY.md** | Build overview | See what was built |
+| File                   | What It Covers             | Read When              |
+| ---------------------- | -------------------------- | ---------------------- |
+| **README.md**          | Full docs, setup, features | Getting started        |
+| **QUICKSTART.md**      | Quick commands & reference | Need quick answer      |
+| **ARCHITECTURE.md**    | System design, data flows  | Understanding codebase |
+| **DEPLOYMENT.md**      | 8 cloud platforms          | Ready to deploy        |
+| **DOCKER.md**          | Docker build & test        | Containerizing         |
+| **UV_GUIDE.md**        | UV package manager         | Want speed boost       |
+| **VERIFY_API.md**      | Test API connection        | Verify backend calls   |
+| **API_TESTING.md**     | Complete API testing       | Deep API testing       |
+| **PROJECT_SUMMARY.md** | Build overview             | See what was built     |
 
 ---
 
 ## 🎯 Common Tasks
 
 ### Change API URL
+
 Edit `app/utils/config.py`:
+
 ```python
 API_URL = "https://your-new-backend.com/api/..."
 ```
 
 ### Adjust Visual Encoding
+
 Edit `app/utils/config.py`:
+
 ```python
 MIN_RADIUS_PX = 6
 MAX_RADIUS_PX = 30
@@ -261,12 +273,15 @@ COLOR_HIGH_THRESHOLD = 75
 ```
 
 ### Change Cache Duration
+
 Edit `app/utils/config.py`:
+
 ```python
 API_CACHE_TTL = 600  # 10 minutes instead of 5
 ```
 
 ### Add New Feature
+
 1. Model → `app/models/`
 2. Service → `app/services/`
 3. Controller → `app/controllers/`
@@ -278,6 +293,7 @@ API_CACHE_TTL = 600  # 10 minutes instead of 5
 ## 🔧 Troubleshooting
 
 ### Import Errors
+
 ```bash
 cd frontend
 pip install -r requirements.txt
@@ -286,6 +302,7 @@ uv pip install -r requirements.txt
 ```
 
 ### API Not Working
+
 ```bash
 # Test it
 python test_api_connection.py
@@ -298,6 +315,7 @@ curl [YOUR_API_URL]
 ```
 
 ### Docker Build Fails
+
 ```bash
 # Check Dockerfile
 cat Dockerfile
@@ -310,6 +328,7 @@ cat .dockerignore
 ```
 
 ### Port Already in Use
+
 ```bash
 # Use different port
 streamlit run app/views/main.py --server.port 8502
@@ -323,6 +342,7 @@ lsof -ti:8501 | xargs kill
 ## 📈 Performance
 
 ### Current Performance
+
 - **App startup**: 2-3 seconds
 - **API call**: 0.5-2.0 seconds (first time)
 - **Cached response**: < 0.1 seconds
@@ -331,6 +351,7 @@ lsof -ti:8501 | xargs kill
 - **Memory usage**: ~200-300MB
 
 ### With UV Package Manager
+
 - **Install speed**: 10-100x faster than pip
 - **Requirements install**: 2-3 seconds (vs 45s with pip)
 
@@ -338,14 +359,14 @@ lsof -ti:8501 | xargs kill
 
 ## 💰 Cost Estimates
 
-| Platform | Free Tier | Paid (Basic) | Best For |
-|----------|-----------|--------------|----------|
-| **Streamlit Cloud** | ✅ Unlimited public | $250/mo | Demos |
-| **Fly.io** | ✅ 3 VMs | $5-10/mo | Production |
-| **Railway** | ✅ 500 hrs | $5/mo | Quick deploy |
-| **Google Cloud Run** | ✅ 2M requests | $5-20/mo | Enterprise |
-| **Heroku** | ⚠️ Limited | $7/mo | Simplicity |
-| **DigitalOcean** | ❌ No | $5/mo | Affordable |
+| Platform             | Free Tier           | Paid (Basic) | Best For     |
+| -------------------- | ------------------- | ------------ | ------------ |
+| **Streamlit Cloud**  | ✅ Unlimited public | $250/mo      | Demos        |
+| **Fly.io**           | ✅ 3 VMs            | $5-10/mo     | Production   |
+| **Railway**          | ✅ 500 hrs          | $5/mo        | Quick deploy |
+| **Google Cloud Run** | ✅ 2M requests      | $5-20/mo     | Enterprise   |
+| **Heroku**           | ⚠️ Limited          | $7/mo        | Simplicity   |
+| **DigitalOcean**     | ❌ No               | $5/mo        | Affordable   |
 
 **Recommendation**: Fly.io or Railway for production ($5-10/mo)
 
@@ -354,6 +375,7 @@ lsof -ti:8501 | xargs kill
 ## 🎓 Technologies Used
 
 ### Core
+
 - **Streamlit** (1.36+) - Web framework
 - **Folium** (0.17+) - Interactive maps
 - **Pydantic** (2.6+) - Data validation
@@ -361,11 +383,13 @@ lsof -ti:8501 | xargs kill
 - **Requests** (2.32+) - HTTP client
 
 ### DevOps
+
 - **Docker** - Containerization
 - **UV** - Ultra-fast package manager
 - **Multi-cloud** - 8 platform support
 
 ### Architecture
+
 - **MVC** - Clean separation of concerns
 - **Caching** - Streamlit decorators
 - **Retry Logic** - Robust error handling
@@ -376,57 +400,65 @@ lsof -ti:8501 | xargs kill
 ## ✅ Production Readiness Checklist
 
 ### Code Quality
+
 ✅ MVC architecture  
 ✅ Type hints throughout  
 ✅ Pydantic validation  
 ✅ Error handling  
 ✅ Logging support  
-✅ Documentation  
+✅ Documentation
 
 ### Security
+
 ✅ Input validation  
 ✅ Non-root container  
 ✅ No secrets in code  
 ✅ XSRF protection  
-✅ HTTPS enforced  
+✅ HTTPS enforced
 
 ### Performance
+
 ✅ API caching  
 ✅ Efficient queries  
 ✅ Optimized Docker image  
 ✅ Health checks  
-✅ Resource limits  
+✅ Resource limits
 
 ### Deployment
+
 ✅ Dockerfile ready  
 ✅ Docker-compose ready  
 ✅ 8 cloud platforms configured  
 ✅ Environment variables  
-✅ Secrets management  
+✅ Secrets management
 
 ### Testing
+
 ✅ API connection test  
 ✅ Interactive tester  
 ✅ Manual test guides  
-✅ Verification docs  
+✅ Verification docs
 
 ---
 
 ## 🚀 Next Steps
 
 ### Immediate (Today)
+
 1. ✅ Install dependencies: `./start-uv.sh` or `./start.sh`
 2. ✅ Test API: `streamlit run test_app_api.py`
 3. ✅ Run app: `streamlit run app/views/main.py`
 4. ✅ Verify in browser: http://localhost:8501
 
 ### Short-term (This Week)
+
 1. Customize config: `app/utils/config.py`
 2. Test Docker: `docker build -t traffic-safety-dashboard .`
 3. Deploy to cloud: Choose from 8 platforms
 4. Share with team
 
 ### Long-term (Future)
+
 1. Add more features (heatmap, historical data, etc.)
 2. Set up CI/CD pipeline
 3. Add monitoring/analytics
@@ -437,16 +469,19 @@ lsof -ti:8501 | xargs kill
 ## 📞 Support & Resources
 
 ### Documentation
+
 - All guides in `frontend/` directory
 - Code comments throughout
 - Architecture diagrams included
 
 ### Testing
+
 - `test_app_api.py` - Interactive tester
 - `test_api_connection.py` - CLI tester
 - Browser DevTools guide
 
 ### Deployment
+
 - 8 platform configurations ready
 - Interactive deployment script
 - Comprehensive guides
@@ -469,6 +504,7 @@ lsof -ti:8501 | xargs kill
 ## 🎉 Ready to Launch!
 
 You have everything you need:
+
 - ✅ Production-ready application
 - ✅ Full documentation
 - ✅ Docker containerization
@@ -478,12 +514,14 @@ You have everything you need:
 - ✅ Comprehensive guides
 
 **Start now:**
+
 ```bash
 cd frontend
 ./start-uv.sh
 ```
 
 **Or deploy:**
+
 ```bash
 cd frontend
 ./deploy.sh
@@ -494,6 +532,6 @@ cd frontend
 **Built with**: Streamlit, Folium, Pydantic, Docker, UV  
 **Version**: 1.0.0  
 **Status**: ✅ Production-Ready  
-**Date**: October 2025  
+**Date**: October 2025
 
 🎉 **Happy deploying!** 🚀

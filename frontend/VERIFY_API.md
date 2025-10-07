@@ -29,12 +29,14 @@ streamlit run test_app_api.py
 ```
 
 **What you'll see:**
+
 - 🔵 **Direct API Call** - Makes fresh request to backend
 - 🟢 **Cached API Call** - Shows exactly how the app works
 - 🔄 **Clear Cache** - Test cache behavior
 - Real-time results, timing, and data validation
 
 **Buttons to click:**
+
 1. Click "🔵 Test Direct API Call" - See raw API response
 2. Click "🟢 Test Cached API Call" - See how app uses the API
 3. Click "🔄 Clear Cache & Retest" - Verify caching works
@@ -46,7 +48,9 @@ streamlit run test_app_api.py
 See the actual network requests in real-time:
 
 ### Steps:
+
 1. **Start the app:**
+
    ```bash
    cd frontend
    streamlit run app/views/main.py
@@ -55,6 +59,7 @@ See the actual network requests in real-time:
 2. **Open browser** to http://localhost:8501
 
 3. **Open DevTools:**
+
    - Press `F12`
    - Or Right-click → "Inspect"
    - Or `Ctrl+Shift+I` (Windows) / `Cmd+Option+I` (Mac)
@@ -66,6 +71,7 @@ See the actual network requests in real-time:
 6. **Refresh the page** (Cmd+R or Ctrl+R)
 
 7. **Look for:**
+
    ```
    Name: index/
    Status: 200
@@ -82,6 +88,7 @@ See the actual network requests in real-time:
 ### What You'll See:
 
 **If API is working:**
+
 ```
 Request URL: https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safety/index/
 Request Method: GET
@@ -90,6 +97,7 @@ Response Time: 450ms
 ```
 
 **If using cached data:**
+
 - You won't see a new request (data served from memory)
 - Click "Refresh Data" button in the app to force a new API call
 
@@ -139,22 +147,22 @@ Open `frontend/app/services/api_client.py` and add at line 87:
 @st.cache_data(ttl=API_CACHE_TTL, show_spinner=False)
 def fetch_intersections_from_api() -> tuple[List[dict], Optional[str]]:
     """Fetch intersection data from the API with caching."""
-    
+
     # ADD THESE LINES ↓↓↓
     import logging
     logging.basicConfig(level=logging.INFO)
     logging.info(f"🔵 API CALL: {API_URL}")
     logging.info(f"🕐 Time: {datetime.now()}")
     # END ADD ↑↑↑
-    
+
     try:
         session = _get_session_with_retries()
         response = session.get(API_URL, timeout=API_TIMEOUT)
-        
+
         # ADD THIS LINE ↓↓↓
         logging.info(f"✅ Response: {response.status_code} in {response.elapsed.total_seconds():.2f}s")
         # END ADD ↑↑↑
-        
+
         response.raise_for_status()
         # ... rest of code
 ```
@@ -168,6 +176,7 @@ Then run the app and **watch the terminal** for log messages!
 The app shows you visually if it's using the API:
 
 ### ✅ API IS WORKING if you see:
+
 - No warning banner at top
 - Real intersection names (e.g., "Main St & 1st Ave")
 - Multiple intersections (more than 10)
@@ -175,6 +184,7 @@ The app shows you visually if it's using the API:
 - Data changes when you click refresh
 
 ### ⚠️ API FAILED if you see:
+
 - Yellow warning banner: "⚠️ Using fallback data: [error]"
 - Intersection names with "(Offline)"
 - Exactly 10 intersections (sample data)
@@ -184,13 +194,13 @@ The app shows you visually if it's using the API:
 
 ## Quick Tests Comparison
 
-| Method | Speed | Detail | Best For |
-|--------|-------|--------|----------|
-| Test App | ⚡ Fast | 🌟🌟🌟🌟🌟 | **Quick verification** |
-| DevTools | ⚡ Fast | 🌟🌟🌟🌟 | **Visual proof** |
-| curl | ⚡⚡ Instant | 🌟🌟🌟 | **Command line** |
-| tcpdump | ⚡⚡ Real-time | 🌟🌟 | **Advanced users** |
-| Logging | ⚡ Fast | 🌟🌟🌟🌟 | **Development** |
+| Method   | Speed          | Detail     | Best For               |
+| -------- | -------------- | ---------- | ---------------------- |
+| Test App | ⚡ Fast        | 🌟🌟🌟🌟🌟 | **Quick verification** |
+| DevTools | ⚡ Fast        | 🌟🌟🌟🌟   | **Visual proof**       |
+| curl     | ⚡⚡ Instant   | 🌟🌟🌟     | **Command line**       |
+| tcpdump  | ⚡⚡ Real-time | 🌟🌟       | **Advanced users**     |
+| Logging  | ⚡ Fast        | 🌟🌟🌟🌟   | **Development**        |
 
 ---
 
@@ -240,7 +250,7 @@ streamlit run test_app_api.py
 
 # 3. In the browser, click all three buttons:
 #    - Test Direct API Call
-#    - Test Cached API Call  
+#    - Test Cached API Call
 #    - Clear Cache & Retest
 
 # 4. Open main app
@@ -266,6 +276,7 @@ streamlit run app/views/main.py
 **Reason**: API call failed, using fallback data.
 
 **Check**:
+
 1. Is backend deployed? Visit URL in browser
 2. Is URL correct in `app/utils/config.py`?
 3. Try: `curl [API_URL]` to test directly
@@ -286,7 +297,7 @@ streamlit run app/views/main.py
 ✅ Open DevTools → See network request  
 ✅ Check for intersection names (not "Offline")  
 ✅ Verify count > 10 intersections  
-✅ Click Refresh button → See new request in DevTools  
+✅ Click Refresh button → See new request in DevTools
 
 **If all pass** → ✅ Your app IS calling the backend API! 🎉
 

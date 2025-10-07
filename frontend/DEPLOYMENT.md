@@ -22,6 +22,7 @@ This guide covers deploying the Streamlit frontend to various cloud platforms.
 **Best for**: Serverless, auto-scaling, pay-per-use
 
 ### Prerequisites
+
 ```bash
 # Install Google Cloud SDK
 brew install google-cloud-sdk  # macOS
@@ -37,6 +38,7 @@ gcloud config set project YOUR_PROJECT_ID
 ### Deployment Steps
 
 #### Option 1: Using gcloud (Recommended)
+
 ```bash
 cd frontend
 
@@ -59,6 +61,7 @@ gcloud run services describe traffic-safety-dashboard \
 ```
 
 #### Option 2: Using Cloud Build
+
 ```bash
 # Build image
 gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/traffic-safety-dashboard
@@ -75,6 +78,7 @@ gcloud run deploy traffic-safety-dashboard \
 ### Cloud Run Configuration File
 
 Create `cloudrun.yaml`:
+
 ```yaml
 apiVersion: serving.knative.dev/v1
 kind: Service
@@ -84,31 +88,33 @@ spec:
   template:
     metadata:
       annotations:
-        autoscaling.knative.dev/maxScale: '10'
-        autoscaling.knative.dev/minScale: '0'
+        autoscaling.knative.dev/maxScale: "10"
+        autoscaling.knative.dev/minScale: "0"
     spec:
       containerConcurrency: 80
       timeoutSeconds: 300
       containers:
-      - image: gcr.io/YOUR_PROJECT_ID/traffic-safety-dashboard
-        ports:
-        - name: http1
-          containerPort: 8501
-        env:
-        - name: PORT
-          value: "8501"
-        resources:
-          limits:
-            cpu: '1'
-            memory: 1Gi
+        - image: gcr.io/YOUR_PROJECT_ID/traffic-safety-dashboard
+          ports:
+            - name: http1
+              containerPort: 8501
+          env:
+            - name: PORT
+              value: "8501"
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
 ```
 
 Deploy with:
+
 ```bash
 gcloud run services replace cloudrun.yaml --region us-central1
 ```
 
 ### Cost Estimate (GCP)
+
 - **Free tier**: 2M requests/month, 180K vCPU-seconds/month
 - **After free tier**: ~$0.05 per hour of compute
 - **Estimated**: $5-20/month for moderate traffic
@@ -120,6 +126,7 @@ gcloud run services replace cloudrun.yaml --region us-central1
 **Best for**: AWS ecosystem integration, fine-grained control
 
 ### Prerequisites
+
 ```bash
 # Install AWS CLI
 brew install awscli  # macOS
@@ -131,6 +138,7 @@ aws configure
 ### Deployment Steps
 
 #### 1. Create ECR Repository
+
 ```bash
 # Create repository
 aws ecr create-repository \
@@ -144,6 +152,7 @@ aws ecr get-login-password --region us-east-1 | \
 ```
 
 #### 2. Build and Push Image
+
 ```bash
 cd frontend
 
@@ -161,6 +170,7 @@ docker push YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/traffic-safety-dashb
 #### 3. Create ECS Task Definition
 
 Create `ecs-task-definition.json`:
+
 ```json
 {
   "family": "traffic-safety-dashboard",
@@ -199,6 +209,7 @@ Create `ecs-task-definition.json`:
 ```
 
 #### 4. Deploy to ECS
+
 ```bash
 # Create log group
 aws logs create-log-group --log-group-name /ecs/traffic-safety-dashboard
@@ -220,6 +231,7 @@ aws ecs create-service \
 ```
 
 ### Cost Estimate (AWS)
+
 - **Fargate**: ~$0.04/vCPU-hour + $0.004/GB-hour
 - **Estimated**: $15-40/month for 1 task running 24/7
 
@@ -230,6 +242,7 @@ aws ecs create-service \
 **Best for**: Quick deployment, Azure integration
 
 ### Prerequisites
+
 ```bash
 # Install Azure CLI
 brew install azure-cli  # macOS
@@ -241,6 +254,7 @@ az login
 ### Deployment Steps
 
 #### 1. Create Resource Group
+
 ```bash
 az group create \
   --name traffic-safety-rg \
@@ -248,6 +262,7 @@ az group create \
 ```
 
 #### 2. Create Container Registry
+
 ```bash
 # Create ACR
 az acr create \
@@ -260,6 +275,7 @@ az acr login --name trafficsafetyacr
 ```
 
 #### 3. Build and Push
+
 ```bash
 cd frontend
 
@@ -271,6 +287,7 @@ az acr build \
 ```
 
 #### 4. Deploy Container Instance
+
 ```bash
 az container create \
   --resource-group traffic-safety-rg \
@@ -293,6 +310,7 @@ az container show \
 ```
 
 ### Cost Estimate (Azure)
+
 - **Container Instances**: ~$0.0000125/vCPU-second + $0.0000014/GB-second
 - **Estimated**: $30-50/month for 24/7 operation
 
@@ -303,6 +321,7 @@ az container show \
 **Best for**: Simplest deployment, built-in CI/CD
 
 ### Prerequisites
+
 ```bash
 # Install Heroku CLI
 brew tap heroku/brew && brew install heroku  # macOS
@@ -314,6 +333,7 @@ heroku login
 ### Deployment Steps
 
 #### 1. Create Heroku App
+
 ```bash
 cd frontend
 
@@ -325,6 +345,7 @@ heroku stack:set container
 ```
 
 #### 2. Create `heroku.yml`
+
 ```yaml
 build:
   docker:
@@ -334,6 +355,7 @@ run:
 ```
 
 #### 3. Deploy
+
 ```bash
 # Deploy
 git add .
@@ -345,6 +367,7 @@ heroku open
 ```
 
 #### Alternative: Using Container Registry
+
 ```bash
 # Login to Heroku Container Registry
 heroku container:login
@@ -360,6 +383,7 @@ heroku open
 ```
 
 ### Cost Estimate (Heroku)
+
 - **Free tier**: Limited hours, sleeps after 30 min
 - **Hobby**: $7/month (no sleep)
 - **Standard**: $25/month (better performance)
@@ -373,6 +397,7 @@ heroku open
 ### Deployment Steps
 
 1. **Push code to GitHub**
+
    ```bash
    git add .
    git commit -m "Prepare for Streamlit Cloud"
@@ -380,6 +405,7 @@ heroku open
    ```
 
 2. **Deploy on Streamlit Cloud**
+
    - Go to [share.streamlit.io](https://share.streamlit.io)
    - Click "New app"
    - Select repository: `Ulrixon/cs6604-trafficsafety`
@@ -395,6 +421,7 @@ heroku open
    ```
 
 ### Cost
+
 - **Free**: Unlimited public apps
 - **Streamlit for Teams**: $250/month (private apps, custom domains)
 
@@ -407,6 +434,7 @@ heroku open
 ### Deployment Steps
 
 #### 1. Create App
+
 ```bash
 # Install doctl
 brew install doctl  # macOS
@@ -416,28 +444,30 @@ doctl auth init
 ```
 
 #### 2. Create `app.yaml`
+
 ```yaml
 name: traffic-safety-dashboard
 services:
-- name: web
-  dockerfile_path: Dockerfile
-  github:
-    repo: Ulrixon/cs6604-trafficsafety
-    branch: frontend
-    deploy_on_push: true
-  http_port: 8501
-  instance_count: 1
-  instance_size_slug: basic-xxs
-  routes:
-  - path: /
-  health_check:
-    http_path: /_stcore/health
-  envs:
-  - key: PORT
-    value: "8501"
+  - name: web
+    dockerfile_path: Dockerfile
+    github:
+      repo: Ulrixon/cs6604-trafficsafety
+      branch: frontend
+      deploy_on_push: true
+    http_port: 8501
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    routes:
+      - path: /
+    health_check:
+      http_path: /_stcore/health
+    envs:
+      - key: PORT
+        value: "8501"
 ```
 
 #### 3. Deploy
+
 ```bash
 # Create app
 doctl apps create --spec app.yaml
@@ -451,6 +481,7 @@ doctl apps create --spec app.yaml
 ```
 
 ### Cost Estimate (DigitalOcean)
+
 - **Basic**: $5/month (512MB RAM, 1 vCPU)
 - **Professional**: $12/month (1GB RAM, 1 vCPU)
 
@@ -463,6 +494,7 @@ doctl apps create --spec app.yaml
 ### Deployment Steps
 
 #### 1. Install Fly CLI
+
 ```bash
 # Install
 curl -L https://fly.io/install.sh | sh
@@ -472,6 +504,7 @@ fly auth login
 ```
 
 #### 2. Launch App
+
 ```bash
 cd frontend
 
@@ -482,6 +515,7 @@ fly launch --name traffic-safety-dashboard --region sjc
 ```
 
 #### 3. Configure `fly.toml`
+
 ```toml
 app = "traffic-safety-dashboard"
 primary_region = "sjc"
@@ -506,6 +540,7 @@ primary_region = "sjc"
 ```
 
 #### 4. Deploy
+
 ```bash
 # Deploy
 fly deploy
@@ -515,6 +550,7 @@ fly open
 ```
 
 ### Cost Estimate (Fly.io)
+
 - **Free tier**: 3 shared-cpu-1x VMs with 256MB RAM
 - **Paid**: ~$5-10/month for better specs
 
@@ -527,6 +563,7 @@ fly open
 ### Deployment Steps
 
 1. **Via Web UI**:
+
    - Go to [railway.app](https://railway.app)
    - Click "New Project"
    - Select "Deploy from GitHub repo"
@@ -535,22 +572,24 @@ fly open
    - Click "Deploy"
 
 2. **Via CLI**:
+
    ```bash
    # Install
    npm i -g @railway/cli
-   
+
    # Login
    railway login
-   
+
    # Initialize
    cd frontend
    railway init
-   
+
    # Deploy
    railway up
    ```
 
 ### Cost Estimate (Railway)
+
 - **Hobby**: $5/month (500 hours, $0.01/hour after)
 - **Pro**: $20/month (more resources)
 
@@ -559,6 +598,7 @@ fly open
 ## 🔒 Security Considerations
 
 ### Environment Variables
+
 Never commit secrets! Use environment variables:
 
 ```bash
@@ -577,37 +617,42 @@ heroku config:set API_KEY=your-secret-key
 ```
 
 ### HTTPS
+
 All platforms provide HTTPS by default except Docker Compose (use nginx reverse proxy).
 
 ---
 
 ## 📊 Cost Comparison Summary
 
-| Platform | Free Tier | Paid (Basic) | Best For |
-|----------|-----------|--------------|----------|
-| Streamlit Cloud | ✅ Yes | $250/mo | Public demos |
-| Google Cloud Run | 2M requests | $5-20/mo | Auto-scaling |
-| Fly.io | 3 VMs | $5-10/mo | Edge/global |
-| Railway | 500 hrs | $5/mo | Quick deploy |
-| DigitalOcean | ❌ No | $5/mo | Affordable |
-| Heroku | Limited | $7/mo | Simplicity |
-| AWS ECS | ❌ No | $15-40/mo | AWS ecosystem |
-| Azure ACI | ❌ No | $30-50/mo | Azure ecosystem |
+| Platform         | Free Tier   | Paid (Basic) | Best For        |
+| ---------------- | ----------- | ------------ | --------------- |
+| Streamlit Cloud  | ✅ Yes      | $250/mo      | Public demos    |
+| Google Cloud Run | 2M requests | $5-20/mo     | Auto-scaling    |
+| Fly.io           | 3 VMs       | $5-10/mo     | Edge/global     |
+| Railway          | 500 hrs     | $5/mo        | Quick deploy    |
+| DigitalOcean     | ❌ No       | $5/mo        | Affordable      |
+| Heroku           | Limited     | $7/mo        | Simplicity      |
+| AWS ECS          | ❌ No       | $15-40/mo    | AWS ecosystem   |
+| Azure ACI        | ❌ No       | $30-50/mo    | Azure ecosystem |
 
 ---
 
 ## 🚀 Recommended Deployment
 
 ### For Development/Testing
+
 **Streamlit Community Cloud** - Free, easy, perfect for demos
 
 ### For Production (Low Traffic)
+
 **Fly.io** or **Railway** - Affordable, easy to scale
 
 ### For Production (High Traffic)
+
 **Google Cloud Run** - Auto-scales, pay per use, enterprise-ready
 
 ### For Enterprise
+
 **AWS ECS** or **Azure ACI** - Full control, compliance, integration
 
 ---
@@ -615,18 +660,21 @@ All platforms provide HTTPS by default except Docker Compose (use nginx reverse 
 ## 📝 Quick Deploy Commands
 
 ### Google Cloud Run (Fastest)
+
 ```bash
 cd frontend
 gcloud run deploy traffic-safety-dashboard --source . --region us-central1 --allow-unauthenticated
 ```
 
 ### Railway (Easiest)
+
 ```bash
 cd frontend
 railway init && railway up
 ```
 
 ### Fly.io (Best Value)
+
 ```bash
 cd frontend
 fly launch && fly deploy

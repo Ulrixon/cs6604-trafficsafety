@@ -1,6 +1,0 @@
-streamlit>=1.36
-requests>=2.32
-pydantic>=2.6
-pandas>=2.2
-folium>=0.17
-streamlit-folium>=0.21

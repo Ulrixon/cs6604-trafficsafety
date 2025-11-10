@@ -1,84 +1,147 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Virginia Transportation Safety Index (VTSI)</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
-    body {
-      background-color: #f8f9fa;
-    }
+    body { background-color: #f8f9fa; }
     .hero {
       background: linear-gradient(135deg, #800000, #550000);
-      color: white;
-      padding: 60px 20px;
-      text-align: center;
+      color: white; padding: 60px 20px; text-align: center;
     }
     .team-card img {
-      border-radius: 50%;
-      width: 150px;
-      height: 150px;
-      object-fit: cover;
-      margin-bottom: 15px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+      border-radius: 50%; width: 150px; height: 150px; object-fit: cover;
+      margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.2);
     }
-    footer {
-      background: #343a40;
-      color: #ccc;
-      text-align: center;
-      padding: 20px 0;
-      margin-top: 40px;
+    .section-title { font-weight: 700; }
+    .pill {
+      display: inline-block; background: #fff; color: #800000;
+      border: 1px solid #a33; border-radius: 999px; padding: 6px 14px; font-weight: 600;
     }
+    .icon-bullet { font-size: 1.25rem; width: 1.75rem; display: inline-block; }
+    .card-soft {
+      border: 0; border-radius: 1rem; box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+    }
+    footer { background: #343a40; color: #ccc; text-align: center; padding: 20px 0; margin-top: 40px; }
     footer a { color: #f8f9fa; text-decoration: none; }
   </style>
 </head>
 <body>
 
-  <!-- Hero Section -->
-  <div class="hero">
+  <!-- Hero -->
+  <header class="hero">
     <h1 class="display-4">Virginia Transportation Safety Index (VTSI)</h1>
-    <p class="lead">Improving roadway safety with data-driven insights</p>
-    <a href="files/proposal.pdf" class="btn btn-light btn-lg mt-3">📄 View Project Proposal</a>
-  </div>
+    <p class="lead mb-3">Improving roadway safety with data-driven insights</p>
+    <div class="d-flex gap-2 justify-content-center flex-wrap">
+      <a href="files/proposal.pdf" class="btn btn-light btn-lg">📄 View Project Proposal</a>
+      <a href="files/checkpoint.pdf" class="btn btn-outline-light btn-lg">✅ View Checkpoint Report</a>
+    </div>
+  </header>
 
-  <!-- Team Section -->
-  <div class="container my-5">
+  <!-- Project Overview -->
+  <section class="container my-5">
+    <div class="row justify-content-center">
+      <div class="col-lg-10">
+        <div class="card card-soft p-4 p-md-5">
+          <div class="mb-3"><span class="pill">🚦 Project Overview</span></div>
+          <p class="mb-3">
+            The Virginia Transportation Safety Index (VTSI) project develops a dynamic, data-driven safety scoring system for intersections and roadway segments across Virginia.
+            We combine crash data, traffic volumes, and severity weighting to provide real-time, actionable insights for improving roadway safety.
+          </p>
+          <div class="row g-4 mt-2">
+            <div class="col-md-6">
+              <div class="p-3 bg-light rounded-4 h-100">
+                <h5 class="mb-2">Traffic Intersection</h5>
+                <p class="mb-0">
+                  Our scoring focuses on intersection-level risk, leveraging temporal patterns (e.g., peak hours), geometric context, approach speeds,
+                  and multimodal activity to surface locations needing near-term attention.
+                </p>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="p-3 bg-light rounded-4 h-100">
+                <h5 class="mb-2">Roadway Segments</h5>
+                <p class="mb-0">
+                  Segment scores normalize crash frequency by exposure (AADT) and weight by severity to identify corridors with disproportionate safety risk.
+                </p>
+              </div>
+            </div>
+          </div>
+          <!-- Key Data Sources -->
+          <hr class="my-4"/>
+          <h4 class="section-title mb-3">📊 Key Data Sources</h4>
+          <ul class="list-unstyled mb-0">
+            <li class="mb-2"><span class="icon-bullet">🛣️</span><strong>VDOT Crash Data</strong> – detailed crash records including severity, time, location, and contributing factors.</li>
+            <li class="mb-2"><span class="icon-bullet">🚗</span><strong>Traffic Volume Data (AADT)</strong> – exposure measures to normalize crash counts.</li>
+            <li class="mb-2"><span class="icon-bullet">🚦</span><strong>VTTI Smart Intersections</strong> – real-time data on vehicle and pedestrian movement in Northern Virginia.</li>
+            <li class="mb-2"><span class="icon-bullet">🚇</span><strong>WMATA Transit Data</strong> – ridership and scheduling information for multimodal safety analysis.</li>
+            <li class="mb-1"><span class="icon-bullet">🌧️</span><strong>Weather & Social Media Feeds</strong> – supplemental contextual signals for risk assessment.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Files -->
+  <section class="container my-5">
+    <h2 class="text-center mb-4">Project Files</h2>
+    <div class="row g-4 justify-content-center">
+      <div class="col-md-5">
+        <div class="card card-soft h-100">
+          <div class="card-body">
+            <h5 class="card-title">📄 Project Proposal</h5>
+            <p class="card-text">Full write-up of problem framing, methods, and deliverables.</p>
+            <a class="btn btn-primary" href="files/proposal.pdf">Open Proposal</a>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-5">
+        <div class="card card-soft h-100">
+          <div class="card-body">
+            <h5 class="card-title">✅ Checkpoint Report</h5>
+            <p class="card-text">Progress summary with milestones, interim results, and next steps.</p>
+            <a class="btn btn-primary" href="files/checkpoint.pdf">Open Checkpoint</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Team -->
+  <section class="container my-5">
     <h2 class="text-center mb-4">Meet the Team</h2>
     <div class="row justify-content-center">
-      
       <!-- Jason -->
       <div class="col-md-4 text-center mb-4">
         <div class="card team-card p-3 shadow-sm">
-          <img src="images/jason.jpg" alt="Jason Cusati">
+          <img src="images/jason.jpg" alt="Jason Cusati" />
           <h5 class="mt-2">Jason Cusati</h5>
-          <p>Computer Science<br>Virginia Tech, Blacksburg, VA</p>
+          <p>Computer Science<br/>Virginia Tech, Blacksburg, VA</p>
           <a href="mailto:djjay@vt.edu" class="btn btn-outline-dark btn-sm">Email</a>
         </div>
       </div>
-
       <!-- Cheng-Shun -->
       <div class="col-md-4 text-center mb-4">
         <div class="card team-card p-3 shadow-sm">
-          <img src="images/chengshun.jpg" alt="Cheng-Shun Chuang">
+          <img src="images/chengshun.jpg" alt="Cheng-Shun Chuang" />
           <h5 class="mt-2">Cheng-Shun Chuang</h5>
-          <p>Computer Science<br>Virginia Tech, Alexandria, VA</p>
+          <p>Computer Science<br/>Virginia Tech, Alexandria, VA</p>
           <a href="mailto:cchengshun@vt.edu" class="btn btn-outline-dark btn-sm">Email</a>
         </div>
       </div>
-
       <!-- Victory -->
       <div class="col-md-4 text-center mb-4">
         <div class="card team-card p-3 shadow-sm">
-          <img src="images/victory.jpg" alt="Victory Uhunmwangho">
+          <img src="images/victory.jpg" alt="Victory Uhunmwangho" />
           <h5 class="mt-2">Victory Uhunmwangho</h5>
-          <p>Computer Science<br>Virginia Tech, Blacksburg, VA</p>
+          <p>Computer Science<br/>Virginia Tech, Blacksburg, VA</p>
           <a href="mailto:victoryu@vt.edu" class="btn btn-outline-dark btn-sm">Email</a>
         </div>
       </div>
-
     </div>
-  </div>
+  </section>
 
   <!-- Footer -->
   <footer>
@@ -87,3 +150,4 @@
 
 </body>
 </html>
+

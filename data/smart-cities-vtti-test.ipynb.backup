@@ -2,41 +2,17 @@
  "cells": [
   {
    "cell_type": "code",
-   "execution_count": 1,
+   "execution_count": null,
    "id": "68cafe96",
    "metadata": {},
-   "outputs": [
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Requirement already satisfied: trino in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from -r requirements.txt (line 1)) (0.336.0)\n",
-      "Requirement already satisfied: pandas in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from -r requirements.txt (line 2)) (2.3.3)\n",
-      "Requirement already satisfied: lz4 in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from trino->-r requirements.txt (line 1)) (4.4.4)\n",
-      "Requirement already satisfied: orjson>=3.11.0 in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from trino->-r requirements.txt (line 1)) (3.11.4)\n",
-      "Requirement already satisfied: python-dateutil in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from trino->-r requirements.txt (line 1)) (2.9.0.post0)\n",
-      "Requirement already satisfied: pytz in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from trino->-r requirements.txt (line 1)) (2025.2)\n",
-      "Requirement already satisfied: requests>=2.32.4 in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from trino->-r requirements.txt (line 1)) (2.32.5)\n",
-      "Requirement already satisfied: tzlocal in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from trino->-r requirements.txt (line 1)) (5.3.1)\n",
-      "Requirement already satisfied: zstandard in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from trino->-r requirements.txt (line 1)) (0.25.0)\n",
-      "Requirement already satisfied: numpy>=1.26.0 in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from pandas->-r requirements.txt (line 2)) (2.3.4)\n",
-      "Requirement already satisfied: tzdata>=2022.7 in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from pandas->-r requirements.txt (line 2)) (2025.2)\n",
-      "Requirement already satisfied: six>=1.5 in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from python-dateutil->trino->-r requirements.txt (line 1)) (1.17.0)\n",
-      "Requirement already satisfied: charset_normalizer<4,>=2 in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from requests>=2.32.4->trino->-r requirements.txt (line 1)) (3.4.4)\n",
-      "Requirement already satisfied: idna<4,>=2.5 in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from requests>=2.32.4->trino->-r requirements.txt (line 1)) (3.11)\n",
-      "Requirement already satisfied: urllib3<3,>=1.21.1 in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from requests>=2.32.4->trino->-r requirements.txt (line 1)) (2.5.0)\n",
-      "Requirement already satisfied: certifi>=2017.4.17 in c:\\code\\git\\cs6604-trafficsafety\\.conda\\lib\\site-packages (from requests>=2.32.4->trino->-r requirements.txt (line 1)) (2025.10.5)\n",
-      "Note: you may need to restart the kernel to use updated packages.\n"
-     ]
-    }
-   ],
+   "outputs": [],
    "source": [
     "%pip install -r requirements.txt"
    ]
   },
   {
    "cell_type": "code",
-   "execution_count": 2,
+   "execution_count": 23,
    "id": "8be8c6ce",
    "metadata": {},
    "outputs": [],
@@ -57,7 +33,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 3,
+   "execution_count": 24,
    "id": "366f8169",
    "metadata": {},
    "outputs": [
@@ -66,7 +42,7 @@
      "output_type": "stream",
      "text": [
       "Open the following URL in browser for the external authentication:\n",
-      "https://smart-cities-trino.pre-prod.cloud.vtti.vt.edu/oauth2/token/initiate/fce4579b1585d674e3cf764eb23fb51099ed5b161e042eb81db8a63047eaac6f\n",
+      "https://smart-cities-trino.pre-prod.cloud.vtti.vt.edu/oauth2/token/initiate/2c9e1c25729ab3c719827f2efe20f6c57f4c19bc83283feb7396f162b6374c16\n",
       "[['alexandria'], ['cci'], ['falls-church'], ['information_schema'], ['smart_cities_test'], ['system'], ['tables'], ['vtti']]\n"
      ]
     }
@@ -80,7 +56,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 4,
+   "execution_count": 7,
    "id": "835a08a9",
    "metadata": {},
    "outputs": [
@@ -99,7 +75,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 5,
+   "execution_count": 8,
    "id": "ecbca743",
    "metadata": {},
    "outputs": [
@@ -118,7 +94,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 6,
+   "execution_count": 9,
    "id": "05016733",
    "metadata": {},
    "outputs": [
@@ -222,7 +198,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 7,
+   "execution_count": 10,
    "id": "s0nvwsudvfk",
    "metadata": {},
    "outputs": [
@@ -307,7 +283,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 8,
+   "execution_count": 11,
    "id": "l1b64brjzm",
    "metadata": {},
    "outputs": [
@@ -318,9 +294,43 @@
       "================================================================================\n",
       "ALEXANDRIA SCHEMA - BSM Table\n",
       "================================================================================\n",
-      "Empty DataFrame\n",
-      "Columns: [Column, Data Type]\n",
-      "Index: []\n"
+      "                      Column  Data Type\n",
+      "0                       city    varchar\n",
+      "1               intersection    varchar\n",
+      "2                      table    varchar\n",
+      "3          publish_timestamp     bigint\n",
+      "4              location_name    varchar\n",
+      "5                source_type    varchar\n",
+      "6                vendor_name    varchar\n",
+      "7             vendor_version    varchar\n",
+      "8                       misc    varchar\n",
+      "9                    msg_cnt    integer\n",
+      "10                        id     bigint\n",
+      "11                  sec_mark    integer\n",
+      "12                       lat     double\n",
+      "13                       lon     double\n",
+      "14                      elev       real\n",
+      "15       accuracy_semi_major       real\n",
+      "16       accuracy_semi_minor       real\n",
+      "17      accuracy_orientation       real\n",
+      "18              transmission    integer\n",
+      "19                     speed       real\n",
+      "20                   heading       real\n",
+      "21                     angle       real\n",
+      "22                 accel_lon       real\n",
+      "23                 accel_lat       real\n",
+      "24                accel_vert       real\n",
+      "25                 accel_yaw       real\n",
+      "26      brake_applied_status    integer\n",
+      "27   traction_control_status    integer\n",
+      "28    anti_lock_brake_status    integer\n",
+      "29  stability_control_status    integer\n",
+      "30       brake_boost_applied    integer\n",
+      "31    auxiliary_brake_status    integer\n",
+      "32                size_width    integer\n",
+      "33               size_length    integer\n",
+      "34     original_content_type    varchar\n",
+      "35          original_content  varbinary\n"
      ]
     }
    ],
@@ -346,7 +356,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 9,
+   "execution_count": 12,
    "id": "058ts384lm93",
    "metadata": {},
    "outputs": [
@@ -466,7 +476,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 10,
+   "execution_count": 13,
    "id": "0s688l7vb3bo",
    "metadata": {},
    "outputs": [
@@ -479,9 +489,43 @@
       "================================================================================\n",
       "\n",
       "Alexandria BSM Schema:\n",
-      "Empty DataFrame\n",
-      "Columns: [Column, Data Type]\n",
-      "Index: []\n",
+      "                  Column Data Type\n",
+      "                    city   varchar\n",
+      "            intersection   varchar\n",
+      "                   table   varchar\n",
+      "       publish_timestamp    bigint\n",
+      "           location_name   varchar\n",
+      "             source_type   varchar\n",
+      "             vendor_name   varchar\n",
+      "          vendor_version   varchar\n",
+      "                    misc   varchar\n",
+      "                 msg_cnt   integer\n",
+      "                      id    bigint\n",
+      "                sec_mark   integer\n",
+      "                     lat    double\n",
+      "                     lon    double\n",
+      "                    elev      real\n",
+      "     accuracy_semi_major      real\n",
+      "     accuracy_semi_minor      real\n",
+      "    accuracy_orientation      real\n",
+      "            transmission   integer\n",
+      "                   speed      real\n",
+      "                 heading      real\n",
+      "                   angle      real\n",
+      "               accel_lon      real\n",
+      "               accel_lat      real\n",
+      "              accel_vert      real\n",
+      "               accel_yaw      real\n",
+      "    brake_applied_status   integer\n",
+      " traction_control_status   integer\n",
+      "  anti_lock_brake_status   integer\n",
+      "stability_control_status   integer\n",
+      "     brake_boost_applied   integer\n",
+      "  auxiliary_brake_status   integer\n",
+      "              size_width   integer\n",
+      "             size_length   integer\n",
+      "   original_content_type   varchar\n",
+      "        original_content varbinary\n",
       "\n",
       "\n",
       "Alexandria PSM Schema:\n",
@@ -613,7 +657,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 11,
+   "execution_count": null,
    "id": "tkmtv24xpwd",
    "metadata": {},
    "outputs": [
@@ -623,8 +667,8 @@
      "text": [
       "Example: Checking if columns exist in BSM table:\n",
       "WARNING: The following columns do not exist in alexandria.bsm:\n",
-      "  Missing: ['publish_timestamp', 'vehicle_id', 'lat', 'lon', 'speed', 'heading']\n",
-      "  Available columns: []\n",
+      "  Missing: ['vehicle_id']\n",
+      "  Available columns: ['city', 'intersection', 'table', 'publish_timestamp', 'location_name', 'source_type', 'vendor_name', 'vendor_version', 'misc', 'msg_cnt', 'id', 'sec_mark', 'lat', 'lon', 'elev', 'accuracy_semi_major', 'accuracy_semi_minor', 'accuracy_orientation', 'transmission', 'speed', 'heading', 'angle', 'accel_lon', 'accel_lat', 'accel_vert', 'accel_yaw', 'brake_applied_status', 'traction_control_status', 'anti_lock_brake_status', 'stability_control_status', 'brake_boost_applied', 'auxiliary_brake_status', 'size_width', 'size_length', 'original_content_type', 'original_content']\n",
       "\n",
       "================================================================================\n",
       "COMMON FIELD NAME CORRECTIONS:\n",
@@ -705,7 +749,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 12,
+   "execution_count": 26,
    "id": "30hy3yg34xj",
    "metadata": {},
    "outputs": [
@@ -715,9 +759,9 @@
      "text": [
       "Building a query for BSM data:\n",
       "WARNING: The following columns do not exist in alexandria.bsm:\n",
-      "  Missing: ['publish_timestamp', 'vehicle_id', 'lat', 'lon', 'speed']\n",
-      "  Available columns: []\n",
-      "Cannot build query - missing columns: ['publish_timestamp', 'vehicle_id', 'lat', 'lon', 'speed']\n"
+      "  Missing: ['vehicle_id']\n",
+      "  Available columns: ['city', 'intersection', 'table', 'publish_timestamp', 'location_name', 'source_type', 'vendor_name', 'vendor_version', 'misc', 'msg_cnt', 'id', 'sec_mark', 'lat', 'lon', 'elev', 'accuracy_semi_major', 'accuracy_semi_minor', 'accuracy_orientation', 'transmission', 'speed', 'heading', 'angle', 'accel_lon', 'accel_lat', 'accel_vert', 'accel_yaw', 'brake_applied_status', 'traction_control_status', 'anti_lock_brake_status', 'stability_control_status', 'brake_boost_applied', 'auxiliary_brake_status', 'size_width', 'size_length', 'original_content_type', 'original_content']\n",
+      "Cannot build query - missing columns: ['vehicle_id']\n"
      ]
     }
    ],
@@ -771,7 +815,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 13,
+   "execution_count": 27,
    "id": "aolrfk0z9xu",
    "metadata": {},
    "outputs": [
@@ -781,23 +825,48 @@
      "text": [
       "================================================================================\n",
       "VERIFYING ACTUAL COLUMN NAMES IN BSM TABLE\n",
-      "================================================================================\n"
-     ]
-    },
-    {
-     "ename": "TrinoExternalError",
-     "evalue": "TrinoExternalError(type=EXTERNAL, name=ICEBERG_CATALOG_ERROR, message=\"Failed to load table: bsm in alexandria namespace\", query_id=20251112_025236_00037_y6d6c)",
-     "output_type": "error",
-     "traceback": [
-      "\u001b[31m---------------------------------------------------------------------------\u001b[39m",
-      "\u001b[31mTrinoExternalError\u001b[39m                        Traceback (most recent call last)",
-      "\u001b[36mCell\u001b[39m\u001b[36m \u001b[39m\u001b[32mIn[13]\u001b[39m\u001b[32m, line 7\u001b[39m\n\u001b[32m      4\u001b[39m \u001b[38;5;28mprint\u001b[39m(\u001b[33m\"\u001b[39m\u001b[33m=\u001b[39m\u001b[33m\"\u001b[39m * \u001b[32m80\u001b[39m)\n\u001b[32m      6\u001b[39m \u001b[38;5;66;03m# Get a sample row to see actual column names\u001b[39;00m\n\u001b[32m----> \u001b[39m\u001b[32m7\u001b[39m \u001b[43mcur\u001b[49m\u001b[43m.\u001b[49m\u001b[43mexecute\u001b[49m\u001b[43m(\u001b[49m\u001b[33;43m\"\"\"\u001b[39;49m\n\u001b[32m      8\u001b[39m \u001b[33;43mSELECT *\u001b[39;49m\n\u001b[32m      9\u001b[39m \u001b[33;43mFROM smartcities_iceberg.alexandria.bsm\u001b[39;49m\n\u001b[32m     10\u001b[39m \u001b[33;43mLIMIT 1\u001b[39;49m\n\u001b[32m     11\u001b[39m \u001b[33;43m\"\"\"\u001b[39;49m\u001b[43m)\u001b[49m\n\u001b[32m     13\u001b[39m \u001b[38;5;66;03m# Get actual column names from the query result\u001b[39;00m\n\u001b[32m     14\u001b[39m actual_bsm_columns = [desc[\u001b[32m0\u001b[39m] \u001b[38;5;28;01mfor\u001b[39;00m desc \u001b[38;5;129;01min\u001b[39;00m cur.description]\n",
-      "\u001b[36mFile \u001b[39m\u001b[32mc:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\dbapi.py:640\u001b[39m, in \u001b[36mCursor.execute\u001b[39m\u001b[34m(self, operation, params)\u001b[39m\n\u001b[32m    637\u001b[39m \u001b[38;5;28;01melse\u001b[39;00m:\n\u001b[32m    638\u001b[39m     \u001b[38;5;28mself\u001b[39m._query = trino.client.TrinoQuery(\u001b[38;5;28mself\u001b[39m._request, query=operation,\n\u001b[32m    639\u001b[39m                                           legacy_primitive_types=\u001b[38;5;28mself\u001b[39m._legacy_primitive_types)\n\u001b[32m--> \u001b[39m\u001b[32m640\u001b[39m     \u001b[38;5;28mself\u001b[39m._iterator = \u001b[38;5;28miter\u001b[39m(\u001b[38;5;28;43mself\u001b[39;49m\u001b[43m.\u001b[49m\u001b[43m_query\u001b[49m\u001b[43m.\u001b[49m\u001b[43mexecute\u001b[49m\u001b[43m(\u001b[49m\u001b[43m)\u001b[49m)\n\u001b[32m    641\u001b[39m \u001b[38;5;28;01mreturn\u001b[39;00m \u001b[38;5;28mself\u001b[39m\n",
-      "\u001b[36mFile \u001b[39m\u001b[32mc:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py:909\u001b[39m, in \u001b[36mTrinoQuery.execute\u001b[39m\u001b[34m(self, additional_http_headers)\u001b[39m\n\u001b[32m    907\u001b[39m \u001b[38;5;66;03m# Execute should block until at least one row is received or query is finished or cancelled\u001b[39;00m\n\u001b[32m    908\u001b[39m \u001b[38;5;28;01mwhile\u001b[39;00m \u001b[38;5;129;01mnot\u001b[39;00m \u001b[38;5;28mself\u001b[39m.finished \u001b[38;5;129;01mand\u001b[39;00m \u001b[38;5;129;01mnot\u001b[39;00m \u001b[38;5;28mself\u001b[39m.cancelled \u001b[38;5;129;01mand\u001b[39;00m \u001b[38;5;28mlen\u001b[39m(\u001b[38;5;28mself\u001b[39m._result.rows) == \u001b[32m0\u001b[39m:\n\u001b[32m--> \u001b[39m\u001b[32m909\u001b[39m     \u001b[38;5;28mself\u001b[39m._result.rows += \u001b[38;5;28;43mself\u001b[39;49m\u001b[43m.\u001b[49m\u001b[43mfetch\u001b[49m\u001b[43m(\u001b[49m\u001b[43m)\u001b[49m\n\u001b[32m    910\u001b[39m \u001b[38;5;28;01mreturn\u001b[39;00m \u001b[38;5;28mself\u001b[39m._result\n",
-      "\u001b[36mFile \u001b[39m\u001b[32mc:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py:929\u001b[39m, in \u001b[36mTrinoQuery.fetch\u001b[39m\u001b[34m(self)\u001b[39m\n\u001b[32m    927\u001b[39m \u001b[38;5;28;01mexcept\u001b[39;00m requests.exceptions.RequestException \u001b[38;5;28;01mas\u001b[39;00m e:\n\u001b[32m    928\u001b[39m     \u001b[38;5;28;01mraise\u001b[39;00m trino.exceptions.TrinoConnectionError(\u001b[33m\"\u001b[39m\u001b[33mfailed to fetch: \u001b[39m\u001b[38;5;132;01m{}\u001b[39;00m\u001b[33m\"\u001b[39m.format(e))\n\u001b[32m--> \u001b[39m\u001b[32m929\u001b[39m status = \u001b[38;5;28;43mself\u001b[39;49m\u001b[43m.\u001b[49m\u001b[43m_request\u001b[49m\u001b[43m.\u001b[49m\u001b[43mprocess\u001b[49m\u001b[43m(\u001b[49m\u001b[43mresponse\u001b[49m\u001b[43m)\u001b[49m\n\u001b[32m    930\u001b[39m \u001b[38;5;28mself\u001b[39m._update_state(status)\n\u001b[32m    931\u001b[39m \u001b[38;5;28;01mif\u001b[39;00m status.next_uri \u001b[38;5;129;01mis\u001b[39;00m \u001b[38;5;28;01mNone\u001b[39;00m:\n",
-      "\u001b[36mFile \u001b[39m\u001b[32mc:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py:698\u001b[39m, in \u001b[36mTrinoRequest.process\u001b[39m\u001b[34m(self, http_response)\u001b[39m\n\u001b[32m    696\u001b[39m response = json.loads(http_response.text)\n\u001b[32m    697\u001b[39m \u001b[38;5;28;01mif\u001b[39;00m \u001b[33m\"\u001b[39m\u001b[33merror\u001b[39m\u001b[33m\"\u001b[39m \u001b[38;5;129;01min\u001b[39;00m response \u001b[38;5;129;01mand\u001b[39;00m response[\u001b[33m\"\u001b[39m\u001b[33merror\u001b[39m\u001b[33m\"\u001b[39m]:\n\u001b[32m--> \u001b[39m\u001b[32m698\u001b[39m     \u001b[38;5;28;01mraise\u001b[39;00m \u001b[38;5;28;43mself\u001b[39;49m\u001b[43m.\u001b[49m\u001b[43m_process_error\u001b[49m\u001b[43m(\u001b[49m\u001b[43mresponse\u001b[49m\u001b[43m[\u001b[49m\u001b[33;43m\"\u001b[39;49m\u001b[33;43merror\u001b[39;49m\u001b[33;43m\"\u001b[39;49m\u001b[43m]\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mresponse\u001b[49m\u001b[43m.\u001b[49m\u001b[43mget\u001b[49m\u001b[43m(\u001b[49m\u001b[33;43m\"\u001b[39;49m\u001b[33;43mid\u001b[39;49m\u001b[33;43m\"\u001b[39;49m\u001b[43m)\u001b[49m\u001b[43m)\u001b[49m\n\u001b[32m    700\u001b[39m \u001b[38;5;28;01mif\u001b[39;00m constants.HEADER_CLEAR_SESSION \u001b[38;5;129;01min\u001b[39;00m http_response.headers:\n\u001b[32m    701\u001b[39m     \u001b[38;5;28;01mfor\u001b[39;00m prop \u001b[38;5;129;01min\u001b[39;00m get_header_values(\n\u001b[32m    702\u001b[39m         http_response.headers, constants.HEADER_CLEAR_SESSION\n\u001b[32m    703\u001b[39m     ):\n",
-      "\u001b[36mFile \u001b[39m\u001b[32mc:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py:667\u001b[39m, in \u001b[36mTrinoRequest._process_error\u001b[39m\u001b[34m(error, query_id)\u001b[39m\n\u001b[32m    665\u001b[39m error_type = error[\u001b[33m\"\u001b[39m\u001b[33merrorType\u001b[39m\u001b[33m\"\u001b[39m]\n\u001b[32m    666\u001b[39m \u001b[38;5;28;01mif\u001b[39;00m error_type == \u001b[33m\"\u001b[39m\u001b[33mEXTERNAL\u001b[39m\u001b[33m\"\u001b[39m:\n\u001b[32m--> \u001b[39m\u001b[32m667\u001b[39m     \u001b[38;5;28;01mraise\u001b[39;00m exceptions.TrinoExternalError(error, query_id)\n\u001b[32m    668\u001b[39m \u001b[38;5;28;01melif\u001b[39;00m error_type == \u001b[33m\"\u001b[39m\u001b[33mUSER_ERROR\u001b[39m\u001b[33m\"\u001b[39m:\n\u001b[32m    669\u001b[39m     \u001b[38;5;28;01mreturn\u001b[39;00m exceptions.TrinoUserError(error, query_id)\n",
-      "\u001b[31mTrinoExternalError\u001b[39m: TrinoExternalError(type=EXTERNAL, name=ICEBERG_CATALOG_ERROR, message=\"Failed to load table: bsm in alexandria namespace\", query_id=20251112_025236_00037_y6d6c)"
+      "================================================================================\n",
+      "\n",
+      "Actual columns in BSM table (36 total):\n",
+      "   1. city\n",
+      "   2. intersection\n",
+      "   3. table\n",
+      "   4. publish_timestamp\n",
+      "   5. location_name\n",
+      "   6. source_type\n",
+      "   7. vendor_name\n",
+      "   8. vendor_version\n",
+      "   9. misc\n",
+      "  10. msg_cnt\n",
+      "  11. id\n",
+      "  12. sec_mark\n",
+      "  13. lat\n",
+      "  14. lon\n",
+      "  15. elev\n",
+      "  16. accuracy_semi_major\n",
+      "  17. accuracy_semi_minor\n",
+      "  18. accuracy_orientation\n",
+      "  19. transmission\n",
+      "  20. speed\n",
+      "  21. heading\n",
+      "  22. angle\n",
+      "  23. accel_lon\n",
+      "  24. accel_lat\n",
+      "  25. accel_vert\n",
+      "  26. accel_yaw\n",
+      "  27. brake_applied_status\n",
+      "  28. traction_control_status\n",
+      "  29. anti_lock_brake_status\n",
+      "  30. stability_control_status\n",
+      "  31. brake_boost_applied\n",
+      "  32. auxiliary_brake_status\n",
+      "  33. size_width\n",
+      "  34. size_length\n",
+      "  35. original_content_type\n",
+      "  36. original_content\n",
+      "\n",
+      "Columns stored from schema query: 36 total\n",
+      "✓ Schema matches actual columns\n"
      ]
     }
    ],
@@ -833,7 +902,41 @@
    "execution_count": null,
    "id": "8d9qoqv9q8",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "================================================================================\n",
+      "VERIFYING ACTUAL COLUMN NAMES IN SAFETY-EVENT TABLE\n",
+      "================================================================================\n",
+      "\n",
+      "Actual columns in Safety-Event table (13 total):\n",
+      "   1. event_type\n",
+      "   2. event_id\n",
+      "   3. time_at_site\n",
+      "   4. detection_area\n",
+      "   5. camera_id\n",
+      "   6. direction\n",
+      "   7. movement\n",
+      "   8. object1_class\n",
+      "   9. object2_class\n",
+      "  10. city\n",
+      "  11. intersection\n",
+      "  12. table\n",
+      "  13. publish_timestamp\n",
+      "\n",
+      "================================================================================\n",
+      "STORE THESE VERIFIED COLUMNS FOR USE IN QUERIES\n",
+      "================================================================================\n",
+      "\n",
+      "bsm_columns_verified = ['city', 'intersection', 'table', 'publish_timestamp', 'location_name', 'source_type', 'vendor_name', 'vendor_version', 'misc', 'msg_cnt', 'id', 'sec_mark', 'lat', 'lon', 'elev', 'accuracy_semi_major', 'accuracy_semi_minor', 'accuracy_orientation', 'transmission', 'speed', 'heading', 'angle', 'accel_lon', 'accel_lat', 'accel_vert', 'accel_yaw', 'brake_applied_status', 'traction_control_status', 'anti_lock_brake_status', 'stability_control_status', 'brake_boost_applied', 'auxiliary_brake_status', 'size_width', 'size_length', 'original_content_type', 'original_content']\n",
+      "\n",
+      "safety_event_columns_verified = ['event_type', 'event_id', 'time_at_site', 'detection_area', 'camera_id', 'direction', 'movement', 'object1_class', 'object2_class', 'city', 'intersection', 'table', 'publish_timestamp']\n"
+     ]
+    }
+   ],
    "source": [
     "# Check Safety Event columns too\n",
     "print(\"\\n\" + \"=\" * 80)\n",
@@ -896,10 +999,35 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 18,
    "id": "argzlf026c5",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "================================================================================\n",
+      "DATA AVAILABILITY AND TIME RANGES\n",
+      "================================================================================\n",
+      "\n",
+      "Checking alexandria.bsm...\n",
+      "  Error: Could not convert '+57641-08-14 10:06:55.000 America/New_York' into the associated python type\n",
+      "\n",
+      "Checking alexandria.psm...\n",
+      "  Error: Could not convert '+57644-02-14 14:15:42.000 America/New_York' into the associated python type\n",
+      "\n",
+      "Checking alexandria.safety-event...\n",
+      "  Error: Could not convert '+57527-01-15 15:25:49.000 America/New_York' into the associated python type\n",
+      "\n",
+      "Checking alexandria.vehicle-count...\n",
+      "  Error: Could not convert '+57527-02-26 06:51:24.000 America/New_York' into the associated python type\n",
+      "\n",
+      "Checking falls-church.hiresdata...\n",
+      "  Error: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 6:39: mismatched input '-'. Expecting: ',', '.', 'AS', 'CROSS', 'EXCEPT', 'FETCH', 'FOR', 'FULL', 'GROUP', 'HAVING', 'INNER', 'INTERSECT', 'JOIN', 'LEFT', 'LIMIT', 'MATCH_RECOGNIZE', 'NATURAL', 'OFFSET', 'ORDER', 'RIGHT', 'TABLESAMPLE', 'UNION', 'WHERE', 'WINDOW', <EOF>, <identifier>\", query_id=20251111_173415_00042_tsjew)\n"
+     ]
+    }
+   ],
    "source": [
     "# Function to check data availability and time range\n",
     "def check_data_range(schema, table, timestamp_col='publish_timestamp'):\n",
@@ -956,10 +1084,63 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 19,
    "id": "blqomcv0go",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "================================================================================\n",
+      "SAMPLE DATA: Alexandria BSM (Basic Safety Message)\n",
+      "================================================================================\n",
+      "         city   intersection           table  publish_timestamp  \\\n",
+      "0  alexandria  glebe-potomac  alexandria.bsm   1762879458287000   \n",
+      "1  alexandria  glebe-potomac  alexandria.bsm   1762879458283000   \n",
+      "2  alexandria  glebe-potomac  alexandria.bsm   1762879458287000   \n",
+      "3  alexandria  glebe-potomac  alexandria.bsm   1762879458287000   \n",
+      "4  alexandria  glebe-potomac  alexandria.bsm   1762879458283000   \n",
+      "\n",
+      "     location_name source_type vendor_name vendor_version  misc  msg_cnt  ...  \\\n",
+      "0  Glebe & Potomac        ittf        derq           rev1  V2.2       97  ...   \n",
+      "1  Glebe & Potomac        ittf        derq           rev1  V2.2       45  ...   \n",
+      "2  Glebe & Potomac        ittf        derq           rev1  V2.2       82  ...   \n",
+      "3  Glebe & Potomac        ittf        derq           rev1  V2.2       81  ...   \n",
+      "4  Glebe & Potomac        ittf        derq           rev1  V2.2       61  ...   \n",
+      "\n",
+      "   brake_applied_status  traction_control_status  anti_lock_brake_status  \\\n",
+      "0                     0                     None                    None   \n",
+      "1                     0                     None                    None   \n",
+      "2                     0                     None                    None   \n",
+      "3                     0                     None                    None   \n",
+      "4                     0                     None                    None   \n",
+      "\n",
+      "   stability_control_status  brake_boost_applied  auxiliary_brake_status  \\\n",
+      "0                      None                 None                    None   \n",
+      "1                      None                 None                    None   \n",
+      "2                      None                 None                    None   \n",
+      "3                      None                 None                    None   \n",
+      "4                      None                 None                    None   \n",
+      "\n",
+      "   size_width  size_length original_content_type  \\\n",
+      "0         190          450      application/json   \n",
+      "1         190          450      application/json   \n",
+      "2         190          450      application/json   \n",
+      "3         190          450      application/json   \n",
+      "4         190          450      application/json   \n",
+      "\n",
+      "                                    original_content  \n",
+      "0  b'{sourceType=ittf, locationName=Glebe & Potom...  \n",
+      "1  b'{sourceType=ittf, locationName=Glebe & Potom...  \n",
+      "2  b'{sourceType=ittf, locationName=Glebe & Potom...  \n",
+      "3  b'{sourceType=ittf, locationName=Glebe & Potom...  \n",
+      "4  b'{sourceType=ittf, locationName=Glebe & Potom...  \n",
+      "\n",
+      "[5 rows x 36 columns]\n"
+     ]
+    }
+   ],
    "source": [
     "# Get sample data from BSM table (using cursor to avoid pandas warning)\n",
     "print(\"=\" * 80)\n",
@@ -980,10 +1161,41 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 20,
    "id": "p6jyxrlg2x",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "================================================================================\n",
+      "SAMPLE DATA: Alexandria Safety Events\n",
+      "================================================================================\n",
+      "  event_type                  event_id      time_at_site       detection_area  \\\n",
+      "0        LCV  6910d6e6b53ea10012dac887  1762693270494000            South Leg   \n",
+      "1         IC  6910dcc386da330012d41285  1762694771847000  Intersection Center   \n",
+      "2     NM-VRU  6910e2894f51570013a8f6dc  1762696246031000            South Leg   \n",
+      "3         IC  69110db164697100125b2daa  1762707297102000  Intersection Center   \n",
+      "4         IC  6911024ae03ddb00119e6a23  1762704377490000  Intersection Center   \n",
+      "\n",
+      "  camera_id direction movement      object1_class object2_class        city  \\\n",
+      "0         0      None     None               None          None  alexandria   \n",
+      "1         0      None     None               None          None  alexandria   \n",
+      "2         0      None     None  Passenger Vehicle    Pedestrian  alexandria   \n",
+      "3         0      None     None               None          None  alexandria   \n",
+      "4         0      None     None               None          None  alexandria   \n",
+      "\n",
+      "    intersection                    table  publish_timestamp  \n",
+      "0  glebe-potomac  alexandria.safety-event   1762714807465000  \n",
+      "1  glebe-potomac  alexandria.safety-event   1762714807465000  \n",
+      "2  glebe-potomac  alexandria.safety-event   1762714807465000  \n",
+      "3  glebe-potomac  alexandria.safety-event   1762725605146000  \n",
+      "4  glebe-potomac  alexandria.safety-event   1762725605146000  \n"
+     ]
+    }
+   ],
    "source": [
     "# Get sample data from Safety Event table (using cursor to avoid pandas warning)\n",
     "print(\"\\n\" + \"=\" * 80)\n",
@@ -1004,10 +1216,76 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 21,
    "id": "v68sy8dltf8",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "================================================================================\n",
+      "SAMPLE DATA: Falls Church - Median Travel Times\n",
+      "================================================================================\n",
+      "           city data_provider                           table  \\\n",
+      "0  falls-church     MioVision  falls-church.mediantraveltimes   \n",
+      "1  falls-church     MioVision  falls-church.mediantraveltimes   \n",
+      "2  falls-church     MioVision  falls-church.mediantraveltimes   \n",
+      "3  falls-church     MioVision  falls-church.mediantraveltimes   \n",
+      "4  falls-church     MioVision  falls-church.mediantraveltimes   \n",
+      "\n",
+      "                    src_intersection_id  src_intersection  \\\n",
+      "0  0f45e46c-efc1-498a-91c3-f61cfad78ea8  broad-washington   \n",
+      "1  0f45e46c-efc1-498a-91c3-f61cfad78ea8  broad-washington   \n",
+      "2  0f45e46c-efc1-498a-91c3-f61cfad78ea8  broad-washington   \n",
+      "3  0f45e46c-efc1-498a-91c3-f61cfad78ea8  broad-washington   \n",
+      "4  0f45e46c-efc1-498a-91c3-f61cfad78ea8  broad-washington   \n",
+      "\n",
+      "                           src_intersection_name  src_intersection_lat  \\\n",
+      "0  East Broad Street and North Washington Street             38.882233   \n",
+      "1  East Broad Street and North Washington Street             38.882233   \n",
+      "2  East Broad Street and North Washington Street             38.882233   \n",
+      "3  East Broad Street and North Washington Street             38.882233   \n",
+      "4  East Broad Street and North Washington Street             38.882233   \n",
+      "\n",
+      "   src_intersection_long                  dest_intersection_id  \\\n",
+      "0             -77.171086  1909c589-3cfa-4e8b-b759-792c667baa96   \n",
+      "1             -77.171086  1909c589-3cfa-4e8b-b759-792c667baa96   \n",
+      "2             -77.171086  1909c589-3cfa-4e8b-b759-792c667baa96   \n",
+      "3             -77.171086  1909c589-3cfa-4e8b-b759-792c667baa96   \n",
+      "4             -77.171086  1909c589-3cfa-4e8b-b759-792c667baa96   \n",
+      "\n",
+      "  dest_intersection              dest_intersection_name  \\\n",
+      "0       birch-broad  Birch Street and West Broad Street   \n",
+      "1       birch-broad  Birch Street and West Broad Street   \n",
+      "2       birch-broad  Birch Street and West Broad Street   \n",
+      "3       birch-broad  Birch Street and West Broad Street   \n",
+      "4       birch-broad  Birch Street and West Broad Street   \n",
+      "\n",
+      "   dest_intersection_lat  dest_intersection_long  publish_timestamp  \\\n",
+      "0              38.893546              -77.188643   1762444037234000   \n",
+      "1              38.893546              -77.188643   1762444037235000   \n",
+      "2              38.893546              -77.188643   1762444037235000   \n",
+      "3              38.893546              -77.188643   1762444037235000   \n",
+      "4              38.893546              -77.188643   1762444037235000   \n",
+      "\n",
+      "   travel_start_time   travel_end_time  travel_median data_confidence  \\\n",
+      "0   1760792743511000  1760792803511000              0            HIGH   \n",
+      "1   1760792923511000  1760792983511000              0            HIGH   \n",
+      "2   1760792983511000  1760793043511000              0            HIGH   \n",
+      "3   1760792803511000  1760792863511000              0            HIGH   \n",
+      "4   1760792863511000  1760792923511000              0            HIGH   \n",
+      "\n",
+      "                                    original_content  \n",
+      "0  {startTime=2025-10-18T13:05:43.511Z, endTime=2...  \n",
+      "1  {startTime=2025-10-18T13:08:43.511Z, endTime=2...  \n",
+      "2  {startTime=2025-10-18T13:09:43.511Z, endTime=2...  \n",
+      "3  {startTime=2025-10-18T13:06:43.511Z, endTime=2...  \n",
+      "4  {startTime=2025-10-18T13:07:43.511Z, endTime=2...  \n"
+     ]
+    }
+   ],
    "source": [
     "# Get sample data from Falls Church median travel times (using cursor to avoid pandas warning)\n",
     "print(\"\\n\" + \"=\" * 80)\n",
@@ -1069,10 +1347,65 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 28,
    "id": "otvff2r5z",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Collected 1000 BSM records from the last 24 hours\n",
+      "\n",
+      "Columns available: ['timestamp', 'city', 'intersection', 'table', 'publish_timestamp', 'location_name', 'source_type', 'vendor_name', 'vendor_version', 'misc', 'msg_cnt', 'id', 'sec_mark', 'lat', 'lon', 'elev', 'accuracy_semi_major', 'accuracy_semi_minor', 'accuracy_orientation', 'transmission', 'speed', 'heading', 'angle', 'accel_lon', 'accel_lat', 'accel_vert', 'accel_yaw', 'brake_applied_status', 'traction_control_status', 'anti_lock_brake_status', 'stability_control_status', 'brake_boost_applied', 'auxiliary_brake_status', 'size_width', 'size_length', 'original_content_type', 'original_content']\n",
+      "\n",
+      "First few rows:\n",
+      "                  timestamp        city   intersection           table  \\\n",
+      "0 2025-11-11 12:44:31-05:00  alexandria  glebe-potomac  alexandria.bsm   \n",
+      "1 2025-11-11 12:44:31-05:00  alexandria  glebe-potomac  alexandria.bsm   \n",
+      "2 2025-11-11 12:44:31-05:00  alexandria  glebe-potomac  alexandria.bsm   \n",
+      "3 2025-11-11 12:44:31-05:00  alexandria  glebe-potomac  alexandria.bsm   \n",
+      "4 2025-11-11 12:44:31-05:00  alexandria  glebe-potomac  alexandria.bsm   \n",
+      "\n",
+      "   publish_timestamp    location_name source_type vendor_name vendor_version  \\\n",
+      "0   1762883071654000  Glebe & Potomac        ittf        derq           rev1   \n",
+      "1   1762883071654000  Glebe & Potomac        ittf        derq           rev1   \n",
+      "2   1762883071654000  Glebe & Potomac        ittf        derq           rev1   \n",
+      "3   1762883071654000  Glebe & Potomac        ittf        derq           rev1   \n",
+      "4   1762883071654000  Glebe & Potomac        ittf        derq           rev1   \n",
+      "\n",
+      "   misc  ...  brake_applied_status  traction_control_status  \\\n",
+      "0  V2.2  ...                     0                     None   \n",
+      "1  V2.2  ...                     0                     None   \n",
+      "2  V2.2  ...                     0                     None   \n",
+      "3  V2.2  ...                     0                     None   \n",
+      "4  V2.2  ...                     0                     None   \n",
+      "\n",
+      "   anti_lock_brake_status  stability_control_status  brake_boost_applied  \\\n",
+      "0                    None                      None                 None   \n",
+      "1                    None                      None                 None   \n",
+      "2                    None                      None                 None   \n",
+      "3                    None                      None                 None   \n",
+      "4                    None                      None                 None   \n",
+      "\n",
+      "   auxiliary_brake_status  size_width  size_length  original_content_type  \\\n",
+      "0                    None         190          450       application/json   \n",
+      "1                    None         190          450       application/json   \n",
+      "2                    None         190          450       application/json   \n",
+      "3                    None         190          450       application/json   \n",
+      "4                    None         190          450       application/json   \n",
+      "\n",
+      "                                    original_content  \n",
+      "0  b'{sourceType=ittf, locationName=Glebe & Potom...  \n",
+      "1  b'{sourceType=ittf, locationName=Glebe & Potom...  \n",
+      "2  b'{sourceType=ittf, locationName=Glebe & Potom...  \n",
+      "3  b'{sourceType=ittf, locationName=Glebe & Potom...  \n",
+      "4  b'{sourceType=ittf, locationName=Glebe & Potom...  \n",
+      "\n",
+      "[5 rows x 37 columns]\n"
+     ]
+    }
+   ],
    "source": [
     "# Collect BSM data for the last 24 hours\n",
     "# Using SELECT * to get all columns - customize after verifying column names above\n",
@@ -1114,10 +1447,20 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 29,
    "id": "ytyxhosfeb",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Collected 0 safety events\n",
+      "\n",
+      "Columns available: ['timestamp', 'event_type', 'event_id', 'time_at_site', 'detection_area', 'camera_id', 'direction', 'movement', 'object1_class', 'object2_class', 'city', 'intersection', 'table', 'publish_timestamp']\n"
+     ]
+    }
+   ],
    "source": [
     "# Collect safety events for a specific date range\n",
     "# Using SELECT * to get all columns - customize after verifying column names above\n",
@@ -1162,10 +1505,33 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 30,
    "id": "xhonfeub11b",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Collected 169 hourly aggregates\n",
+      "\n",
+      "Columns: ['hour', 'vehicle_count', 'avg_speed', 'max_speed', 'min_speed']\n",
+      "                       hour  vehicle_count  avg_speed  max_speed  min_speed\n",
+      "0 2025-11-11 12:00:00-05:00         125273        NaN        NaN        NaN\n",
+      "1 2025-11-11 11:00:00-05:00         153049        NaN        NaN        NaN\n",
+      "2 2025-11-11 10:00:00-05:00         151151        NaN        NaN        NaN\n",
+      "3 2025-11-11 09:00:00-05:00         154407        NaN        NaN        NaN\n",
+      "4 2025-11-11 08:00:00-05:00         125744        NaN        NaN        NaN\n",
+      "5 2025-11-11 07:00:00-05:00          93338        NaN        NaN        NaN\n",
+      "6 2025-11-11 06:00:00-05:00          58090        NaN        NaN        NaN\n",
+      "7 2025-11-11 05:00:00-05:00          22832        NaN        NaN        NaN\n",
+      "8 2025-11-11 04:00:00-05:00          10789        NaN        NaN        NaN\n",
+      "9 2025-11-11 03:00:00-05:00           4330        NaN        NaN        NaN\n",
+      "\n",
+      "Install matplotlib to visualize the data: %pip install matplotlib\n"
+     ]
+    }
+   ],
    "source": [
     "# Aggregate vehicle counts by hour for the last 7 days\n",
     "# Note: publish_timestamp is a bigint (microseconds since epoch)\n",
@@ -1228,10 +1594,36 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 31,
    "id": "4cwtlmu2957",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "================================================================================\n",
+      "Collecting safety events in daily batches...\n",
+      "================================================================================\n",
+      "Collecting data for 2024-01-01...\n",
+      "  Found 0 records\n",
+      "Collecting data for 2024-01-02...\n",
+      "  Found 0 records\n",
+      "Collecting data for 2024-01-03...\n",
+      "  Found 0 records\n",
+      "Collecting data for 2024-01-04...\n",
+      "  Found 0 records\n",
+      "Collecting data for 2024-01-05...\n",
+      "  Found 0 records\n",
+      "Collecting data for 2024-01-06...\n",
+      "  Found 0 records\n",
+      "Collecting data for 2024-01-07...\n",
+      "  Found 0 records\n",
+      "\n",
+      "No data found in this date range\n"
+     ]
+    }
+   ],
    "source": [
     "from datetime import datetime, timedelta\n",
     "\n",
@@ -1417,10 +1809,22 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 32,
    "id": "9sjupzoy53",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "================================================================================\n",
+      "PHASE 1.2: INTERSECTION DATA OVERLAP ANALYSIS\n",
+      "================================================================================\n",
+      "Error analyzing intersection coverage: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 5:57: Invalid numeric literal: 9999999999999999999\", query_id=20251111_175216_00059_tsjew)\n",
+      "Proceeding with available data...\n"
+     ]
+    }
+   ],
    "source": [
     "# Phase 1.2: Identify intersections with sufficient data overlap\n",
     "print(\"=\" * 80)\n",
@@ -1432,25 +1836,25 @@
     "WITH bsm_intersections AS (\n",
     "    SELECT DISTINCT intersection\n",
     "    FROM alexandria.bsm\n",
-    "    WHERE publish_timestamp > 0 AND publish_timestamp < 9999999999999999\n",
+    "    WHERE publish_timestamp > 0 AND publish_timestamp < 9999999999999999999\n",
     "    LIMIT 100\n",
     "),\n",
     "psm_intersections AS (\n",
     "    SELECT DISTINCT intersection  \n",
     "    FROM alexandria.psm\n",
-    "    WHERE publish_timestamp > 0 AND publish_timestamp < 9999999999999999\n",
+    "    WHERE publish_timestamp > 0 AND publish_timestamp < 9999999999999999999\n",
     "    LIMIT 100\n",
     "),\n",
     "event_intersections AS (\n",
     "    SELECT DISTINCT intersection\n",
     "    FROM alexandria.\"safety-event\"\n",
-    "    WHERE time_at_site > 0 AND time_at_site < 9999999999999999\n",
+    "    WHERE time_at_site > 0 AND time_at_site < 9999999999999999999\n",
     "    LIMIT 100\n",
     "),\n",
     "count_intersections AS (\n",
     "    SELECT DISTINCT intersection\n",
     "    FROM alexandria.\"vehicle-count\"\n",
-    "    WHERE publish_timestamp > 0 AND publish_timestamp < 9999999999999999\n",
+    "    WHERE publish_timestamp > 0 AND publish_timestamp < 9999999999999999999\n",
     "    LIMIT 100\n",
     ")\n",
     "SELECT \n",
@@ -1499,10 +1903,25 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 33,
    "id": "tj7oe82pp6",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "================================================================================\n",
+      "PHASE 2.1: SEVERITY-WEIGHTED BASELINE CONSTRUCTION\n",
+      "================================================================================\n",
+      "\n",
+      "Collecting events from 2025-10-12 to 2025-11-11...\n",
+      "Error collecting baseline events: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 14:47: Invalid numeric literal: 9999999999999999999\", query_id=20251111_175217_00060_tsjew)\n",
+      "⚠ No events found in the specified date range\n",
+      "Try adjusting the date range or checking data availability\n"
+     ]
+    }
+   ],
    "source": [
     "# Phase 2.1: Collect severity-weighted safety events for baseline\n",
     "from datetime import datetime, timedelta\n",
@@ -1536,7 +1955,7 @@
     "    \"\"\"\n",
     "\n",
     "    # Build query with optional filters\n",
-    "    where_clauses = [\"time_at_site > 0\", \"time_at_site < 9999999999999999\"]\n",
+    "    where_clauses = [\"time_at_site > 0\", \"time_at_site < 9999999999999999999\"]\n",
     "\n",
     "    if intersection:\n",
     "        where_clauses.append(f\"intersection = '{intersection}'\")\n",
@@ -1634,10 +2053,28 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 34,
    "id": "foavg978bkb",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "================================================================================\n",
+      "PHASE 2.2: EXPOSURE METRICS CONSTRUCTION\n",
+      "================================================================================\n",
+      "\n",
+      "Collecting exposure metrics from 2025-10-12 to 2025-11-11...\n",
+      "Error collecting exposure metrics: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 13:57: Invalid numeric literal: 9999999999999999999\", query_id=20251111_175217_00061_tsjew)\n",
+      "\n",
+      "⚠ No vehicle count data found\n",
+      "\n",
+      "⚠ No VRU count data found\n"
+     ]
+    }
+   ],
    "source": [
     "# Phase 2.2: Build exposure metrics from vehicle and VRU count data\n",
     "print(\"\\n\" + \"=\" * 80)\n",
@@ -1656,7 +2093,7 @@
     "\n",
     "    # Build WHERE clause\n",
     "    where_clauses = [\"publish_timestamp > 0\",\n",
-    "                     \"publish_timestamp < 9999999999999999\"]\n",
+    "                     \"publish_timestamp < 9999999999999999999\"]\n",
     "\n",
     "    if intersection:\n",
     "        where_clauses.append(f\"intersection = '{intersection}'\")\n",
@@ -1755,9 +2192,9 @@
     "\n",
     "    # Aggregate to 15-minute intervals to match index granularity\n",
     "    vehicle_counts['time_15min'] = pd.to_datetime(\n",
-    "        vehicle_counts['time'], utc=True).dt.floor('15min')\n",
+    "        vehicle_counts['time']).dt.floor('15min')\n",
     "    vru_counts['time_15min'] = pd.to_datetime(\n",
-    "        vru_counts['time'], utc=True).dt.floor('15min')\n",
+    "        vru_counts['time']).dt.floor('15min')\n",
     "\n",
     "    vehicle_15min = vehicle_counts.groupby(['intersection', 'time_15min'])[\n",
     "        'vehicle_count'].sum().reset_index()\n",
@@ -1780,10 +2217,46 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 35,
    "id": "734le8n83k8",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "================================================================================\n",
+      "PHASE 3.1: BSM-DERIVED VEHICLE FEATURES\n",
+      "================================================================================\n",
+      "\n",
+      "Collecting BSM features from 2025-10-12 to 2025-11-11...\n",
+      "Error collecting BSM features: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 15:57: Invalid numeric literal: 9999999999999999999\", query_id=20251111_175217_00062_tsjew)\n",
+      "⚠ No BSM features generated - check data availability\n"
+     ]
+    },
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "Traceback (most recent call last):\n",
+      "  File \"C:\\Users\\djjay\\AppData\\Local\\Temp\\ipykernel_161612\\2768779151.py\", line 64, in collect_bsm_features\n",
+      "    cur.execute(query)\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\dbapi.py\", line 640, in execute\n",
+      "    self._iterator = iter(self._query.execute())\n",
+      "                          ^^^^^^^^^^^^^^^^^^^^^\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py\", line 909, in execute\n",
+      "    self._result.rows += self.fetch()\n",
+      "                         ^^^^^^^^^^^^\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py\", line 929, in fetch\n",
+      "    status = self._request.process(response)\n",
+      "             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py\", line 698, in process\n",
+      "    raise self._process_error(response[\"error\"], response.get(\"id\"))\n",
+      "trino.exceptions.TrinoUserError: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 15:57: Invalid numeric literal: 9999999999999999999\", query_id=20251111_175217_00062_tsjew)\n"
+     ]
+    }
+   ],
    "source": [
     "# Phase 3.1: BSM-derived vehicle features (15-minute aggregates)\n",
     "import numpy as np\n",
@@ -1814,7 +2287,7 @@
     "\n",
     "    # Build WHERE clause\n",
     "    where_clauses = [\"publish_timestamp > 0\",\n",
-    "                     \"publish_timestamp < 9999999999999999\"]\n",
+    "                     \"publish_timestamp < 9999999999999999999\"]\n",
     "\n",
     "    if intersection:\n",
     "        where_clauses.append(f\"intersection = '{intersection}'\")\n",
@@ -1860,7 +2333,7 @@
     "        print(f\"✓ Retrieved {len(df):,} BSM records\")\n",
     "\n",
     "        # Convert time to datetime and create 15-minute bins\n",
-    "        df['time'] = pd.to_datetime(df['time'], utc=True)\n",
+    "        df['time'] = pd.to_datetime(df['time'])\n",
     "        df['time_15min'] = df['time'].dt.floor('15min')\n",
     "\n",
     "        # Identify hard braking events (brake_applied_status & 0x04 for hard braking)\n",
@@ -1984,10 +2457,48 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 36,
    "id": "zdewx17ivq",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "================================================================================\n",
+      "PHASE 3.2: PSM-DERIVED VRU FEATURES\n",
+      "================================================================================\n",
+      "\n",
+      "Collecting PSM features from 2025-10-12 to 2025-11-11...\n",
+      "Error collecting PSM features: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 16:57: Invalid numeric literal: 9999999999999999999\", query_id=20251111_175217_00063_tsjew)\n",
+      "⚠ No PSM features generated\n",
+      "   PSM data may be limited or unavailable for this time period\n",
+      "   The Safety Index can still be computed with reduced VRU component accuracy\n"
+     ]
+    },
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "Traceback (most recent call last):\n",
+      "  File \"C:\\Users\\djjay\\AppData\\Local\\Temp\\ipykernel_161612\\3809972926.py\", line 62, in collect_psm_features\n",
+      "    cur.execute(query)\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\dbapi.py\", line 640, in execute\n",
+      "    self._iterator = iter(self._query.execute())\n",
+      "                          ^^^^^^^^^^^^^^^^^^^^^\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py\", line 909, in execute\n",
+      "    self._result.rows += self.fetch()\n",
+      "                         ^^^^^^^^^^^^\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py\", line 929, in fetch\n",
+      "    status = self._request.process(response)\n",
+      "             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py\", line 698, in process\n",
+      "    raise self._process_error(response[\"error\"], response.get(\"id\"))\n",
+      "trino.exceptions.TrinoUserError: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 16:57: Invalid numeric literal: 9999999999999999999\", query_id=20251111_175217_00063_tsjew)\n"
+     ]
+    }
+   ],
    "source": [
     "# Phase 3.2: PSM-derived VRU features (15-minute aggregates)\n",
     "print(\"\\n\" + \"=\" * 80)\n",
@@ -2016,7 +2527,7 @@
     "\n",
     "    # Build WHERE clause\n",
     "    where_clauses = [\"publish_timestamp > 0\",\n",
-    "                     \"publish_timestamp < 9999999999999999\"]\n",
+    "                     \"publish_timestamp < 9999999999999999999\"]\n",
     "\n",
     "    if intersection:\n",
     "        where_clauses.append(f\"intersection = '{intersection}'\")\n",
@@ -2063,7 +2574,7 @@
     "        print(f\"✓ Retrieved {len(df):,} PSM records\")\n",
     "\n",
     "        # Convert time to datetime and create 15-minute bins\n",
-    "        df['time'] = pd.to_datetime(df['time'], utc=True)\n",
+    "        df['time'] = pd.to_datetime(df['time'])\n",
     "        df['time_15min'] = df['time'].dt.floor('15min')\n",
     "\n",
     "        # Classify VRU types based on basic_type field\n",
@@ -2151,10 +2662,26 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 37,
    "id": "zdxbtsvnfg",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "================================================================================\n",
+      "PHASE 3.3: SAFETY EVENT AGGREGATION\n",
+      "================================================================================\n",
+      "\n",
+      "Aggregating safety events from 2025-10-12 to 2025-11-11...\n",
+      "Error collecting baseline events: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 14:47: Invalid numeric literal: 9999999999999999999\", query_id=20251111_175217_00064_tsjew)\n",
+      "⚠ No safety events to aggregate\n",
+      "⚠ No aggregated events generated\n"
+     ]
+    }
+   ],
    "source": [
     "# Phase 3.3: Aggregate safety events by 15-minute intervals\n",
     "print(\"\\n\" + \"=\" * 80)\n",
@@ -2193,7 +2720,7 @@
     "    print(\"Aggregating to 15-minute intervals...\")\n",
     "\n",
     "    # Convert event_time to datetime and create 15-minute bins\n",
-    "    events_df['event_time'] = pd.to_datetime(events_df['event_time'], utc=True)\n",
+    "    events_df['event_time'] = pd.to_datetime(events_df['event_time'])\n",
     "    events_df['time_15min'] = events_df['event_time'].dt.floor('15min')\n",
     "\n",
     "    # Group by intersection and 15-minute interval\n",
@@ -2284,10 +2811,31 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 38,
    "id": "qe9f5x2bmvi",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "================================================================================\n",
+      "PHASE 4: MASTER FEATURE TABLE CONSTRUCTION\n",
+      "================================================================================\n",
+      "Creating master feature table from collected data...\n",
+      "\n",
+      "Data sources availability:\n",
+      "  ✗ bsm_features\n",
+      "  ✗ psm_features\n",
+      "  ✗ aggregated_events\n",
+      "  ✗ vehicle_counts\n",
+      "  ✗ vru_counts\n",
+      "\n",
+      "⚠ ERROR: Cannot create master feature table - BSM features are required\n"
+     ]
+    }
+   ],
    "source": [
     "# Phase 4: Create master feature table by joining all data sources\n",
     "print(\"\\n\" + \"=\" * 80)\n",
@@ -2324,7 +2872,7 @@
     "    # Aggregate vehicle counts to 15-minute intervals\n",
     "    if len(vehicle_counts) > 0:\n",
     "        vehicle_counts['time_15min'] = pd.to_datetime(\n",
-    "            vehicle_counts['time'], utc=True).dt.floor('15min')\n",
+    "            vehicle_counts['time']).dt.floor('15min')\n",
     "        vehicle_agg = vehicle_counts.groupby(['intersection', 'time_15min'])[\n",
     "            'vehicle_count'].sum().reset_index()\n",
     "        vehicle_agg.rename(\n",
@@ -2341,7 +2889,7 @@
     "    # Aggregate VRU counts to 15-minute intervals\n",
     "    if len(vru_counts) > 0:\n",
     "        vru_counts['time_15min'] = pd.to_datetime(\n",
-    "            vru_counts['time'], utc=True).dt.floor('15min')\n",
+    "            vru_counts['time']).dt.floor('15min')\n",
     "        vru_agg = vru_counts.groupby(['intersection', 'time_15min'])[\n",
     "            'vru_count'].sum().reset_index()\n",
     "        vru_agg.rename(columns={'vru_count': 'vru_volume'}, inplace=True)\n",
@@ -2473,10 +3021,22 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 39,
    "id": "786qw0rygee",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "================================================================================\n",
+      "PHASE 5: NORMALIZATION CONSTANTS\n",
+      "================================================================================\n",
+      "⚠ ERROR: Master feature table not available - cannot compute constants\n"
+     ]
+    }
+   ],
    "source": [
     "# Phase 5: Compute all normalization constants\n",
     "print(\"\\n\" + \"=\" * 80)\n",
@@ -2639,10 +3199,22 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 40,
    "id": "lfeaaup8jup",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "================================================================================\n",
+      "PHASE 6: SAFETY INDEX COMPUTATION\n",
+      "================================================================================\n",
+      "⚠ ERROR: Cannot compute safety indices - missing master features or normalization constants\n"
+     ]
+    }
+   ],
    "source": [
     "# Phase 6: Implement Safety Index formulas\n",
     "print(\"\\n\" + \"=\" * 80)\n",
@@ -2853,10 +3425,22 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 41,
    "id": "xv37m8scn2",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "================================================================================\n",
+      "PHASE 7: EMPIRICAL BAYES STABILIZATION\n",
+      "================================================================================\n",
+      "⚠ ERROR: No indices available for Empirical Bayes adjustment\n"
+     ]
+    }
+   ],
    "source": [
     "# Phase 7: Empirical Bayes stabilization\n",
     "print(\"\\n\" + \"=\" * 80)\n",
@@ -3167,7 +3751,108 @@
    "execution_count": null,
    "id": "wby6llsrwk",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "================================================================================\n",
+      "VIRGINIA TRANSPORTATION SAFETY INDEX - END-TO-END WORKFLOW\n",
+      "================================================================================\n",
+      "\n",
+      "Configuration:\n",
+      "  Date range: 2025-11-04 to 2025-11-11 (7 days)\n",
+      "  Target intersection: ALL\n",
+      "  Export results: True\n",
+      "  Create visualizations: True\n",
+      "\n",
+      "================================================================================\n",
+      "\n",
+      "[1/7] Assessing data quality...\n",
+      "Open the following URL in browser for the external authentication:\n",
+      "https://smart-cities-trino.pre-prod.cloud.vtti.vt.edu/oauth2/token/initiate/b692cf04b024145445523d09438f246245a77ff5f4d1e52978f7e7edd69c8bc1\n",
+      "  ✓ Quality assessment complete\n",
+      "\n",
+      "[2/7] Collecting historical baseline data...\n",
+      "Error collecting baseline events: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 14:47: Invalid numeric literal: 9999999999999999999\", query_id=20251111_234113_00132_tsjew)\n",
+      "Error collecting exposure metrics: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 13:57: Invalid numeric literal: 9999999999999999999\", query_id=20251111_234113_00133_tsjew)\n",
+      "  ✓ Baseline: 0 events, 0 vehicle counts, 0 VRU counts\n",
+      "\n",
+      "[3/7] Engineering features from BSM, PSM, and safety events...\n",
+      "Error collecting BSM features: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 15:57: Invalid numeric literal: 9999999999999999999\", query_id=20251111_234114_00134_tsjew)\n"
+     ]
+    },
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "Traceback (most recent call last):\n",
+      "  File \"C:\\Users\\djjay\\AppData\\Local\\Temp\\ipykernel_161612\\2768779151.py\", line 64, in collect_bsm_features\n",
+      "    cur.execute(query)\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\dbapi.py\", line 640, in execute\n",
+      "    self._iterator = iter(self._query.execute())\n",
+      "                          ^^^^^^^^^^^^^^^^^^^^^\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py\", line 909, in execute\n",
+      "    self._result.rows += self.fetch()\n",
+      "                         ^^^^^^^^^^^^\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py\", line 929, in fetch\n",
+      "    status = self._request.process(response)\n",
+      "             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py\", line 698, in process\n",
+      "    raise self._process_error(response[\"error\"], response.get(\"id\"))\n",
+      "trino.exceptions.TrinoUserError: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 15:57: Invalid numeric literal: 9999999999999999999\", query_id=20251111_234114_00134_tsjew)\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Error collecting PSM features: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 16:57: Invalid numeric literal: 9999999999999999999\", query_id=20251111_234114_00135_tsjew)\n",
+      "Error collecting baseline events: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 14:47: Invalid numeric literal: 9999999999999999999\", query_id=20251111_234114_00136_tsjew)\n",
+      "⚠ No safety events to aggregate\n",
+      "  ✓ Features: 0 BSM intervals, 0 PSM intervals, 0 event intervals\n",
+      "\n",
+      "[4/7] Creating master feature table...\n",
+      "Building master feature table...\n",
+      "⚠ ERROR: No BSM features available - cannot build master table\n",
+      "  ✗ Error: Master table creation failed: 'intersection'\n"
+     ]
+    },
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "Traceback (most recent call last):\n",
+      "  File \"C:\\Users\\djjay\\AppData\\Local\\Temp\\ipykernel_161612\\3809972926.py\", line 62, in collect_psm_features\n",
+      "    cur.execute(query)\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\dbapi.py\", line 640, in execute\n",
+      "    self._iterator = iter(self._query.execute())\n",
+      "                          ^^^^^^^^^^^^^^^^^^^^^\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py\", line 909, in execute\n",
+      "    self._result.rows += self.fetch()\n",
+      "                         ^^^^^^^^^^^^\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py\", line 929, in fetch\n",
+      "    status = self._request.process(response)\n",
+      "             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+      "  File \"c:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\trino\\client.py\", line 698, in process\n",
+      "    raise self._process_error(response[\"error\"], response.get(\"id\"))\n",
+      "trino.exceptions.TrinoUserError: TrinoUserError(type=USER_ERROR, name=SYNTAX_ERROR, message=\"line 16:57: Invalid numeric literal: 9999999999999999999\", query_id=20251111_234114_00135_tsjew)\n"
+     ]
+    },
+    {
+     "ename": "KeyError",
+     "evalue": "'intersection'",
+     "output_type": "error",
+     "traceback": [
+      "\u001b[31m---------------------------------------------------------------------------\u001b[39m",
+      "\u001b[31mKeyError\u001b[39m                                  Traceback (most recent call last)",
+      "\u001b[36mCell\u001b[39m\u001b[36m \u001b[39m\u001b[32mIn[43]\u001b[39m\u001b[32m, line 134\u001b[39m\n\u001b[32m    125\u001b[39m \u001b[38;5;28;01mtry\u001b[39;00m:\n\u001b[32m    126\u001b[39m     master_features_wf = create_master_feature_table(\n\u001b[32m    127\u001b[39m         bsm_features=bsm_features_wf,\n\u001b[32m    128\u001b[39m         psm_features=psm_features_wf,\n\u001b[32m   (...)\u001b[39m\u001b[32m    131\u001b[39m         vru_counts=vru_counts_wf\n\u001b[32m    132\u001b[39m     )\n\u001b[32m--> \u001b[39m\u001b[32m134\u001b[39m     \u001b[38;5;28mprint\u001b[39m(\u001b[33mf\u001b[39m\u001b[33m\"\u001b[39m\u001b[33m  ✓ Master table: \u001b[39m\u001b[38;5;132;01m{\u001b[39;00m\u001b[38;5;28mlen\u001b[39m(master_features_wf)\u001b[38;5;132;01m}\u001b[39;00m\u001b[33m 15-minute intervals across \u001b[39m\u001b[38;5;132;01m{\u001b[39;00m\u001b[43mmaster_features_wf\u001b[49m\u001b[43m[\u001b[49m\u001b[33;43m'\u001b[39;49m\u001b[33;43mintersection\u001b[39;49m\u001b[33;43m'\u001b[39;49m\u001b[43m]\u001b[49m.nunique()\u001b[38;5;132;01m}\u001b[39;00m\u001b[33m intersections\u001b[39m\u001b[33m\"\u001b[39m)\n\u001b[32m    135\u001b[39m \u001b[38;5;28;01mexcept\u001b[39;00m \u001b[38;5;167;01mException\u001b[39;00m \u001b[38;5;28;01mas\u001b[39;00m e:\n\u001b[32m    136\u001b[39m     \u001b[38;5;28mprint\u001b[39m(\u001b[33mf\u001b[39m\u001b[33m\"\u001b[39m\u001b[33m  ✗ Error: Master table creation failed: \u001b[39m\u001b[38;5;132;01m{\u001b[39;00me\u001b[38;5;132;01m}\u001b[39;00m\u001b[33m\"\u001b[39m)\n",
+      "\u001b[36mFile \u001b[39m\u001b[32mc:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\pandas\\core\\frame.py:4113\u001b[39m, in \u001b[36mDataFrame.__getitem__\u001b[39m\u001b[34m(self, key)\u001b[39m\n\u001b[32m   4111\u001b[39m \u001b[38;5;28;01mif\u001b[39;00m \u001b[38;5;28mself\u001b[39m.columns.nlevels > \u001b[32m1\u001b[39m:\n\u001b[32m   4112\u001b[39m     \u001b[38;5;28;01mreturn\u001b[39;00m \u001b[38;5;28mself\u001b[39m._getitem_multilevel(key)\n\u001b[32m-> \u001b[39m\u001b[32m4113\u001b[39m indexer = \u001b[38;5;28;43mself\u001b[39;49m\u001b[43m.\u001b[49m\u001b[43mcolumns\u001b[49m\u001b[43m.\u001b[49m\u001b[43mget_loc\u001b[49m\u001b[43m(\u001b[49m\u001b[43mkey\u001b[49m\u001b[43m)\u001b[49m\n\u001b[32m   4114\u001b[39m \u001b[38;5;28;01mif\u001b[39;00m is_integer(indexer):\n\u001b[32m   4115\u001b[39m     indexer = [indexer]\n",
+      "\u001b[36mFile \u001b[39m\u001b[32mc:\\Code\\Git\\cs6604-trafficsafety\\.conda\\Lib\\site-packages\\pandas\\core\\indexes\\range.py:417\u001b[39m, in \u001b[36mRangeIndex.get_loc\u001b[39m\u001b[34m(self, key)\u001b[39m\n\u001b[32m    415\u001b[39m         \u001b[38;5;28;01mraise\u001b[39;00m \u001b[38;5;167;01mKeyError\u001b[39;00m(key) \u001b[38;5;28;01mfrom\u001b[39;00m\u001b[38;5;250m \u001b[39m\u001b[34;01merr\u001b[39;00m\n\u001b[32m    416\u001b[39m \u001b[38;5;28;01mif\u001b[39;00m \u001b[38;5;28misinstance\u001b[39m(key, Hashable):\n\u001b[32m--> \u001b[39m\u001b[32m417\u001b[39m     \u001b[38;5;28;01mraise\u001b[39;00m \u001b[38;5;167;01mKeyError\u001b[39;00m(key)\n\u001b[32m    418\u001b[39m \u001b[38;5;28mself\u001b[39m._check_indexing_error(key)\n\u001b[32m    419\u001b[39m \u001b[38;5;28;01mraise\u001b[39;00m \u001b[38;5;167;01mKeyError\u001b[39;00m(key)\n",
+      "\u001b[31mKeyError\u001b[39m: 'intersection'"
+     ]
+    }
+   ],
    "source": [
     "# ============================================================================\n",
     "# COMPLETE END-TO-END WORKFLOW: Safety Index Computation\n",
@@ -3623,10 +4308,55 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 42,
    "id": "7xzmlervelo",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "================================================================================\n",
+      "PHASE 1: DATA QUALITY ASSESSMENT\n",
+      "================================================================================\n",
+      "\n",
+      "Checking alexandria.bsm...\n",
+      "  ✓ Records: 96,430,028\n",
+      "  ✓ Intersections: 2\n",
+      "  ✓ Date range: 1756826633215000 to 1762883071654000\n",
+      "\n",
+      "Checking alexandria.psm...\n",
+      "  ✓ Records: 37,846,848\n",
+      "  ✓ Intersections: 2\n",
+      "  ✓ Date range: 1756905621342000 to 1762882859151000\n",
+      "\n",
+      "Checking alexandria.safety-event...\n",
+      "  ✓ Records: 2,679\n",
+      "  ✓ Intersections: 1\n",
+      "  ✓ Date range: 1753195503825000 to 1762856764156000\n",
+      "\n",
+      "Checking alexandria.vehicle-count...\n",
+      "  ✓ Records: 47,099\n",
+      "  ✓ Intersections: 1\n",
+      "  ✓ Date range: 1753214413884000 to 1762880404545000\n",
+      "\n",
+      "Checking alexandria.vru-count...\n",
+      "  ✓ Records: 17,567\n",
+      "  ✓ Intersections: 1\n",
+      "  ✓ Date range: 1753214414851000 to 1762880404360000\n",
+      "\n",
+      "================================================================================\n",
+      "COVERAGE SUMMARY\n",
+      "================================================================================\n",
+      "    schema         table  total_records  num_intersections         earliest           latest status\n",
+      "alexandria           bsm       96430028                  2 1756826633215000 1762883071654000     OK\n",
+      "alexandria           psm       37846848                  2 1756905621342000 1762882859151000     OK\n",
+      "alexandria  safety-event           2679                  1 1753195503825000 1762856764156000     OK\n",
+      "alexandria vehicle-count          47099                  1 1753214413884000 1762880404545000     OK\n",
+      "alexandria     vru-count          17567                  1 1753214414851000 1762880404360000     OK\n"
+     ]
+    }
+   ],
    "source": [
     "# Phase 1.1: Check temporal coverage and data availability for each key table\n",
     "import pandas as pd\n",

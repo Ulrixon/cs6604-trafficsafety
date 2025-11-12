@@ -1,0 +1,40 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: safety-index-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Project settings
+      - PROJECT_NAME=${PROJECT_NAME:-Traffic Safety API}
+      - VERSION=${VERSION:-0.1.0}
+      - DEBUG=${DEBUG:-true}
+      - BASE_URL=${BASE_URL:-http://localhost:8000}
+
+      # Trino connection
+      - TRINO_HOST=${TRINO_HOST:-smart-cities-trino.pre-prod.cloud.vtti.vt.edu}
+      - TRINO_PORT=${TRINO_PORT:-443}
+      - TRINO_HTTP_SCHEME=${TRINO_HTTP_SCHEME:-https}
+      - TRINO_CATALOG=${TRINO_CATALOG:-smartcities_iceberg}
+
+      # Safety Index settings
+      - EMPIRICAL_BAYES_K=${EMPIRICAL_BAYES_K:-50}
+      - DEFAULT_LOOKBACK_DAYS=${DEFAULT_LOOKBACK_DAYS:-7}
+    env_file:
+      - .env
+    volumes:
+      # Mount app directory for development (optional - comment out for production)
+      - ./app:/app/app
+      # Mount Trino OAuth token cache (Windows path - adjust for your OS)
+      # For Windows: C:\Users\YourUsername\.trino
+      # For Linux/Mac: ~/.trino
+      - ${USERPROFILE}/.trino:/root/.trino
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

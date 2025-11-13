@@ -45,6 +45,82 @@ curl http://localhost:8000/health
 curl http://localhost:8000/api/v1/safety/index/
 ```
 
+## Trino Authentication
+
+The API needs to authenticate with Trino to query the smart-cities database. There are **three authentication methods** available:
+
+### Method 1: OAuth Token Cache Mounting (RECOMMENDED - No Browser in Docker!)
+
+**How it works:** Authenticate once on your host machine, then Docker uses the cached token.
+
+**Steps:**
+
+1. **Authenticate on your host machine first** (run your Jupyter notebook or any Trino query)
+   - This creates a token cache at `C:\Users\YourUsername\.trino\token-cache.json`
+
+2. **Token is automatically mounted into Docker** via docker-compose.yml volume:
+   ```yaml
+   volumes:
+     - ${USERPROFILE}/.trino:/root/.trino
+   ```
+
+3. **Run Docker:**
+   ```bash
+   docker-compose up --build
+   ```
+
+**That's it!** Docker will use your cached token automatically.
+
+---
+
+### Method 2: Extract JWT Token (Alternative)
+
+If you need to run Docker without the volume mount, extract the JWT token manually:
+
+**Steps:**
+
+1. **Run the token extractor script** (on host machine with browser):
+   ```bash
+   cd backend
+   python extract_trino_token.py
+   ```
+
+2. **Copy the token to `.env` file:**
+   ```env
+   TRINO_JWT_TOKEN=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+   ```
+
+3. **Run Docker:**
+   ```bash
+   docker-compose up --build
+   ```
+
+---
+
+### Method 3: Basic Authentication (If Supported)
+
+If your Trino server supports username/password authentication:
+
+**Add to `.env` file:**
+```env
+TRINO_USERNAME=your_vtti_username
+TRINO_PASSWORD=your_password
+```
+
+**Note:** Check with your Trino admin if this is enabled.
+
+---
+
+### Which Method to Use?
+
+| Method | Pros | Cons | Recommended For |
+|--------|------|------|-----------------|
+| **OAuth Cache Mount** | ✅ Automatic, no extra steps | Requires host auth first | **Development (BEST)** |
+| **JWT Token** | ✅ Works without volume | Manual token extraction | Production/CI/CD |
+| **Basic Auth** | ✅ Simple credentials | May not be enabled | If available |
+
+**For most users:** Just use Method 1 (OAuth Cache Mount) - it's already configured!
+
 ## Docker Commands
 
 ### Start the API (detached mode)

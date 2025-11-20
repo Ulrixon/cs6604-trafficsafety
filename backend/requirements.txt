@@ -17,6 +17,14 @@ numpy==2.2.1
 # Trino connection (from notebook)
 trino==0.336.0
 
+# VCC API and WebSocket support
+requests>=2.28.0
+websockets>=10.4
+aiohttp>=3.9.0
+
+# Parquet storage
+pyarrow>=14.0.0
+
 # Utilities
 python-dotenv==1.0.1
 python-dateutil==2.9.0.post0

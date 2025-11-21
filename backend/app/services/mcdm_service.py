@@ -519,7 +519,9 @@ class MCDMSafetyIndexService:
             except Exception as e:
                 logger.error(f"Error in MCDM calculation: {e}", exc_info=True)
                 # Try processing time bins individually to skip problematic ones
-                return self._calculate_trend_individually(matrix, start_time, end_time, intersection)
+                return self._calculate_trend_individually(
+                    matrix, start_time, end_time, intersection
+                )
 
             # Filter to requested time range (excluding lookback data)
             results = results[
@@ -535,9 +537,11 @@ class MCDMSafetyIndexService:
             for _, row in results.iterrows():
                 # Skip rows with NaN or infinite values
                 if pd.isna(row["Safety_Score"]) or pd.isna(row["MCDM_Safety_Index"]):
-                    logger.warning(f"Skipping time bin {row['time_bin']} due to invalid score")
+                    logger.warning(
+                        f"Skipping time bin {row['time_bin']} due to invalid score"
+                    )
                     continue
-                    
+
                 try:
                     trend_data.append(
                         {
@@ -556,7 +560,9 @@ class MCDMSafetyIndexService:
                         }
                     )
                 except (ValueError, TypeError) as e:
-                    logger.warning(f"Skipping time bin {row['time_bin']} due to conversion error: {e}")
+                    logger.warning(
+                        f"Skipping time bin {row['time_bin']} due to conversion error: {e}"
+                    )
                     continue
 
             logger.info(
@@ -580,46 +586,49 @@ class MCDMSafetyIndexService:
     ) -> List[Dict]:
         """
         Calculate safety scores for each time bin individually, skipping bins that fail.
-        
+
         This is a fallback method when batch calculation fails.
         """
         trend_data = []
-        
+
         # Get unique time bins in the requested range
         time_bins = matrix[
             (matrix["time_bin"] >= start_time) & (matrix["time_bin"] < end_time)
         ]["time_bin"].unique()
-        
-        logger.info(f"Processing {len(time_bins)} time bins individually for {intersection}")
-        
+
+        logger.info(
+            f"Processing {len(time_bins)} time bins individually for {intersection}"
+        )
+
         for time_bin in sorted(time_bins):
             try:
                 # Get data for this specific time bin and 24 hours before for CRITIC
                 lookback_start = time_bin - timedelta(days=1)
                 bin_matrix = matrix[
-                    (matrix["time_bin"] >= lookback_start) & (matrix["time_bin"] <= time_bin)
+                    (matrix["time_bin"] >= lookback_start)
+                    & (matrix["time_bin"] <= time_bin)
                 ].copy()
-                
+
                 if len(bin_matrix) < 2:  # Need at least 2 data points for CRITIC
                     logger.debug(f"Skipping {time_bin}: insufficient data")
                     continue
-                
+
                 # Calculate MCDM for this bin
                 result = self._calculate_hybrid_mcdm(bin_matrix)
-                
+
                 # Get the row for the current time bin
                 current_row = result[result["time_bin"] == time_bin]
-                
+
                 if len(current_row) == 0:
                     continue
-                
+
                 row = current_row.iloc[0]
-                
+
                 # Check for valid scores
                 if pd.isna(row["Safety_Score"]) or pd.isna(row["MCDM_Safety_Index"]):
                     logger.debug(f"Skipping {time_bin}: invalid scores")
                     continue
-                
+
                 trend_data.append(
                     {
                         "intersection": row["intersection"],
@@ -639,8 +648,10 @@ class MCDMSafetyIndexService:
             except Exception as e:
                 logger.debug(f"Skipping {time_bin} due to error: {e}")
                 continue
-        
-        logger.info(f"Successfully processed {len(trend_data)} out of {len(time_bins)} time bins")
+
+        logger.info(
+            f"Successfully processed {len(trend_data)} out of {len(time_bins)} time bins"
+        )
         return trend_data
 
     def get_available_intersections(self) -> List[str]:

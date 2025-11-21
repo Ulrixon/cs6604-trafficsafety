@@ -102,7 +102,7 @@ def render_single_time_view(
             f"No data available for **{intersection}** at **{selected_time.strftime('%Y-%m-%d %H:%M')}**"
         )
         st.info(
-            "💡 Try selecting a different time or intersection. Available data up to November 9, 2025."
+            "💡 Try selecting a different time or intersection."
         )
         return
 
@@ -235,11 +235,6 @@ def render_trend_view(
         st.error("End time must be after start time!")
         return
 
-    time_delta = end_time - start_time
-    if time_delta.days > 7:
-        st.error("Time range cannot exceed 7 days!")
-        return
-
     with st.spinner("Fetching trend data..."):
         data = get_safety_score_trend(intersection, start_time, end_time, bin_minutes)
 
@@ -249,7 +244,7 @@ def render_trend_view(
             f"**{start_time.strftime('%Y-%m-%d %H:%M')}** and **{end_time.strftime('%Y-%m-%d %H:%M')}**"
         )
         st.info(
-            "💡 Try selecting a different time range or intersection. Available data up to November 9, 2025."
+            "💡 Try selecting a different time range or intersection."
         )
         return
 
@@ -435,8 +430,7 @@ def main():
             selected_date = st.date_input(
                 "Date",
                 value=default_date,
-                max_value=datetime(2025, 11, 9),  # Data only available up to Nov 9
-                help="Select date (data available up to Nov 9, 2025)",
+                help="Select date",
             )
 
             selected_time = st.time_input(
@@ -455,64 +449,80 @@ def main():
             default_start = datetime(2025, 11, 9, 8, 0)
             default_end = datetime(2025, 11, 9, 18, 0)
 
+            # Initialize session state for time range if not exists
+            if "start_datetime" not in st.session_state:
+                st.session_state.start_datetime = default_start
+            if "end_datetime" not in st.session_state:
+                st.session_state.end_datetime = default_end
+
             start_date = st.date_input(
                 "Start Date",
-                value=default_start.date(),
-                max_value=datetime(2025, 11, 9),
+                value=st.session_state.start_datetime.date(),
                 help="Select start date",
             )
 
             start_time = st.time_input(
                 "Start Time",
-                value=default_start.time(),
+                value=st.session_state.start_datetime.time(),
                 help="Select start time",
             )
 
             end_date = st.date_input(
                 "End Date",
-                value=default_end.date(),
-                max_value=datetime(2025, 11, 9),
+                value=st.session_state.end_datetime.date(),
                 help="Select end date",
             )
 
             end_time = st.time_input(
                 "End Time",
-                value=default_end.time(),
+                value=st.session_state.end_datetime.time(),
                 help="Select end time",
             )
 
+            # Update session state with manual input changes
             start_datetime = datetime.combine(start_date, start_time)
             end_datetime = datetime.combine(end_date, end_time)
+            
+            # Update session state if values changed manually
+            if start_datetime != st.session_state.start_datetime:
+                st.session_state.start_datetime = start_datetime
+            if end_datetime != st.session_state.end_datetime:
+                st.session_state.end_datetime = end_datetime
 
         st.divider()
 
         # Quick time range presets (only for trend mode)
         if analysis_mode == "Time Range Trend":
             st.subheader("⚡ Quick Presets")
+            st.caption("Click to set time range based on selected start date/time")
 
             col1, col2 = st.columns(2)
 
             with col1:
-                if st.button("Last 2 Hours", use_container_width=True):
-                    end_datetime = datetime(2025, 11, 9, 23, 45)
-                    start_datetime = end_datetime - timedelta(hours=2)
+                if st.button("2 Hours", use_container_width=True):
+                    st.session_state.start_datetime = datetime.combine(start_date, start_time)
+                    st.session_state.end_datetime = st.session_state.start_datetime + timedelta(hours=2)
+                    st.rerun()
 
             with col2:
-                if st.button("Last 6 Hours", use_container_width=True):
-                    end_datetime = datetime(2025, 11, 9, 23, 45)
-                    start_datetime = end_datetime - timedelta(hours=6)
+                if st.button("6 Hours", use_container_width=True):
+                    st.session_state.start_datetime = datetime.combine(start_date, start_time)
+                    st.session_state.end_datetime = st.session_state.start_datetime + timedelta(hours=6)
+                    st.rerun()
 
             col1, col2 = st.columns(2)
 
             with col1:
-                if st.button("Business Hours", use_container_width=True):
-                    start_datetime = datetime(2025, 11, 9, 9, 0)
-                    end_datetime = datetime(2025, 11, 9, 17, 0)
+                if st.button("12 Hours", use_container_width=True):
+                    st.session_state.start_datetime = datetime.combine(start_date, start_time)
+                    st.session_state.end_datetime = st.session_state.start_datetime + timedelta(hours=12)
+                    st.rerun()
 
             with col2:
-                if st.button("Full Day", use_container_width=True):
-                    start_datetime = datetime(2025, 11, 9, 0, 0)
-                    end_datetime = datetime(2025, 11, 9, 23, 59)
+                if st.button("24 Hours", use_container_width=True):
+                    st.session_state.start_datetime = datetime.combine(start_date, start_time)
+                    st.session_state.end_datetime = st.session_state.start_datetime + timedelta(hours=24)
+                    st.rerun()
 
         # About section
         with st.expander("ℹ️ About"):

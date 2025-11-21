@@ -1,7 +1,7 @@
 """
-📈 Trend Analysis
+🏠 Home
 
-Time-based trend analysis view for Traffic Safety Dashboard.
+Traffic Safety Trend Analysis - Home Page
 Analyze safety scores at specific times or visualize trends over time ranges.
 """
 

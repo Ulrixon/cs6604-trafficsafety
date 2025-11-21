@@ -18,5 +18,5 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Redirect to the Home page
-st.switch_page("pages/0_🏠_Home.py")
+# Redirect to the Dashboard page
+st.switch_page("pages/0_🏠_Dashboard.py")

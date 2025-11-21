@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime
 from typing import Optional
+import logging
 
 from ..schemas.intersection import IntersectionRead
 from ..schemas.safety_score import SafetyScoreTimePoint, IntersectionList
@@ -10,6 +11,7 @@ from ..services.mcdm_service import MCDMSafetyIndexService
 from ..core.config import settings
 
 router = APIRouter(prefix="/safety/index", tags=["Safety Index"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/", response_model=list[IntersectionRead])
@@ -100,12 +102,19 @@ def get_safety_score_trend(
     db_client = get_db_client()
     mcdm_service = MCDMSafetyIndexService(db_client)
 
-    results = mcdm_service.calculate_safety_score_trend(
-        intersection=intersection,
-        start_time=start_time,
-        end_time=end_time,
-        bin_minutes=bin_minutes,
-    )
+    try:
+        results = mcdm_service.calculate_safety_score_trend(
+            intersection=intersection,
+            start_time=start_time,
+            end_time=end_time,
+            bin_minutes=bin_minutes,
+        )
+    except Exception as e:
+        logger.error(f"Error calculating trend: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error calculating safety score trend: {str(e)}",
+        )
 
     if not results:
         raise HTTPException(

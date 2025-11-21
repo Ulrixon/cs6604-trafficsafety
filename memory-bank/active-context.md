@@ -1,11 +1,38 @@
 # Active Context
 
-**Last Updated**: 2025-11-20
-**Status**: ✅ PRODUCTION SYSTEM OPERATIONAL
+**Last Updated**: 2025-11-20 (Evening)
+**Status**: ✅ PRODUCTION SYSTEM OPERATIONAL | 📋 POSTGRESQL MIGRATION PLANNED
 
 ---
 
-## Current Sprint: COMPLETED ✅
+## Current Sprint: PostgreSQL + GCP Migration Planning ✅
+
+### Just Completed (2025-11-20 Evening)
+
+**Intersection History Feature + PostgreSQL Migration Planning:**
+
+1. ✅ **Intersection History Feature (COMPLETE)**
+   - Backend: Created history API endpoints with smart aggregation
+   - Frontend: Built Plotly time series charts and statistics cards
+   - Integration: Added "View Historical Data" toggle in dashboard
+   - Status: Fully implemented and tested
+
+2. ✅ **Data Verification**
+   - Created data verification notebook
+   - Identified: Only tracking 1 intersection (0.0) out of 4 available from VCC
+   - Root cause: Feature extraction not mapping vehicles to all intersections
+
+3. ✅ **PostgreSQL Migration Architecture Decision**
+   - Requirements document created (400+ lines)
+   - Design document created (1000+ lines)
+   - Sprint plan created (detailed 4-week plan)
+   - Architectural decisions documented (ADR-001 through ADR-008)
+
+**Key Architectural Decision**: Hybrid storage with PostgreSQL + PostGIS for operational queries and GCP Cloud Storage for raw data archival.
+
+---
+
+## Current Sprint: COMPLETED ✅ (Historical Context)
 
 ### What We Just Completed (2025-11-20)
 
@@ -111,18 +138,65 @@ External Clients (Dashboards, Apps, etc.)
 
 ---
 
-## What We're Working On This Week
+## What We're Working On Next
 
-**PLANNING PHASE - Next Generation Architecture**
+**NEW: PostgreSQL + GCP Migration Sprint**
 
-The core safety index system is complete and operational. We're now planning the next major evolution:
+### Current Focus: Database Migration Architecture 🔥 HIGH PRIORITY
+- 📋 **Status**: Planning complete, ready to implement
+- 🎯 **Goal**: Migrate from Parquet-only to PostgreSQL + GCP Cloud Storage
+- 📄 **Documents**:
+  - Requirements: `construction/requirements/postgresql-migration-requirements.md`
+  - Design: `construction/design/postgresql-migration-design.md`
+  - Sprint Plan: `construction/sprints/sprint-postgresql-migration.md`
+  - ADRs: `memory-bank/architectural-decisions.md`
 
-### Current Focus: Data Integration & Extensibility Roadmap
-- 📋 **Status**: Planning complete, awaiting approval
+**Why This Migration:**
+1. **Performance**: 10-100x faster API queries with indexed database
+2. **Scalability**: Support 100+ intersections and concurrent users
+3. **Spatial Features**: PostGIS enables proximity, routing, heatmaps
+4. **Production Ready**: Cloud storage (GCS) instead of local Docker volumes
+5. **Data Management**: Automated aggregation, retention, lifecycle policies
+
+**Architecture:**
+```
+VCC API → Data Collector → Dual Write
+                             ├─→ GCS (raw Parquet archives)
+                             └─→ PostgreSQL + PostGIS (operational queries)
+                                      ↓
+                                  FastAPI (10-100x faster)
+                                      ↓
+                                  Frontend (no changes)
+```
+
+**Key Technologies:**
+- PostgreSQL 15 + PostGIS 3.3 for operational database
+- GCP Cloud Storage for raw data archival (Parquet)
+- Dual-write during migration for zero downtime
+- Time partitioning for performance
+- Automated aggregation jobs (hourly, daily)
+
+**Timeline:** 4 weeks (80-100 hours)
+**Cost:** ~$35/month for GCS (PostgreSQL free in Docker)
+
+**Next Steps:**
+1. Review and approve migration plan
+2. Begin Phase 1: Database setup (Days 1-3)
+3. Phase 2: GCP Cloud Storage setup (Days 4-5)
+4. Phase 3: Dual-write implementation (Days 6-8)
+5. Phase 4: API migration (Days 9-12)
+6. Phase 5: Batch jobs (Days 13-15)
+7. Phase 6: Historical backfill (Days 16-18)
+8. Phase 7: Cutover (Days 19-20)
+
+---
+
+### Future Focus: Data Integration & Extensibility Roadmap
+- 📋 **Status**: Planning complete, deferred until after PostgreSQL migration
 - 🎯 **Goal**: Transform from VCC-only to multi-source pluggable platform
 - 📄 **Document**: `memory-bank/data-integration-roadmap.md`
 
-**Key Initiatives**:
+**Key Initiatives** (postponed):
 1. **Pluggable Data Source Architecture** - Allow easy addition of new data sources (weather, crash data, traffic)
 2. **Configurable Safety Index** - Make features and weights adjustable without code changes
 3. **Admin UI** - Build dashboard for data analysis and index tuning
@@ -130,19 +204,45 @@ The core safety index system is complete and operational. We're now planning the
 
 **Timeline**: 4-6 months (15-20 weeks development)
 **Phases**: 6 phases from plugin framework to A/B testing
+**Status**: Deferred until PostgreSQL migration complete
 
 ---
 
 ## What Decisions Are We Facing?
 
-### 1. **Data Integration Roadmap Approval** 🔥 HIGH PRIORITY
-- **Status**: Roadmap complete, awaiting user decision
+### 1. **PostgreSQL + GCP Migration Approval** 🔥 URGENT - NEW
+- **Status**: Planning complete, ready to implement
+- **Documents**:
+  - `construction/requirements/postgresql-migration-requirements.md`
+  - `construction/design/postgresql-migration-design.md`
+  - `construction/sprints/sprint-postgresql-migration.md`
+  - `memory-bank/architectural-decisions.md`
+- **Key Decisions Needed**:
+  - ✅ **Approve hybrid storage architecture?** (PostgreSQL + GCP Cloud Storage)
+  - ✅ **Approve GCP Cloud Storage?** (~$35/month for Parquet archival)
+  - ✅ **Approve 4-week timeline?** (80-100 hours effort)
+  - ✅ **Start immediately or defer?** (Blocks multi-intersection support)
+  - ⏳ **GCP project setup?** (Need to create GCP account/project)
+
+**Recommendation:** Approve and start immediately. Current Parquet-only architecture cannot scale beyond 1-2 intersections efficiently.
+
+**Benefits:**
+- 10-100x faster API queries
+- Support for 100+ intersections
+- Spatial queries (proximity, routing, heatmaps)
+- Production-ready cloud storage
+- Automated data lifecycle management
+
+**Risks:** Managed with dual-write, feature flags, validation, and rollback plan
+
+---
+
+### 2. **Data Integration Roadmap Approval** (Deferred)
+- **Status**: Roadmap complete, deferred until after PostgreSQL migration
 - **Document**: `memory-bank/data-integration-roadmap.md`
 - **Key Decisions Needed**:
-  - ✅ Approve overall architecture approach?
-  - ✅ Prioritize which phases to implement first?
-  - ✅ Identify must-have vs. nice-to-have features?
-  - ✅ Confirm timeline and resource allocation?
+  - ⏸️ Deferred - PostgreSQL migration takes priority
+  - Will revisit after database migration complete
 
 **Proposed Architecture**:
 - Pluggable data source framework (abstract interface + registry)

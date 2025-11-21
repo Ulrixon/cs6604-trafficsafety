@@ -20,6 +20,7 @@ from .schemas.intersection import IntersectionRead
 from .core.config import settings  # type: ignore
 from .api.intersection import router as intersection_router
 from .api.vcc import router as vcc_router
+from .api.history import router as history_router
 
 
 def create_app() -> FastAPI:
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     # Include API routers
     app.include_router(intersection_router, prefix="/api/v1")
     app.include_router(vcc_router, prefix="/api/v1")
+    app.include_router(history_router, prefix="/api/v1")
 
     # Simple health‑check endpoint
     @app.get("/health", tags=["Health"])

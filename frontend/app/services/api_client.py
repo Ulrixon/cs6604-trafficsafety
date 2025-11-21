@@ -174,3 +174,170 @@ def get_intersections() -> tuple[List[Intersection], Optional[str], dict]:
 def clear_cache():
     """Clear the API cache to force fresh data fetch."""
     st.cache_data.clear()
+
+
+# ============================================================================
+# HISTORICAL DATA API METHODS
+# ============================================================================
+
+@st.cache_data(ttl=API_CACHE_TTL, show_spinner=False)
+def fetch_intersection_history(
+    intersection_id: str,
+    days: int = 7,
+    aggregation: Optional[str] = None
+) -> tuple[Optional[dict], Optional[str]]:
+    """
+    Fetch historical time series data for an intersection.
+
+    Args:
+        intersection_id: Unique intersection identifier
+        days: Number of days of history to retrieve (default: 7)
+        aggregation: Time aggregation level (1min, 1hour, 1day, 1week, 1month)
+                    If None, smart default based on date range is used
+
+    Returns:
+        Tuple of (history data dict, error message or None)
+
+        History data structure:
+        {
+            "intersection_id": str,
+            "intersection_name": str,
+            "data_points": [
+                {
+                    "timestamp": str (ISO format),
+                    "safety_index": float,
+                    "vru_index": float or null,
+                    "vehicle_index": float or null,
+                    "traffic_volume": int,
+                    "hour_of_day": int,
+                    "day_of_week": int
+                },
+                ...
+            ],
+            "start_date": str (ISO format),
+            "end_date": str (ISO format),
+            "total_points": int,
+            "aggregation": str
+        }
+    """
+    try:
+        # Construct URL - replace /safety/index/ with /safety/history/
+        base_url = API_URL.replace("/safety/index/", "/safety/history/")
+        url = f"{base_url}{intersection_id}"
+
+        # Build query parameters
+        params = {"days": days}
+        if aggregation:
+            params["aggregation"] = aggregation
+
+        session = _get_session_with_retries()
+        response = session.get(url, params=params, timeout=API_TIMEOUT)
+        response.raise_for_status()
+
+        data = response.json()
+        return data, None
+
+    except requests.exceptions.Timeout:
+        error_msg = f"History API request timed out after {API_TIMEOUT} seconds"
+        return None, error_msg
+
+    except requests.exceptions.ConnectionError:
+        error_msg = "Could not connect to history API (connection error)"
+        return None, error_msg
+
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            error_msg = "No historical data found for this intersection"
+        else:
+            error_msg = f"History API returned error: {e.response.status_code}"
+        return None, error_msg
+
+    except json.JSONDecodeError:
+        error_msg = "History API returned invalid JSON"
+        return None, error_msg
+
+    except Exception as e:
+        error_msg = f"Unexpected error fetching history: {str(e)}"
+        return None, error_msg
+
+
+@st.cache_data(ttl=API_CACHE_TTL, show_spinner=False)
+def fetch_intersection_stats(
+    intersection_id: str,
+    days: int = 7
+) -> tuple[Optional[dict], Optional[str]]:
+    """
+    Fetch aggregated statistics for an intersection over a time period.
+
+    Args:
+        intersection_id: Unique intersection identifier
+        days: Number of days to aggregate statistics over (default: 7)
+
+    Returns:
+        Tuple of (statistics dict, error message or None)
+
+        Statistics structure:
+        {
+            "intersection_id": str,
+            "intersection_name": str,
+            "period_start": str (ISO format),
+            "period_end": str (ISO format),
+            "avg_safety_index": float,
+            "min_safety_index": float,
+            "max_safety_index": float,
+            "std_safety_index": float,
+            "total_traffic_volume": int,
+            "avg_traffic_volume": float,
+            "high_risk_intervals": int,
+            "high_risk_percentage": float
+        }
+    """
+    try:
+        # Construct URL - replace /safety/index/ with /safety/history/
+        base_url = API_URL.replace("/safety/index/", "/safety/history/")
+        url = f"{base_url}{intersection_id}/stats"
+
+        # Build query parameters
+        params = {"days": days}
+
+        session = _get_session_with_retries()
+        response = session.get(url, params=params, timeout=API_TIMEOUT)
+        response.raise_for_status()
+
+        data = response.json()
+        return data, None
+
+    except requests.exceptions.Timeout:
+        error_msg = f"Statistics API request timed out after {API_TIMEOUT} seconds"
+        return None, error_msg
+
+    except requests.exceptions.ConnectionError:
+        error_msg = "Could not connect to statistics API (connection error)"
+        return None, error_msg
+
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            error_msg = "No statistical data found for this intersection"
+        else:
+            error_msg = f"Statistics API returned error: {e.response.status_code}"
+        return None, error_msg
+
+    except json.JSONDecodeError:
+        error_msg = "Statistics API returned invalid JSON"
+        return None, error_msg
+
+    except Exception as e:
+        error_msg = f"Unexpected error fetching statistics: {str(e)}"
+        return None, error_msg
+
+
+def clear_history_cache():
+    """
+    Clear only the history-related API caches to force fresh data fetch.
+
+    This is useful when users want to manually refresh historical data
+    without clearing the entire application cache.
+    """
+    # Clear specific cached functions
+    fetch_intersection_history.clear()
+    fetch_intersection_stats.clear()

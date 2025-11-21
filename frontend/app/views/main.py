@@ -112,6 +112,9 @@ def main():
     # Main layout: Map and Details side by side
     col_map, col_details = st.columns([2, 1])
 
+    # Initialize map_data to None
+    map_data = None
+
     with col_map:
         st.subheader("🗺️ Interactive Map")
 

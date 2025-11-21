@@ -22,6 +22,14 @@ services:
       # Safety Index settings
       - EMPIRICAL_BAYES_K=${EMPIRICAL_BAYES_K:-50}
       - DEFAULT_LOOKBACK_DAYS=${DEFAULT_LOOKBACK_DAYS:-7}
+
+      # VCC API configuration
+      - VCC_BASE_URL=${VCC_BASE_URL:-https://vcc.vtti.vt.edu}
+      - VCC_CLIENT_ID=${VCC_CLIENT_ID:-}
+      - VCC_CLIENT_SECRET=${VCC_CLIENT_SECRET:-}
+      - DATA_SOURCE=${DATA_SOURCE:-trino}
+      - PARQUET_STORAGE_PATH=${PARQUET_STORAGE_PATH:-backend/data/parquet}
+      - REALTIME_ENABLED=${REALTIME_ENABLED:-false}
     env_file:
       - .env
     volumes:
@@ -31,6 +39,8 @@ services:
       # For Windows: C:\Users\YourUsername\.trino
       # For Linux/Mac: ~/.trino
       - ${USERPROFILE}/.trino:/root/.trino
+      # Mount Parquet storage directory
+      - ./data/parquet:/app/backend/data/parquet
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

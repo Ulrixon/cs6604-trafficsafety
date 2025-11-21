@@ -19,10 +19,8 @@ import requests
 
 from app.utils.config import APP_ICON, API_URL
 
-# API configuration - derive base URL from main API_URL
-API_BASE_URL = (
-    API_URL.rstrip("/").rsplit("/", 1)[0] if API_URL.endswith("/") else API_URL
-)
+# API configuration - use the full API_URL as base (already includes /api/v1/safety/index/)
+API_BASE_URL = API_URL.rstrip("/")
 
 
 def get_available_intersections():

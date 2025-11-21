@@ -1,27 +1,38 @@
 """
 Configuration constants for the Traffic Safety Index application.
+Loads from .env file if available, otherwise uses defaults.
 """
 
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env file from frontend directory
+env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
 # API Configuration
-API_URL = "https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safety/index/"
-API_TIMEOUT = 10  # seconds
-API_MAX_RETRIES = 3
-API_CACHE_TTL = 300  # seconds (5 minutes)
+API_URL = os.getenv("API_URL", "http://localhost:8000/api/v1/safety/index/")
+API_TIMEOUT = int(os.getenv("API_TIMEOUT", "10"))  # seconds
+API_MAX_RETRIES = int(os.getenv("API_MAX_RETRIES", "3"))
+API_CACHE_TTL = int(os.getenv("API_CACHE_TTL", "300"))  # seconds (5 minutes)
 
 # Map Configuration
-DEFAULT_CENTER = (38.86, -77.055)  # Default to D.C. area, will be computed from data
-DEFAULT_ZOOM = 13
-MAP_HEIGHT = 650
+DEFAULT_LATITUDE = float(os.getenv("DEFAULT_LATITUDE", "38.86"))
+DEFAULT_LONGITUDE = float(os.getenv("DEFAULT_LONGITUDE", "-77.055"))
+DEFAULT_CENTER = (DEFAULT_LATITUDE, DEFAULT_LONGITUDE)  # Default to D.C. area, will be computed from data
+DEFAULT_ZOOM = int(os.getenv("DEFAULT_ZOOM", "13"))
+MAP_HEIGHT = int(os.getenv("MAP_HEIGHT", "650"))
 MAP_TILES = "CartoDB positron"  # Clean, minimal base map
 
 # Visual Encoding - Radius
-MIN_RADIUS_PX = 6
-MAX_RADIUS_PX = 30
-RADIUS_SCALE_FACTOR = 24  # (MAX - MIN)
+MIN_RADIUS_PX = int(os.getenv("MIN_RADIUS_PX", "6"))
+MAX_RADIUS_PX = int(os.getenv("MAX_RADIUS_PX", "30"))
+RADIUS_SCALE_FACTOR = MAX_RADIUS_PX - MIN_RADIUS_PX
 
 # Visual Encoding - Color Thresholds
-COLOR_LOW_THRESHOLD = 60  # Below this: green (low risk)
-COLOR_HIGH_THRESHOLD = 75  # Above this: red (high risk)
+COLOR_LOW_THRESHOLD = int(os.getenv("COLOR_LOW_THRESHOLD", "60"))  # Below this: green (low risk)
+COLOR_HIGH_THRESHOLD = int(os.getenv("COLOR_HIGH_THRESHOLD", "75"))  # Above this: red (high risk)
 
 # Colors (Hex codes)
 COLOR_LOW_RISK = "#2ECC71"  # Green

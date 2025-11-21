@@ -3,7 +3,7 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including Google Cloud SDK
 RUN apt-get update && apt-get install -y \
     gcc \
     curl \
@@ -19,8 +19,15 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY app/ ./app/
 
-# Expose port
-EXPOSE 8000
+# Create .env file placeholder (will be populated at runtime)
+RUN touch .env
 
-# Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Expose port (Cloud Run uses PORT env var, defaults to 8080)
+EXPOSE 8080
+
+# Create startup script that fetches secrets and starts the app
+COPY docker-entrypoint.sh /app/
+RUN chmod +x /app/docker-entrypoint.sh
+
+# Run the application with entrypoint script
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

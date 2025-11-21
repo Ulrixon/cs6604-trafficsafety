@@ -65,7 +65,7 @@ class MCDMSafetyIndexService:
                 UNION ALL
                 SELECT MAX(publish_timestamp) as max_ts FROM "speed-distribution"
                 UNION ALL
-                SELECT MAX(timestamp) as max_ts FROM "safety-event"
+                SELECT MAX(publish_timestamp) as max_ts FROM "safety-event"
             ) AS max_timestamps;
             """
             result = self.client.execute_query(latest_query)
@@ -387,3 +387,187 @@ class MCDMSafetyIndexService:
         if max_score - min_score > 0:
             return ((scores - min_score) / (max_score - min_score)) * 100
         return np.ones_like(scores) * 50
+
+    def calculate_safety_score_for_time(
+        self, intersection: str, target_time: datetime, bin_minutes: int = 15
+    ) -> Optional[Dict]:
+        """
+        Calculate safety score for a specific intersection at a specific time.
+
+        Args:
+            intersection: Intersection name
+            target_time: Target datetime
+            bin_minutes: Time bin size in minutes (default: 15)
+
+        Returns:
+            Dictionary with safety score details or None if no data
+        """
+        try:
+            # Floor to nearest bin
+            bin_start = target_time.replace(
+                minute=(target_time.minute // bin_minutes) * bin_minutes,
+                second=0,
+                microsecond=0,
+            )
+            bin_end = bin_start + timedelta(minutes=bin_minutes)
+
+            # Collect data from 1 day before for CRITIC calculation
+            lookback_start = bin_start - timedelta(days=1)
+
+            logger.info(
+                f"Calculating safety score for {intersection} at {bin_start} (lookback from {lookback_start})"
+            )
+
+            matrix = self._collect_data_matrix(lookback_start, bin_end, bin_minutes)
+
+            if len(matrix) == 0:
+                logger.warning(f"No data available for {intersection} at {bin_start}")
+                return None
+
+            # Filter to the specific intersection
+            matrix = matrix[matrix["intersection"] == intersection]
+
+            if len(matrix) == 0:
+                logger.warning(
+                    f"No data for intersection {intersection} at {bin_start}"
+                )
+                return None
+
+            # Calculate MCDM scores
+            results = self._calculate_hybrid_mcdm(matrix)
+
+            # Filter to target time bin
+            target_results = results[results["time_bin"] == bin_start]
+
+            if len(target_results) == 0:
+                logger.warning(
+                    f"No results for {intersection} at target time {bin_start}"
+                )
+                return None
+
+            row = target_results.iloc[0]
+
+            return {
+                "intersection": row["intersection"],
+                "time_bin": row["time_bin"],
+                "safety_score": float(row["Safety_Score"]),
+                "mcdm_index": float(row["MCDM_Safety_Index"]),
+                "vehicle_count": int(row["vehicle_count"]),
+                "vru_count": int(row["vru_count"]),
+                "avg_speed": float(row["avg_speed"]),
+                "speed_variance": float(row["speed_variance"]),
+                "incident_count": int(row["incident_count"]),
+                "saw_score": float(row["SAW"]),
+                "edas_score": float(row["EDAS"]),
+                "codas_score": float(row["CODAS"]),
+            }
+
+        except Exception as e:
+            logger.error(
+                f"Error calculating safety score for {intersection} at {target_time}: {e}",
+                exc_info=True,
+            )
+            return None
+
+    def calculate_safety_score_trend(
+        self,
+        intersection: str,
+        start_time: datetime,
+        end_time: datetime,
+        bin_minutes: int = 15,
+    ) -> List[Dict]:
+        """
+        Calculate safety score trend for an intersection over a time period.
+
+        Args:
+            intersection: Intersection name
+            start_time: Start datetime
+            end_time: End datetime
+            bin_minutes: Time bin size in minutes (default: 15)
+
+        Returns:
+            List of dictionaries with safety scores for each time bin
+        """
+        try:
+            logger.info(
+                f"Calculating safety score trend for {intersection} from {start_time} to {end_time}"
+            )
+
+            # Collect data from 1 day before start time for CRITIC calculation
+            lookback_start = start_time - timedelta(days=1)
+
+            matrix = self._collect_data_matrix(lookback_start, end_time, bin_minutes)
+
+            if len(matrix) == 0:
+                logger.warning(
+                    f"No data available for {intersection} in period {start_time} to {end_time}"
+                )
+                return []
+
+            # Filter to the specific intersection
+            matrix = matrix[matrix["intersection"] == intersection]
+
+            if len(matrix) == 0:
+                logger.warning(
+                    f"No data for intersection {intersection} in specified period"
+                )
+                return []
+
+            # Calculate MCDM scores
+            results = self._calculate_hybrid_mcdm(matrix)
+
+            # Filter to requested time range (excluding lookback data)
+            results = results[
+                (results["time_bin"] >= start_time) & (results["time_bin"] < end_time)
+            ]
+
+            if len(results) == 0:
+                logger.warning(f"No results for {intersection} in requested period")
+                return []
+
+            # Convert to list of dictionaries
+            trend_data = []
+            for _, row in results.iterrows():
+                trend_data.append(
+                    {
+                        "intersection": row["intersection"],
+                        "time_bin": row["time_bin"],
+                        "safety_score": float(row["Safety_Score"]),
+                        "mcdm_index": float(row["MCDM_Safety_Index"]),
+                        "vehicle_count": int(row["vehicle_count"]),
+                        "vru_count": int(row["vru_count"]),
+                        "avg_speed": float(row["avg_speed"]),
+                        "speed_variance": float(row["speed_variance"]),
+                        "incident_count": int(row["incident_count"]),
+                        "saw_score": float(row["SAW"]),
+                        "edas_score": float(row["EDAS"]),
+                        "codas_score": float(row["CODAS"]),
+                    }
+                )
+
+            logger.info(
+                f"Successfully calculated {len(trend_data)} time points for {intersection}"
+            )
+            return trend_data
+
+        except Exception as e:
+            logger.error(
+                f"Error calculating safety score trend for {intersection}: {e}",
+                exc_info=True,
+            )
+            return []
+
+    def get_available_intersections(self) -> List[str]:
+        """
+        Get list of available intersections in the database.
+
+        Returns:
+            List of intersection names
+        """
+        try:
+            query = 'SELECT DISTINCT intersection FROM "vehicle-count" ORDER BY intersection;'
+            result = self.client.execute_query(query)
+            return [row["intersection"] for row in result]
+        except Exception as e:
+            logger.error(f"Error getting available intersections: {e}", exc_info=True)
+            return []

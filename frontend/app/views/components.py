@@ -192,6 +192,11 @@ def render_filters(
     if not df.empty:
         min_si = float(df["safety_index"].min())
         max_si = float(df["safety_index"].max())
+        # Handle case where min and max are the same
+        if min_si == max_si:
+            # Expand range slightly to allow slider to work
+            min_si = max(0.0, min_si - 1.0)
+            max_si = min(100.0, max_si + 1.0)
     else:
         min_si, max_si = 0.0, 100.0
 
@@ -207,6 +212,9 @@ def render_filters(
     if not df.empty:
         min_vol = float(df["traffic_volume"].min())
         max_vol = float(df["traffic_volume"].max())
+        # Handle case where min and max are the same
+        if min_vol == max_vol:
+            max_vol = min_vol + 1.0
     else:
         min_vol, max_vol = 0.0, 10000.0
 
@@ -214,7 +222,7 @@ def render_filters(
         "Traffic Volume Range",
         min_value=min_vol,
         max_value=max_vol,
-        value=(min_vol, max_vol),
+        value=(min_vol, max_vol if max_vol > min_vol else min_vol),
         format="%.0f",
         help="Filter by traffic volume",
     )

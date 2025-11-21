@@ -4,3 +4,5 @@ pydantic>=2.6
 pandas>=2.2
 folium>=0.17
 streamlit-folium>=0.21
+plotly>=5.18
+python-dotenv>=1.0.0

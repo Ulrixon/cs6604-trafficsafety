@@ -31,7 +31,13 @@ from app.services.vcc_feature_engineering import (
 )
 from app.services.index_computation import compute_safety_indices
 from app.core.config import settings
+from app.db.connection import init_db, close_db
+from app.services.db_service import insert_safety_indices_batch, SafetyIndexRecord
+from app.services.gcs_storage import GCSStorage
 import pandas as pd
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class DataCollector:
@@ -59,6 +65,43 @@ class DataCollector:
         # Initialize storage
         self.storage = ParquetStorage(str(self.storage_path))
 
+        # Initialize database connection if PostgreSQL is enabled
+        self.db_initialized = False
+        if settings.USE_POSTGRESQL or settings.ENABLE_DUAL_WRITE:
+            try:
+                logger.info("Initializing PostgreSQL connection for dual-write...")
+                init_db(
+                    database_url=settings.DATABASE_URL,
+                    pool_size=settings.DB_POOL_SIZE,
+                    max_overflow=settings.DB_MAX_OVERFLOW
+                )
+                self.db_initialized = True
+                logger.info("✓ PostgreSQL connection initialized")
+            except Exception as e:
+                logger.error(f"✗ Failed to initialize PostgreSQL: {e}")
+                if not settings.FALLBACK_TO_PARQUET:
+                    raise
+                logger.warning("Continuing with Parquet-only mode...")
+
+        # Initialize GCS client if cloud upload is enabled
+        self.gcs_initialized = False
+        self.gcs = None
+        if settings.ENABLE_GCS_UPLOAD:
+            try:
+                if not settings.GCS_BUCKET_NAME:
+                    logger.warning("GCS upload enabled but GCS_BUCKET_NAME not configured")
+                else:
+                    logger.info("Initializing GCS client for cloud archival...")
+                    self.gcs = GCSStorage(
+                        bucket_name=settings.GCS_BUCKET_NAME,
+                        project_id=settings.GCS_PROJECT_ID or None
+                    )
+                    self.gcs_initialized = True
+                    logger.info(f"✓ GCS client initialized: gs://{settings.GCS_BUCKET_NAME}")
+            except Exception as e:
+                logger.error(f"✗ Failed to initialize GCS client: {e}")
+                logger.warning("Continuing without GCS upload...")
+
         # Running flag
         self.running = False
 
@@ -69,7 +112,12 @@ class DataCollector:
             'total_psm': 0,
             'total_mapdata': 0,
             'last_collection': None,
-            'errors': 0
+            'errors': 0,
+            'parquet_writes': 0,
+            'db_writes': 0,
+            'dual_write_errors': 0,
+            'gcs_uploads': 0,
+            'gcs_errors': 0
         }
 
     def setup_signal_handlers(self):
@@ -77,9 +125,105 @@ class DataCollector:
         def shutdown_handler(signum, frame):
             print("\n\n⚠ Received shutdown signal, stopping collector...")
             self.running = False
+            # Close database connection
+            if self.db_initialized:
+                close_db()
+                print("✓ Database connections closed")
 
         signal.signal(signal.SIGINT, shutdown_handler)
         signal.signal(signal.SIGTERM, shutdown_handler)
+
+    def save_safety_indices_dual_write(self, indices_df: pd.DataFrame) -> tuple[bool, bool, bool]:
+        """
+        Save safety indices to Parquet, PostgreSQL, and GCS (triple-write).
+
+        Args:
+            indices_df: DataFrame with computed safety indices
+
+        Returns:
+            Tuple of (parquet_success, db_success, gcs_success)
+        """
+        parquet_success = False
+        db_success = False
+        gcs_success = False
+        local_parquet_path = None
+
+        # 1. Save to Parquet (local archive)
+        try:
+            local_parquet_path = self.storage.save_indices(indices_df)
+            parquet_success = True
+            self.stats['parquet_writes'] += 1
+            print(f"  ✓ Parquet: Saved {len(indices_df)} records")
+        except Exception as e:
+            print(f"  ✗ Parquet write failed: {e}")
+            logger.error(f"Parquet write failed: {e}", exc_info=True)
+            self.stats['dual_write_errors'] += 1
+
+        # 2. Save to PostgreSQL (operational database)
+        if self.db_initialized and (settings.USE_POSTGRESQL or settings.ENABLE_DUAL_WRITE):
+            try:
+                # Convert DataFrame rows to SafetyIndexRecord objects
+                records = []
+                for _, row in indices_df.iterrows():
+                    # Extract intersection ID (stored as float in Parquet)
+                    intersection_id = int(row['intersection']) if pd.notna(row['intersection']) else 0
+
+                    # Extract timestamp (column is named time_15min but contains 1-minute timestamps)
+                    timestamp = pd.to_datetime(row['time_15min'])
+
+                    # Create record
+                    record = SafetyIndexRecord(
+                        intersection_id=intersection_id,
+                        timestamp=timestamp,
+                        combined_index=float(row.get('Combined_Index', 0)),
+                        combined_index_eb=float(row.get('Combined_Index_EB')) if pd.notna(row.get('Combined_Index_EB')) else None,
+                        vru_index=float(row.get('VRU_Index')) if pd.notna(row.get('VRU_Index')) else None,
+                        vehicle_index=float(row.get('Vehicle_Index')) if pd.notna(row.get('Vehicle_Index')) else None,
+                        traffic_volume=int(row.get('traffic_volume', 0)),
+                        vru_count=int(row.get('psm_vru_count', 0)),
+                        hour_of_day=timestamp.hour,
+                        day_of_week=timestamp.weekday()
+                    )
+                    records.append(record)
+
+                # Batch insert
+                success_count = insert_safety_indices_batch(records)
+                if success_count == len(records):
+                    db_success = True
+                    self.stats['db_writes'] += 1
+                    print(f"  ✓ PostgreSQL: Saved {success_count}/{len(records)} records")
+                else:
+                    print(f"  ⚠ PostgreSQL: Partial success {success_count}/{len(records)} records")
+                    self.stats['dual_write_errors'] += 1
+
+            except Exception as e:
+                print(f"  ✗ PostgreSQL write failed: {e}")
+                logger.error(f"PostgreSQL write failed: {e}", exc_info=True)
+                self.stats['dual_write_errors'] += 1
+                if not settings.FALLBACK_TO_PARQUET:
+                    raise
+
+        # 3. Upload to GCS (cloud archive)
+        if self.gcs_initialized and parquet_success and local_parquet_path:
+            try:
+                # Extract date from the first timestamp in the DataFrame
+                first_timestamp = pd.to_datetime(indices_df.iloc[0]['time_15min'])
+                target_date = first_timestamp.date()
+
+                # Upload to GCS
+                gcs_uri = self.gcs.upload_indices(
+                    local_path=Path(local_parquet_path),
+                    target_date=target_date
+                )
+                gcs_success = True
+                self.stats['gcs_uploads'] += 1
+                print(f"  ✓ GCS: Uploaded to {gcs_uri}")
+            except Exception as e:
+                print(f"  ✗ GCS upload failed: {e}")
+                logger.error(f"GCS upload failed: {e}", exc_info=True)
+                self.stats['gcs_errors'] += 1
+
+        return parquet_success, db_success, gcs_success
 
     def collect_cycle(self) -> bool:
         """
@@ -108,19 +252,59 @@ class DataCollector:
                 print("⚠ No new data collected")
                 return True
 
-            # Save raw data to Parquet
+            # Save raw data to Parquet and upload to GCS
             print("\n[2/3] Saving data to Parquet storage...")
             if bsm_messages:
-                self.storage.save_bsm_batch(bsm_messages)
+                bsm_path = self.storage.save_bsm_batch(bsm_messages)
                 print(f"✓ Saved {len(bsm_messages)} BSM messages")
 
+                # Upload to GCS if enabled
+                if self.gcs_initialized and bsm_path:
+                    try:
+                        # Extract date from first message timestamp
+                        first_timestamp = pd.to_datetime(bsm_messages[0].get('metadata', {}).get('generatedAt', datetime.now()))
+                        target_date = first_timestamp.date()
+                        gcs_uri = self.gcs.upload_bsm_batch(Path(bsm_path), target_date)
+                        self.stats['gcs_uploads'] += 1
+                        print(f"  ✓ GCS: Uploaded BSM to {gcs_uri}")
+                    except Exception as e:
+                        print(f"  ⚠ GCS upload failed: {e}")
+                        logger.error(f"GCS BSM upload failed: {e}", exc_info=True)
+                        self.stats['gcs_errors'] += 1
+
             if psm_messages:
-                self.storage.save_psm_batch(psm_messages)
+                psm_path = self.storage.save_psm_batch(psm_messages)
                 print(f"✓ Saved {len(psm_messages)} PSM messages")
 
+                # Upload to GCS if enabled
+                if self.gcs_initialized and psm_path:
+                    try:
+                        first_timestamp = pd.to_datetime(psm_messages[0].get('metadata', {}).get('generatedAt', datetime.now()))
+                        target_date = first_timestamp.date()
+                        gcs_uri = self.gcs.upload_psm_batch(Path(psm_path), target_date)
+                        self.stats['gcs_uploads'] += 1
+                        print(f"  ✓ GCS: Uploaded PSM to {gcs_uri}")
+                    except Exception as e:
+                        print(f"  ⚠ GCS upload failed: {e}")
+                        logger.error(f"GCS PSM upload failed: {e}", exc_info=True)
+                        self.stats['gcs_errors'] += 1
+
             if mapdata_list:
-                self.storage.save_mapdata_batch(mapdata_list)
+                mapdata_path = self.storage.save_mapdata_batch(mapdata_list)
                 print(f"✓ Saved {len(mapdata_list)} MapData messages")
+
+                # Upload to GCS if enabled
+                if self.gcs_initialized and mapdata_path:
+                    try:
+                        # MapData doesn't have timestamp, use current date
+                        target_date = datetime.now().date()
+                        gcs_uri = self.gcs.upload_mapdata_batch(Path(mapdata_path), target_date)
+                        self.stats['gcs_uploads'] += 1
+                        print(f"  ✓ GCS: Uploaded MapData to {gcs_uri}")
+                    except Exception as e:
+                        print(f"  ⚠ GCS upload failed: {e}")
+                        logger.error(f"GCS MapData upload failed: {e}", exc_info=True)
+                        self.stats['gcs_errors'] += 1
 
             # Real-time processing: Compute safety indices
             print("\n[3/3] Computing real-time safety indices...")
@@ -215,9 +399,23 @@ class DataCollector:
                     # Compute safety indices
                     indices_df = compute_safety_indices(master_features, norm_constants)
 
-                    # Save indices to Parquet
-                    self.storage.save_indices(indices_df)
-                    print(f"✓ Computed and saved safety indices for {len(indices_df)} intervals")
+                    # Save indices using triple-write (Parquet + PostgreSQL + GCS)
+                    print(f"\nSaving {len(indices_df)} computed safety indices...")
+                    parquet_ok, db_ok, gcs_ok = self.save_safety_indices_dual_write(indices_df)
+
+                    # Report results
+                    if parquet_ok and db_ok and gcs_ok:
+                        print("✓ Triple-write successful (Parquet + PostgreSQL + GCS)")
+                    elif parquet_ok and db_ok:
+                        print("✓ Dual-write successful (Parquet + PostgreSQL)")
+                    elif parquet_ok and gcs_ok:
+                        print("✓ Dual-write successful (Parquet + GCS)")
+                    elif parquet_ok:
+                        print("✓ Parquet write successful (Database/GCS write failed or disabled)")
+                    elif db_ok:
+                        print("✓ PostgreSQL write successful (Parquet/GCS write failed)")
+                    else:
+                        print("✗ All writes failed!")
 
             except Exception as e:
                 print(f"⚠ Error during real-time processing: {e}")
@@ -250,8 +448,20 @@ class DataCollector:
         print(f"Total PSM Messages: {self.stats['total_psm']:,}")
         print(f"Total MapData: {self.stats['total_mapdata']}")
         print(f"Errors: {self.stats['errors']}")
+
+        # Storage statistics
+        if self.db_initialized or self.gcs_initialized:
+            print(f"\nStorage Statistics:")
+            print(f"  Parquet Writes: {self.stats['parquet_writes']}")
+            if self.db_initialized:
+                print(f"  PostgreSQL Writes: {self.stats['db_writes']}")
+                print(f"  Dual-Write Errors: {self.stats['dual_write_errors']}")
+            if self.gcs_initialized:
+                print(f"  GCS Uploads: {self.stats['gcs_uploads']}")
+                print(f"  GCS Errors: {self.stats['gcs_errors']}")
+
         if self.stats['last_collection']:
-            print(f"Last Collection: {self.stats['last_collection'].strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"\nLast Collection: {self.stats['last_collection'].strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"{'='*80}\n")
 
     def run(self):
@@ -266,6 +476,18 @@ class DataCollector:
         print(f"Realtime Mode: {self.realtime_mode}")
         print(f"Storage Path: {self.storage_path}")
         print(f"VCC Base URL: {settings.VCC_BASE_URL}")
+
+        print(f"\nPostgreSQL Dual-Write: {'✓ ENABLED' if self.db_initialized else '✗ DISABLED'}")
+        if self.db_initialized:
+            print(f"  Database URL: {settings.DATABASE_URL}")
+            print(f"  Fallback to Parquet: {settings.FALLBACK_TO_PARQUET}")
+
+        print(f"\nGCS Cloud Archive: {'✓ ENABLED' if self.gcs_initialized else '✗ DISABLED'}")
+        if self.gcs_initialized:
+            print(f"  Bucket: gs://{settings.GCS_BUCKET_NAME}")
+            if settings.GCS_PROJECT_ID:
+                print(f"  Project ID: {settings.GCS_PROJECT_ID}")
+
         print("="*80 + "\n")
 
         # Verify VCC credentials

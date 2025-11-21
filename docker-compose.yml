@@ -100,6 +100,22 @@ services:
       # Safety Index settings
       - EMPIRICAL_BAYES_K=${EMPIRICAL_BAYES_K:-50}
       - DEFAULT_LOOKBACK_DAYS=${DEFAULT_LOOKBACK_DAYS:-7}
+
+      # PostgreSQL + PostGIS database configuration (for dual-write)
+      - DATABASE_URL=${DATABASE_URL:-postgresql://trafficsafety:trafficsafety_dev@db:5432/trafficsafety}
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-5}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-10}
+
+      # Feature flags for PostgreSQL migration (disabled by default)
+      - USE_POSTGRESQL=${USE_POSTGRESQL:-false}
+      - FALLBACK_TO_PARQUET=${FALLBACK_TO_PARQUET:-true}
+      - ENABLE_DUAL_WRITE=${ENABLE_DUAL_WRITE:-false}
+
+      # GCP Cloud Storage configuration (disabled by default)
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-}
+      - GCS_PROJECT_ID=${GCS_PROJECT_ID:-}
+      - ENABLE_GCS_UPLOAD=${ENABLE_GCS_UPLOAD:-false}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
     env_file:
       - ./backend/.env
     volumes:
@@ -107,6 +123,8 @@ services:
       - ./backend/app:/app/app
       # Share Parquet storage with API
       - parquet_data:/app/data/parquet
+      # Mount GCP credentials if they exist
+      - ./backend/secrets:/app/secrets:ro
     restart: unless-stopped
     command: ["python", "data_collector.py", "--interval", "${COLLECTION_INTERVAL:-60}", "--storage-path", "/app/data/parquet"]
 

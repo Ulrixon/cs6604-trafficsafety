@@ -16,8 +16,8 @@ PORT=${PORT:-8080}
 export VTTI_DB_INSTANCE_CONNECTION_NAME=${VTTI_DB_INSTANCE_CONNECTION_NAME:-""}
 
 # Database credentials
-export VTTI_DB_NAME=${VTTI_DB_NAME:-"vtti_db"}
-export VTTI_DB_USER=${VTTI_DB_USER:-"vtti_user"}
+export VTTI_DB_NAME=${VTTI_DB_NAME:-"vtsi"}
+export VTTI_DB_USER=${VTTI_DB_USER:-"postgres"}
 export VTTI_DB_PASSWORD=${VTTI_DB_PASSWORD:-""}
 
 # TCP connection settings (used only if VTTI_DB_INSTANCE_CONNECTION_NAME is not set)

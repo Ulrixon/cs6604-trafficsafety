@@ -41,7 +41,7 @@ gcloud run deploy ${SERVICE_NAME} \
   --max-instances 10 \
   --min-instances 0 \
   --add-cloudsql-instances ${CLOUD_SQL_INSTANCE} \
-  --set-env-vars "VTTI_DB_INSTANCE_CONNECTION_NAME=${CLOUD_SQL_INSTANCE},VTTI_DB_NAME=vtti_db,MCDM_BIN_MINUTES=15,MCDM_LOOKBACK_HOURS=24" \
+  --set-env-vars "VTTI_DB_INSTANCE_CONNECTION_NAME=${CLOUD_SQL_INSTANCE},VTTI_DB_NAME=vtsi,MCDM_BIN_MINUTES=15,MCDM_LOOKBACK_HOURS=24" \
   --set-secrets "VTTI_DB_USER=db_user:1,VTTI_DB_PASSWORD=db_password:1"
 
 echo ""

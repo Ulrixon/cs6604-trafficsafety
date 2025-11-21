@@ -37,7 +37,9 @@ class Settings(BaseSettings):
     VTTI_DB_NAME: str = "vtsi"
     VTTI_DB_USER: str = "postgres"
     VTTI_DB_PASSWORD: str = ""  # Must be set in .env file
-    VTTI_DB_INSTANCE_CONNECTION_NAME: str = ""  # Cloud SQL instance (e.g., project:region:instance)
+    VTTI_DB_INSTANCE_CONNECTION_NAME: str = (
+        ""  # Cloud SQL instance (e.g., project:region:instance)
+    )
 
     # MCDM Safety Index settings
     MCDM_BIN_MINUTES: int = Field(

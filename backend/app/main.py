@@ -47,6 +47,7 @@ async def lifespan(app: FastAPI):
     logger.info("✓ Database connection closed")
 
 
+
 def create_app() -> FastAPI:
     """
     Create and configure the FastAPI application.
@@ -69,6 +70,8 @@ def create_app() -> FastAPI:
 
     # Include API routers
     app.include_router(intersection_router, prefix="/api/v1")
+    app.include_router(vcc_router, prefix="/api/v1")
+    app.include_router(history_router, prefix="/api/v1")
 
     # Simple health‑check endpoint
     @app.get("/health", tags=["Health"])

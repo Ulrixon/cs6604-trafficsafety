@@ -8,6 +8,7 @@ from typing import Optional
 
 from app.models.intersection import Intersection
 from app.utils.scaling import format_number
+from app.views.history_components import render_historical_section
 
 
 def render_kpi_cards(df: pd.DataFrame):
@@ -118,6 +119,25 @@ def render_details_card(row: Optional[pd.Series]):
     st.divider()
     st.caption(f"**Intersection ID:** {row['intersection_id']}")
 
+    # Historical data toggle button
+    st.markdown("")  # Add spacing
+
+    # Initialize session state for history visibility if not exists
+    if "show_history" not in st.session_state:
+        st.session_state.show_history = False
+
+    # Toggle button
+    if st.button(
+        "📊 View Historical Data" if not st.session_state.show_history else "📊 Hide Historical Data",
+        key=f"history_toggle_{row['intersection_id']}",
+        use_container_width=True
+    ):
+        st.session_state.show_history = not st.session_state.show_history
+
+    # Render historical section if toggled on
+    if st.session_state.show_history:
+        render_historical_section(str(row['intersection_id']))
+
 
 def render_legend():
     """Render a legend explaining the visual encoding."""
@@ -212,9 +232,12 @@ def render_filters(
     if not df.empty:
         min_vol = float(df["traffic_volume"].min())
         max_vol = float(df["traffic_volume"].max())
-        # Handle case where min and max are the same
+
+        # Handle edge case where all values are the same
         if min_vol == max_vol:
-            max_vol = min_vol + 1.0
+            # Add a small buffer to allow the slider to work
+            min_vol = max(0, min_vol - 1)
+            max_vol = max_vol + 1
     else:
         min_vol, max_vol = 0.0, 10000.0
 

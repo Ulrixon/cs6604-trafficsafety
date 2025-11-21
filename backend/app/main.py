@@ -19,6 +19,8 @@ import logging
 from .schemas.intersection import IntersectionRead
 from .core.config import settings  # type: ignore
 from .api.intersection import router as intersection_router
+from .api.vcc import router as vcc_router
+from .api.history import router as history_router
 from .services.db_client import get_db_client, close_db_client
 
 logger = logging.getLogger(__name__)
@@ -30,21 +32,19 @@ async def lifespan(app: FastAPI):
     Lifespan context manager for FastAPI app.
     Handles startup and shutdown events.
     """
-    # Startup: Initialize database connection
-    logger.info("Initializing database connection...")
-    try:
-        get_db_client()
-        logger.info("✓ Database connection established")
-    except Exception as e:
-        logger.error(f"Failed to connect to database: {e}")
-        logger.warning("API will continue but database features may not work")
-
+    # Startup: Initialize database connection (non-blocking)
+    logger.info("Starting Traffic Safety API...")
+    # Database connection will be established lazily on first request
+    
     yield
 
     # Shutdown: Close database connection
-    logger.info("Closing database connection...")
-    close_db_client()
-    logger.info("✓ Database connection closed")
+    logger.info("Shutting down Traffic Safety API...")
+    try:
+        close_db_client()
+        logger.info("✓ Database connection closed")
+    except Exception as e:
+        logger.warning(f"Error closing database: {e}")
 
 
 def create_app() -> FastAPI:

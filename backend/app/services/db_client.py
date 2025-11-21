@@ -4,6 +4,7 @@ PostgreSQL Database Client for VTTI Database
 Adapted from data-integration/gcp_postgres_client.py for backend use.
 """
 
+import os
 import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor

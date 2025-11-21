@@ -101,9 +101,7 @@ def render_single_time_view(
         st.warning(
             f"No data available for **{intersection}** at **{selected_time.strftime('%Y-%m-%d %H:%M')}**"
         )
-        st.info(
-            "💡 Try selecting a different time or intersection."
-        )
+        st.info("💡 Try selecting a different time or intersection.")
         return
 
     # Display metrics in cards
@@ -243,9 +241,7 @@ def render_trend_view(
             f"No data available for **{intersection}** between "
             f"**{start_time.strftime('%Y-%m-%d %H:%M')}** and **{end_time.strftime('%Y-%m-%d %H:%M')}**"
         )
-        st.info(
-            "💡 Try selecting a different time range or intersection."
-        )
+        st.info("💡 Try selecting a different time range or intersection.")
         return
 
     # Convert to DataFrame
@@ -447,8 +443,12 @@ def main():
 
             # Default to current date 8 AM - 6 PM
             today = datetime.now().date()
-            default_start = datetime.combine(today, datetime.strptime("08:00", "%H:%M").time())
-            default_end = datetime.combine(today, datetime.strptime("18:00", "%H:%M").time())
+            default_start = datetime.combine(
+                today, datetime.strptime("08:00", "%H:%M").time()
+            )
+            default_end = datetime.combine(
+                today, datetime.strptime("18:00", "%H:%M").time()
+            )
 
             # Initialize session state for time range if not exists
             if "start_datetime" not in st.session_state:
@@ -483,7 +483,7 @@ def main():
             # Update session state with manual input changes
             start_datetime = datetime.combine(start_date, start_time)
             end_datetime = datetime.combine(end_date, end_time)
-            
+
             # Update session state if values changed manually
             if start_datetime != st.session_state.start_datetime:
                 st.session_state.start_datetime = start_datetime
@@ -501,28 +501,44 @@ def main():
 
             with col1:
                 if st.button("2 Hours", use_container_width=True):
-                    st.session_state.start_datetime = datetime.combine(start_date, start_time)
-                    st.session_state.end_datetime = st.session_state.start_datetime + timedelta(hours=2)
+                    st.session_state.start_datetime = datetime.combine(
+                        start_date, start_time
+                    )
+                    st.session_state.end_datetime = (
+                        st.session_state.start_datetime + timedelta(hours=2)
+                    )
                     st.rerun()
 
             with col2:
                 if st.button("6 Hours", use_container_width=True):
-                    st.session_state.start_datetime = datetime.combine(start_date, start_time)
-                    st.session_state.end_datetime = st.session_state.start_datetime + timedelta(hours=6)
+                    st.session_state.start_datetime = datetime.combine(
+                        start_date, start_time
+                    )
+                    st.session_state.end_datetime = (
+                        st.session_state.start_datetime + timedelta(hours=6)
+                    )
                     st.rerun()
 
             col1, col2 = st.columns(2)
 
             with col1:
                 if st.button("12 Hours", use_container_width=True):
-                    st.session_state.start_datetime = datetime.combine(start_date, start_time)
-                    st.session_state.end_datetime = st.session_state.start_datetime + timedelta(hours=12)
+                    st.session_state.start_datetime = datetime.combine(
+                        start_date, start_time
+                    )
+                    st.session_state.end_datetime = (
+                        st.session_state.start_datetime + timedelta(hours=12)
+                    )
                     st.rerun()
 
             with col2:
                 if st.button("24 Hours", use_container_width=True):
-                    st.session_state.start_datetime = datetime.combine(start_date, start_time)
-                    st.session_state.end_datetime = st.session_state.start_datetime + timedelta(hours=24)
+                    st.session_state.start_datetime = datetime.combine(
+                        start_date, start_time
+                    )
+                    st.session_state.end_datetime = (
+                        st.session_state.start_datetime + timedelta(hours=24)
+                    )
                     st.rerun()
 
         # About section

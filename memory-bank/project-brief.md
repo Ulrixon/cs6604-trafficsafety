@@ -1,0 +1,13 @@
+# Project Brief: Intersection Safety Index
+
+## What problem are you solving?
+
+This project addresses the critical challenge of proactively delivering actionable traffic safety data to drivers and transportation stakeholders. Currently, drivers and autonomous vehicle systems lack real-time, data-driven insights about intersection safety conditions that could inform their decision-making. By developing an intersection safety index based on live traffic data from the Virginia Connected Corridor (VCC), we can quantify and communicate safety risk levels at specific intersections, enabling proactive rather than reactive responses to hazardous conditions. This system transforms raw V2X message data (BSM, SPAT, MapData, PSM) into meaningful safety metrics that can be consumed by downstream applications and decision-makers.
+
+## For whom?
+
+This solution serves multiple stakeholder groups across the transportation ecosystem. Primary beneficiaries include the Virginia Tech Transportation Institute (VTTI) and Virginia Department of Transportation (VDOT), who can leverage safety indices for infrastructure planning and policy decisions. Autonomous vehicle researchers gain quantifiable safety metrics for algorithm development and validation. Most importantly, this system ultimately serves drivers and vulnerable road users (pedestrians, cyclists) who benefit from improved safety awareness and risk communication. Civil engineers can use these insights to identify problematic intersections requiring geometric or signal timing improvements, creating a feedback loop for continuous safety enhancement.
+
+## What does success look like?
+
+Success is defined as a fully operational API capable of collecting real-time traffic information from the VCC Public API, processing V2X messages through safety analysis algorithms, and updating intersection safety scores in real time. The system will continuously ingest data streams (BSM, SPAT, PSM), compute safety metrics based on traffic conflicts, signal compliance, and behavioral patterns, and expose these scores through a well-documented REST API. Success metrics include: reliable real-time data processing with minimal latency, accurate safety score computation validated against historical crash data, scalable architecture supporting all VCC intersections, and demonstrated integration by at least one downstream application (e.g., driver warning system, traffic management dashboard). The ultimate measure of success will be the system's ability to provide actionable intelligence that contributes to measurable improvements in intersection safety.

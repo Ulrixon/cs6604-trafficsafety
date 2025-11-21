@@ -1,32 +1,52 @@
-# Byte‑code and caches
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
 
 # Virtual environments
 venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment files
 .env
-.env.*
+.env.local
 
-# Build artifacts
-build/
-dist/
-*.egg-info/
-*.egg
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+*.cover
 
-# OS files
+# Documentation build
+docs/_build/
+
+# OS
 .DS_Store
 Thumbs.db
 
-# Git files
-.git
+# Git
+.git/
 .gitignore
 
-# Docker files
-Dockerfile
-docker-compose.yml
-
-# Miscellaneous
+# Other
 *.log
-*.swp
-*~
+*.bak
+setup_and_run.bat
+test_api_manual.py
+README*.md
+INTEGRATION_GUIDE.md

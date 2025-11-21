@@ -3,7 +3,7 @@ Configuration constants for the Traffic Safety Index application.
 """
 
 # API Configuration
-API_URL = "https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safety/index/"
+API_URL = "http://api:8000/api/v1/safety/index/"
 API_TIMEOUT = 10  # seconds
 API_MAX_RETRIES = 3
 API_CACHE_TTL = 300  # seconds (5 minutes)

@@ -1,5 +1,8 @@
 FROM python:3.11-slim
 
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+
 # Set working directory
 WORKDIR /app
 
@@ -19,8 +22,14 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY app/ ./app/
 
-# Expose port
-EXPOSE 8000
+# Copy data collector script
+COPY data_collector.py .
 
-# Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Copy historical processing script
+COPY process_historical.py .
+
+# Create data directory
+RUN mkdir -p /app/data/parquet
+
+# Run the data collector
+CMD ["python", "data_collector.py", "--interval", "60", "--storage-path", "/app/data/parquet"]

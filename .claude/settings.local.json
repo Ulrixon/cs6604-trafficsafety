@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(curl:*)",
+      "Bash(cat:*)",
+      "Bash(MSYS_NO_PATHCONV=1 docker exec:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

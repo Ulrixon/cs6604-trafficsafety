@@ -97,13 +97,6 @@ def get_safety_score_trend(
     if end_time <= start_time:
         raise HTTPException(status_code=400, detail="end_time must be after start_time")
 
-    # Limit to reasonable time range (e.g., 7 days)
-    max_days = 7
-    if (end_time - start_time).days > max_days:
-        raise HTTPException(
-            status_code=400, detail=f"Time range cannot exceed {max_days} days"
-        )
-
     db_client = get_db_client()
     mcdm_service = MCDMSafetyIndexService(db_client)
 

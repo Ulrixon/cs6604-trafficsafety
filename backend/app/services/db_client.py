@@ -52,7 +52,7 @@ class VTTIPostgresClient:
         self.database = database or os.getenv("VTTI_DB_NAME", "vtsi")
         self.user = user or os.getenv("VTTI_DB_USER", "postgres")
         self.password = password or os.getenv("VTTI_DB_PASSWORD")
-        instance_connection_name = os.getenv("VTTI_DB_INSTANCE_CONNECTION_NAME")
+        instance_connection_name = os.getenv("INSTANCE_CONNECTION_NAME")
 
         # If Cloud SQL instance connection name is provided → use Unix socket
         if instance_connection_name:

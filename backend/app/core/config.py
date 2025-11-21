@@ -30,11 +30,14 @@ class Settings(BaseSettings):
     )
 
     # PostgreSQL database configuration (for MCDM calculations)
+    # For local development: use VTTI_DB_HOST and VTTI_DB_PORT
+    # For Cloud Run: use VTTI_DB_INSTANCE_CONNECTION_NAME (Unix socket)
     VTTI_DB_HOST: str = "127.0.0.1"
     VTTI_DB_PORT: int = 9470
     VTTI_DB_NAME: str = "vtsi"
     VTTI_DB_USER: str = "postgres"
     VTTI_DB_PASSWORD: str = ""  # Must be set in .env file
+    VTTI_DB_INSTANCE_CONNECTION_NAME: str = ""  # Cloud SQL instance (e.g., project:region:instance)
 
     # MCDM Safety Index settings
     MCDM_BIN_MINUTES: int = Field(

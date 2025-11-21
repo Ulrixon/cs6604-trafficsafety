@@ -70,15 +70,26 @@ class VTTIPostgresClient:
 
         try:
             # Create connection pool
-            self.connection_pool = psycopg2.pool.SimpleConnectionPool(
-                min_connections,
-                max_connections,
-                host=self.host,
-                database=self.database,
-                user=self.user,
-                password=self.password,
-                port=self.port,
-            )
+            if self.port is None:
+                # Unix socket mode
+                self.connection_pool = psycopg2.pool.SimpleConnectionPool(
+                    min_connections,
+                    max_connections,
+                    host=self.host,
+                    database=self.database,
+                    user=self.user,
+                    password=self.password,
+                )
+            else:
+                self.connection_pool = psycopg2.pool.SimpleConnectionPool(
+                    min_connections,
+                    max_connections,
+                    host=self.host,
+                    database=self.database,
+                    user=self.user,
+                    password=self.password,
+                    port=self.port,
+                )
             logger.info(
                 f"✓ Connected to PostgreSQL database: {self.database}@{self.host}"
             )

@@ -16,14 +16,29 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 
+logger = logging.getLogger(__name__)
+
 from .schemas.intersection import IntersectionRead
 from .core.config import settings  # type: ignore
 from .api.intersection import router as intersection_router
-from .api.vcc import router as vcc_router
-from .api.history import router as history_router
 from .services.db_client import get_db_client, close_db_client
 
-logger = logging.getLogger(__name__)
+# Optional routers - import conditionally to avoid startup failures
+try:
+    from .api.vcc import router as vcc_router
+
+    VCC_AVAILABLE = True
+except Exception as e:
+    logger.warning(f"VCC router not available: {e}")
+    VCC_AVAILABLE = False
+
+try:
+    from .api.history import router as history_router
+
+    HISTORY_AVAILABLE = True
+except Exception as e:
+    logger.warning(f"History router not available: {e}")
+    HISTORY_AVAILABLE = False
 
 
 @asynccontextmanager
@@ -35,7 +50,7 @@ async def lifespan(app: FastAPI):
     # Startup: Initialize database connection (non-blocking)
     logger.info("Starting Traffic Safety API...")
     # Database connection will be established lazily on first request
-    
+
     yield
 
     # Shutdown: Close database connection
@@ -69,8 +84,15 @@ def create_app() -> FastAPI:
 
     # Include API routers
     app.include_router(intersection_router, prefix="/api/v1")
-    app.include_router(vcc_router, prefix="/api/v1")
-    app.include_router(history_router, prefix="/api/v1")
+
+    # Optional routers
+    if VCC_AVAILABLE:
+        app.include_router(vcc_router, prefix="/api/v1")
+        logger.info("✓ VCC router registered")
+
+    if HISTORY_AVAILABLE:
+        app.include_router(history_router, prefix="/api/v1")
+        logger.info("✓ History router registered")
 
     # Simple health‑check endpoint
     @app.get("/health", tags=["Health"])

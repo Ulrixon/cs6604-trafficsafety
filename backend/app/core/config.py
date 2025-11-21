@@ -45,9 +45,12 @@ class Settings(BaseSettings):
         description="Hours of historical data to use for MCDM CRITIC weights",
     )
 
-    # VCC credentials (optional, for other services)
+    # VCC API configuration (optional, for other services)
+    VCC_BASE_URL: str = "https://api.vcc.vtti.vt.edu"
     VCC_CLIENT_ID: str = ""
     VCC_CLIENT_SECRET: str = ""
+    DATA_SOURCE: str = "vcc"  # Data source for VCC API
+    REALTIME_ENABLED: bool = False  # Enable real-time streaming
 
     model_config = SettingsConfigDict(
         env_file="backend/.env",

@@ -423,8 +423,8 @@ def main():
         if analysis_mode == "Single Time Point":
             st.subheader("🕐 Select Time")
 
-            # Default to Nov 9, 2025 10:00 AM
-            default_date = datetime(2025, 11, 9)
+            # Default to current date at 10:00 AM
+            default_date = datetime.now().date()
             default_time = datetime.strptime("10:00", "%H:%M").time()
 
             selected_date = st.date_input(
@@ -445,9 +445,10 @@ def main():
         else:  # Time Range Trend
             st.subheader("📅 Select Time Range")
 
-            # Default to Nov 9, 2025 8 AM - 6 PM
-            default_start = datetime(2025, 11, 9, 8, 0)
-            default_end = datetime(2025, 11, 9, 18, 0)
+            # Default to current date 8 AM - 6 PM
+            today = datetime.now().date()
+            default_start = datetime.combine(today, datetime.strptime("08:00", "%H:%M").time())
+            default_end = datetime.combine(today, datetime.strptime("18:00", "%H:%M").time())
 
             # Initialize session state for time range if not exists
             if "start_datetime" not in st.session_state:

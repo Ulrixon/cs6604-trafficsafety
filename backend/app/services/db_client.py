@@ -49,12 +49,20 @@ class VTTIPostgresClient:
             min_connections: Minimum connections in pool
             max_connections: Maximum connections in pool
         """
-        self.host = host or os.getenv("VTTI_DB_HOST", "127.0.0.1")
         self.database = database or os.getenv("VTTI_DB_NAME", "vtsi")
         self.user = user or os.getenv("VTTI_DB_USER", "postgres")
         self.password = password or os.getenv("VTTI_DB_PASSWORD")
-        self.port = int(port or os.getenv("VTTI_DB_PORT", "9470"))
+        instance_connection_name = os.getenv("VTTI_DB_INSTANCE_CONNECTION_NAME")
 
+        # If Cloud SQL instance connection name is provided → use Unix socket
+        if instance_connection_name:
+            # Cloud Run automatically mounts sockets here
+            self.host = f"/cloudsql/{instance_connection_name}"
+            self.port = None  # socket mode ignores port
+        else:
+            # Local / TCP fallback
+            self.host = host or os.getenv("VTTI_DB_HOST", "127.0.0.1")
+            self.port = int(port or os.getenv("VTTI_DB_PORT", "9470"))
         if not self.password:
             raise ValueError(
                 "Database password must be provided via VTTI_DB_PASSWORD environment variable or password parameter"

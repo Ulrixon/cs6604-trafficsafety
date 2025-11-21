@@ -1,20 +1,22 @@
 version: '3.8'
 
 services:
-  # PostgreSQL database for storing safety indices
+  # PostgreSQL + PostGIS database for storing safety indices
   db:
-    image: postgres:15-alpine
+    image: postgis/postgis:15-3.3
     container_name: trafficsafety-db
     environment:
       POSTGRES_DB: trafficsafety
       POSTGRES_USER: trafficsafety
       POSTGRES_PASSWORD: trafficsafety_dev
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/init:/docker-entrypoint-initdb.d  # Schema initialization scripts
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U trafficsafety"]
+      test: ["CMD-SHELL", "pg_isready -U trafficsafety -d trafficsafety"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -147,12 +149,33 @@ services:
       retries: 3
       start_period: 40s
 
+  # PgAdmin for database management (development only)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: trafficsafety-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@trafficsafety.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - db
+    restart: unless-stopped
+    profiles:
+      - dev  # Only start when using 'docker-compose --profile dev up'
+
 volumes:
   postgres_data:
     driver: local
   parquet_data:
     driver: local
   redis_data:
+    driver: local
+  pgadmin_data:
     driver: local
 
 networks:

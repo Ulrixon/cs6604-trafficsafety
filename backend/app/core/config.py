@@ -15,6 +15,23 @@ class Settings(BaseSettings):
     # Base URL for the service
     BASE_URL: str = Field("http://localhost:8000", env="BASE_URL")
 
+    # PostgreSQL + PostGIS database configuration
+    DATABASE_URL: str = Field(
+        "postgresql://trafficsafety:trafficsafety_dev@db:5432/trafficsafety",
+        env="DATABASE_URL",
+        description="PostgreSQL connection string"
+    )
+    DB_POOL_SIZE: int = Field(
+        5,
+        env="DB_POOL_SIZE",
+        description="Number of database connections to maintain in pool"
+    )
+    DB_MAX_OVERFLOW: int = Field(
+        10,
+        env="DB_MAX_OVERFLOW",
+        description="Maximum overflow connections beyond pool size"
+    )
+
     # Trino database configuration
     TRINO_HOST: str = Field(
         "smart-cities-trino.pre-prod.cloud.vtti.vt.edu",
@@ -66,6 +83,40 @@ class Settings(BaseSettings):
         False,
         env="REALTIME_ENABLED",
         description="Enable real-time WebSocket streaming"
+    )
+
+    # Feature flags for PostgreSQL migration
+    USE_POSTGRESQL: bool = Field(
+        False,
+        env="USE_POSTGRESQL",
+        description="Use PostgreSQL for queries (migration feature flag)"
+    )
+    FALLBACK_TO_PARQUET: bool = Field(
+        True,
+        env="FALLBACK_TO_PARQUET",
+        description="Fallback to Parquet if PostgreSQL query fails"
+    )
+    ENABLE_DUAL_WRITE: bool = Field(
+        False,
+        env="ENABLE_DUAL_WRITE",
+        description="Write to both PostgreSQL and Parquet during migration"
+    )
+
+    # GCP Cloud Storage configuration (for future use)
+    GCS_BUCKET_NAME: str = Field(
+        "",
+        env="GCS_BUCKET_NAME",
+        description="GCP bucket name for Parquet storage (e.g., trafficsafety-prod-parquet)"
+    )
+    GCS_PROJECT_ID: str = Field(
+        "",
+        env="GCS_PROJECT_ID",
+        description="GCP project ID"
+    )
+    ENABLE_GCS_UPLOAD: bool = Field(
+        False,
+        env="ENABLE_GCS_UPLOAD",
+        description="Enable uploading Parquet files to GCS"
     )
 
     class Config:

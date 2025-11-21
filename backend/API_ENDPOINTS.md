@@ -1,6 +1,7 @@
 # Traffic Safety Backend API Documentation
 
 ## Base URL
+
 ```
 http://localhost:8000/api/v1
 ```
@@ -8,11 +9,13 @@ http://localhost:8000/api/v1
 ## Endpoints
 
 ### 1. List All Intersections with Latest Safety Scores
+
 ```
 GET /safety/index/
 ```
 
 **Response:**
+
 ```json
 [
   {
@@ -28,14 +31,17 @@ GET /safety/index/
 ---
 
 ### 2. Get Single Intersection by ID
+
 ```
 GET /safety/index/{intersection_id}
 ```
 
 **Parameters:**
+
 - `intersection_id` (path): Integer ID of intersection
 
 **Response:**
+
 ```json
 {
   "id": 1,
@@ -49,11 +55,13 @@ GET /safety/index/{intersection_id}
 ---
 
 ### 3. List Available Intersections
+
 ```
 GET /safety/index/intersections/list
 ```
 
 **Response:**
+
 ```json
 {
   "intersections": ["glebe-potomac"]
@@ -63,21 +71,25 @@ GET /safety/index/intersections/list
 ---
 
 ### 4. Get Safety Score at Specific Time
+
 ```
 GET /safety/index/time/specific
 ```
 
 **Query Parameters:**
+
 - `intersection` (required): Intersection name (e.g., "glebe-potomac")
 - `time` (required): ISO 8601 datetime (e.g., "2025-11-09T10:00:00")
 - `bin_minutes` (optional): Time bin size in minutes (default: 15, range: 1-60)
 
 **Example:**
+
 ```bash
 curl "http://localhost:8000/api/v1/safety/index/time/specific?intersection=glebe-potomac&time=2025-11-09T10:00:00&bin_minutes=15"
 ```
 
 **Response:**
+
 ```json
 {
   "intersection": "glebe-potomac",
@@ -96,6 +108,7 @@ curl "http://localhost:8000/api/v1/safety/index/time/specific?intersection=glebe
 ```
 
 **Fields:**
+
 - `safety_score`: Overall safety score (0-100, higher is safer)
 - `mcdm_index`: Multi-Criteria Decision Making index (same as safety_score)
 - `vehicle_count`: Number of vehicles detected in time bin
@@ -110,26 +123,31 @@ curl "http://localhost:8000/api/v1/safety/index/time/specific?intersection=glebe
 ---
 
 ### 5. Get Safety Score Trend Over Time Range
+
 ```
 GET /safety/index/time/range
 ```
 
 **Query Parameters:**
+
 - `intersection` (required): Intersection name (e.g., "glebe-potomac")
 - `start_time` (required): ISO 8601 datetime (e.g., "2025-11-09T08:00:00")
 - `end_time` (required): ISO 8601 datetime (e.g., "2025-11-09T18:00:00")
 - `bin_minutes` (optional): Time bin size in minutes (default: 15, range: 1-60)
 
 **Constraints:**
+
 - `end_time` must be after `start_time`
 - Time range cannot exceed 7 days
 
 **Example:**
+
 ```bash
 curl "http://localhost:8000/api/v1/safety/index/time/range?intersection=glebe-potomac&start_time=2025-11-09T08:00:00&end_time=2025-11-09T10:00:00&bin_minutes=15"
 ```
 
 **Response:**
+
 ```json
 [
   {
@@ -144,7 +162,7 @@ curl "http://localhost:8000/api/v1/safety/index/time/range?intersection=glebe-po
     "incident_count": 1,
     "saw_score": 56.92,
     "edas_score": 42.11,
-    "codas_score": 71.10
+    "codas_score": 71.1
   },
   {
     "intersection": "glebe-potomac",
@@ -170,6 +188,7 @@ curl "http://localhost:8000/api/v1/safety/index/time/range?intersection=glebe-po
 The safety scores are calculated using a hybrid Multi-Criteria Decision Making (MCDM) approach:
 
 1. **Data Collection**: Gathers data from multiple tables:
+
    - BSM (Basic Safety Messages)
    - PSM (Personal Safety Messages)
    - Vehicle count
@@ -178,6 +197,7 @@ The safety scores are calculated using a hybrid Multi-Criteria Decision Making (
    - Safety events
 
 2. **Criteria Weighting**: Uses CRITIC method to determine weights for:
+
    - Vehicle count
    - VRU count
    - Average speed
@@ -185,6 +205,7 @@ The safety scores are calculated using a hybrid Multi-Criteria Decision Making (
    - Incident count
 
 3. **Scoring Methods**: Combines three MCDM methods:
+
    - **SAW** (Simple Additive Weighting): Weighted sum of normalized criteria
    - **EDAS** (Evaluation based on Distance from Average Solution): Distance from average performance
    - **CODAS** (Combinative Distance-based Assessment): Euclidean and Taxicab distances
@@ -198,6 +219,7 @@ The safety scores are calculated using a hybrid Multi-Criteria Decision Making (
 ## Data Availability
 
 Currently available data:
+
 - **Intersection**: glebe-potomac
 - **Date Range**: Up to November 9, 2025
 - **Time Resolution**: 15-minute bins (configurable)
@@ -207,6 +229,7 @@ Currently available data:
 ## Error Responses
 
 ### 404 Not Found
+
 ```json
 {
   "detail": "No data available for intersection 'xyz' at time 2025-11-09T10:00:00"
@@ -214,6 +237,7 @@ Currently available data:
 ```
 
 ### 400 Bad Request
+
 ```json
 {
   "detail": "end_time must be after start_time"
@@ -229,11 +253,13 @@ Currently available data:
 ---
 
 ## Health Check
+
 ```
 GET /health
 ```
 
 **Response:**
+
 ```json
 {
   "status": "ok"

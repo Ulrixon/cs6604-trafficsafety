@@ -20,7 +20,10 @@ API_CACHE_TTL = int(os.getenv("API_CACHE_TTL", "300"))  # seconds (5 minutes)
 # Map Configuration
 DEFAULT_LATITUDE = float(os.getenv("DEFAULT_LATITUDE", "38.86"))
 DEFAULT_LONGITUDE = float(os.getenv("DEFAULT_LONGITUDE", "-77.055"))
-DEFAULT_CENTER = (DEFAULT_LATITUDE, DEFAULT_LONGITUDE)  # Default to D.C. area, will be computed from data
+DEFAULT_CENTER = (
+    DEFAULT_LATITUDE,
+    DEFAULT_LONGITUDE,
+)  # Default to D.C. area, will be computed from data
 DEFAULT_ZOOM = int(os.getenv("DEFAULT_ZOOM", "13"))
 MAP_HEIGHT = int(os.getenv("MAP_HEIGHT", "650"))
 MAP_TILES = "CartoDB positron"  # Clean, minimal base map
@@ -31,8 +34,12 @@ MAX_RADIUS_PX = int(os.getenv("MAX_RADIUS_PX", "30"))
 RADIUS_SCALE_FACTOR = MAX_RADIUS_PX - MIN_RADIUS_PX
 
 # Visual Encoding - Color Thresholds
-COLOR_LOW_THRESHOLD = int(os.getenv("COLOR_LOW_THRESHOLD", "60"))  # Below this: green (low risk)
-COLOR_HIGH_THRESHOLD = int(os.getenv("COLOR_HIGH_THRESHOLD", "75"))  # Above this: red (high risk)
+COLOR_LOW_THRESHOLD = int(
+    os.getenv("COLOR_LOW_THRESHOLD", "60")
+)  # Below this: green (low risk)
+COLOR_HIGH_THRESHOLD = int(
+    os.getenv("COLOR_HIGH_THRESHOLD", "75")
+)  # Above this: red (high risk)
 
 # Colors (Hex codes)
 COLOR_LOW_RISK = "#2ECC71"  # Green

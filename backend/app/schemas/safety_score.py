@@ -9,7 +9,7 @@ from typing import Optional
 
 class SafetyScoreTimePoint(BaseModel):
     """Safety score for a specific time point."""
-    
+
     intersection: str = Field(..., example="glebe-potomac")
     time_bin: datetime = Field(..., example="2025-11-09T10:00:00")
     safety_score: float = Field(..., ge=0, le=100, example=67.66)
@@ -26,7 +26,7 @@ class SafetyScoreTimePoint(BaseModel):
 
 class SafetyScoreTrend(BaseModel):
     """Safety score trend over time for an intersection."""
-    
+
     intersection: str = Field(..., example="glebe-potomac")
     time_points: list[SafetyScoreTimePoint] = Field(..., description="Time series data")
     avg_safety_score: float = Field(..., example=65.5)
@@ -38,5 +38,5 @@ class SafetyScoreTrend(BaseModel):
 
 class IntersectionList(BaseModel):
     """List of available intersections."""
-    
+
     intersections: list[str] = Field(..., example=["glebe-potomac", "duke-jordan"])

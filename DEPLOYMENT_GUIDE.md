@@ -5,6 +5,7 @@ This guide explains how to deploy the Traffic Safety application (backend API an
 ## Prerequisites
 
 1. **Google Cloud SDK** installed and configured
+
    ```bash
    gcloud --version
    gcloud auth login
@@ -12,11 +13,13 @@ This guide explains how to deploy the Traffic Safety application (backend API an
    ```
 
 2. **Docker** installed
+
    ```bash
    docker --version
    ```
 
 3. **Required GCP APIs enabled**
+
    ```bash
    gcloud services enable \
      run.googleapis.com \
@@ -44,22 +47,27 @@ This guide explains how to deploy the Traffic Safety application (backend API an
 ## Backend Deployment
 
 ### 1. Navigate to backend directory
+
 ```bash
 cd backend
 ```
 
 ### 2. Update configuration (if needed)
+
 Edit `docker-entrypoint.sh` to adjust:
+
 - Database host: `VTTI_DB_HOST=34.140.49.230`
 - MCDM settings: `MCDM_BIN_MINUTES`, `MCDM_LOOKBACK_HOURS`
 
 ### 3. Deploy using script
+
 ```bash
 chmod +x deploy-gcp.sh
 ./deploy-gcp.sh
 ```
 
 ### 4. Manual deployment (alternative)
+
 ```bash
 # Build image
 docker build -t gcr.io/180117512369/cs6604-trafficsafety-backend:latest .
@@ -81,6 +89,7 @@ gcloud run deploy cs6604-trafficsafety-backend \
 ```
 
 ### 5. Verify backend deployment
+
 ```bash
 # Health check
 curl https://cs6604-trafficsafety-180117512369.europe-west1.run.app/health
@@ -95,12 +104,15 @@ curl https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safet
 ## Frontend Deployment
 
 ### 1. Navigate to frontend directory
+
 ```bash
 cd frontend
 ```
 
 ### 2. Verify backend URL in Dockerfile
+
 The Dockerfile creates a `.env` file with:
+
 ```
 API_URL=https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safety/index/
 ```
@@ -108,12 +120,14 @@ API_URL=https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/sa
 If the backend URL changes, update line 24 in `frontend/Dockerfile`.
 
 ### 3. Deploy using script
+
 ```bash
 chmod +x deploy-gcp.sh
 ./deploy-gcp.sh
 ```
 
 ### 4. Manual deployment (alternative)
+
 ```bash
 # Build image
 docker build -t gcr.io/180117512369/cs6604-trafficsafety-frontend:latest .
@@ -133,6 +147,7 @@ gcloud run deploy cs6604-trafficsafety-frontend \
 ```
 
 ### 5. Get frontend URL
+
 ```bash
 gcloud run services describe cs6604-trafficsafety-frontend \
   --region europe-west1 \
@@ -142,6 +157,7 @@ gcloud run services describe cs6604-trafficsafety-frontend \
 ## Environment Variables
 
 ### Backend (.env)
+
 ```bash
 # Database (production)
 VTTI_DB_HOST=34.140.49.230
@@ -156,6 +172,7 @@ MCDM_LOOKBACK_HOURS=24
 ```
 
 ### Frontend (.env)
+
 ```bash
 # API Configuration
 API_URL=https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safety/index/
@@ -173,6 +190,7 @@ MAP_HEIGHT=650
 ## Secret Manager Setup
 
 ### Create secrets (if not already created)
+
 ```bash
 # Create db_user secret
 echo -n "your_db_username" | gcloud secrets create db_user \
@@ -186,6 +204,7 @@ echo -n "your_db_password" | gcloud secrets create db_password \
 ```
 
 ### Grant Cloud Run access to secrets
+
 ```bash
 # Get the service account email
 gcloud run services describe cs6604-trafficsafety-backend \
@@ -205,6 +224,7 @@ gcloud secrets add-iam-policy-binding db_password \
 ## Database Connectivity
 
 The backend connects to PostgreSQL at:
+
 - **Host**: `34.140.49.230` (GCP VM external IP)
 - **Port**: `5432`
 - **Database**: `vtti_db`
@@ -212,7 +232,9 @@ The backend connects to PostgreSQL at:
 - **Password**: From Secret Manager (`db_password`)
 
 ### Firewall rules
+
 Ensure the PostgreSQL server allows connections from Cloud Run:
+
 1. Cloud Run services get dynamic IPs
 2. Options:
    - Allow all Cloud Run IPs (not recommended for production)
@@ -222,22 +244,26 @@ Ensure the PostgreSQL server allows connections from Cloud Run:
 ## Monitoring & Logs
 
 ### View backend logs
+
 ```bash
 gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=cs6604-trafficsafety-backend" --limit 50
 ```
 
 ### View frontend logs
+
 ```bash
 gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=cs6604-trafficsafety-frontend" --limit 50
 ```
 
 ### Monitor in Console
+
 - Backend: https://console.cloud.google.com/run/detail/europe-west1/cs6604-trafficsafety-backend
 - Frontend: https://console.cloud.google.com/run/detail/europe-west1/cs6604-trafficsafety-frontend
 
 ## Troubleshooting
 
 ### Backend returns 500 errors
+
 ```bash
 # Check logs
 gcloud logging tail "resource.type=cloud_run_revision AND resource.labels.service_name=cs6604-trafficsafety-backend"
@@ -249,6 +275,7 @@ gcloud logging tail "resource.type=cloud_run_revision AND resource.labels.servic
 ```
 
 ### Frontend can't reach backend
+
 ```bash
 # Verify backend is accessible
 curl https://cs6604-trafficsafety-180117512369.europe-west1.run.app/health
@@ -260,6 +287,7 @@ gcloud run services describe cs6604-trafficsafety-frontend \
 ```
 
 ### Database connection timeout
+
 ```bash
 # Test connection from Cloud Shell
 gcloud compute ssh <instance-name> --command "telnet 34.140.49.230 5432"
@@ -271,6 +299,7 @@ psql -h 34.140.49.230 -p 5432 -U vtti_user -d vtti_db
 ## Rollback
 
 ### Rollback to previous revision
+
 ```bash
 # List revisions
 gcloud run revisions list --service cs6604-trafficsafety-backend --region europe-west1
@@ -302,17 +331,30 @@ gcloud run services update-traffic cs6604-trafficsafety-backend \
 ## Updates & CI/CD
 
 For continuous deployment, consider:
+
 1. **Cloud Build** triggers on git push
 2. **GitHub Actions** for automated testing and deployment
 3. **Terraform** for infrastructure as code
 
 Example Cloud Build trigger:
+
 ```yaml
 steps:
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/cs6604-trafficsafety-backend', '.']
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/cs6604-trafficsafety-backend']
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    args: ['gcloud', 'run', 'deploy', 'cs6604-trafficsafety-backend', '--image', 'gcr.io/$PROJECT_ID/cs6604-trafficsafety-backend', '--region', 'europe-west1']
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      ["build", "-t", "gcr.io/$PROJECT_ID/cs6604-trafficsafety-backend", "."]
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/$PROJECT_ID/cs6604-trafficsafety-backend"]
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    args:
+      [
+        "gcloud",
+        "run",
+        "deploy",
+        "cs6604-trafficsafety-backend",
+        "--image",
+        "gcr.io/$PROJECT_ID/cs6604-trafficsafety-backend",
+        "--region",
+        "europe-west1",
+      ]
 ```

@@ -7,6 +7,7 @@ The Trend Analysis page provides interactive time-based analysis of intersection
 ## Features
 
 ### 1. Single Time Point Analysis
+
 View detailed safety metrics for a specific intersection at a specific time:
 
 - **Safety Score**: Overall MCDM safety score (0-100, higher = safer)
@@ -18,6 +19,7 @@ View detailed safety metrics for a specific intersection at a specific time:
 - **MCDM Breakdown**: Individual scores from SAW, EDAS, and CODAS methods
 
 ### 2. Time Range Trend Analysis
+
 Visualize safety trends over time with interactive charts:
 
 - **Safety Score Trend**: Line chart showing how safety changes over time
@@ -31,12 +33,14 @@ Visualize safety trends over time with interactive charts:
 ### Running the Application
 
 1. **Start the Backend API** (required):
+
    ```bash
    cd /path/to/project
    uvicorn backend.app.main:app --reload --port 8000
    ```
 
 2. **Install Frontend Dependencies**:
+
    ```bash
    cd frontend
    pip install -r requirements.txt
@@ -76,7 +80,6 @@ Visualize safety trends over time with interactive charts:
 - **Time Bin Size**: 15, 30, or 60-minute bins
   - Smaller bins = more granular data
   - Larger bins = smoother trends
-  
 - **Intersection Selection**: Choose from available intersections
   - Currently available: glebe-potomac
   - More intersections may be added as data becomes available
@@ -91,6 +94,7 @@ Visualize safety trends over time with interactive charts:
 ## Understanding the Metrics
 
 ### Safety Score (0-100)
+
 - **Higher = Safer**: A score of 75 is safer than 50
 - Calculated using hybrid MCDM approach
 - Considers multiple criteria weighted by importance
@@ -98,10 +102,12 @@ Visualize safety trends over time with interactive charts:
 ### MCDM Methods
 
 1. **SAW (Simple Additive Weighting)**
+
    - Weighted sum of normalized criteria
    - Simple and intuitive
 
 2. **EDAS (Evaluation based on Distance from Average Solution)**
+
    - Measures distance from average performance
    - Good for comparing alternatives
 
@@ -124,11 +130,13 @@ Visualize safety trends over time with interactive charts:
 ## Tips & Best Practices
 
 ### For Single Time Analysis
+
 - Compare different times of day (rush hour vs. off-peak)
 - Look at the MCDM breakdown to understand which method identifies risks
 - Check incident count alongside safety score
 
 ### For Trend Analysis
+
 - Use 15-minute bins for detailed analysis
 - Use 60-minute bins for daily overviews
 - Look for patterns:
@@ -139,12 +147,14 @@ Visualize safety trends over time with interactive charts:
 ### Interpreting Results
 
 **Safe Conditions** (High Safety Score):
+
 - Low incident count
 - Consistent speeds (low variance)
 - Manageable traffic volume
 - Few VRUs in conflict zones
 
 **Unsafe Conditions** (Low Safety Score):
+
 - High incident count
 - High speed variance
 - Very high or very low traffic
@@ -153,11 +163,13 @@ Visualize safety trends over time with interactive charts:
 ## Troubleshooting
 
 ### No Data Available
+
 - **Check date range**: Data only available up to Nov 9, 2025
 - **Try different time**: Not all time bins have data
 - **Check API**: Ensure backend is running on port 8000
 
 ### API Connection Error
+
 ```bash
 # Verify backend is running
 curl http://localhost:8000/health
@@ -167,6 +179,7 @@ curl http://localhost:8000/api/v1/safety/index/intersections/list
 ```
 
 ### Time Range Too Large
+
 - Maximum time range: 7 days
 - Use smaller ranges for better performance
 - Consider using larger time bins (60 min) for long ranges
@@ -176,9 +189,11 @@ curl http://localhost:8000/api/v1/safety/index/intersections/list
 ### API Endpoints Used
 
 1. **GET /api/v1/safety/index/intersections/list**
+
    - Returns available intersections
 
 2. **GET /api/v1/safety/index/time/specific**
+
    - Parameters: intersection, time, bin_minutes
    - Returns single time point data
 
@@ -197,6 +212,7 @@ curl http://localhost:8000/api/v1/safety/index/intersections/list
 ## Future Enhancements
 
 Potential features for future versions:
+
 - Export data to CSV
 - Comparison mode (multiple intersections)
 - Prediction/forecasting
@@ -208,6 +224,7 @@ Potential features for future versions:
 ## Support
 
 For issues or questions:
+
 1. Check backend API logs: `/tmp/backend.log`
 2. Verify database connection
 3. Check data availability for selected time range

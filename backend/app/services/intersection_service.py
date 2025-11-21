@@ -59,7 +59,9 @@ def get_intersection_coordinates() -> Dict[str, Dict[str, float]]:
         return coords_map
 
     except Exception as e:
-        logger.error(f"Error fetching intersection coordinates from PSM: {e}", exc_info=True)
+        logger.error(
+            f"Error fetching intersection coordinates from PSM: {e}", exc_info=True
+        )
         return {}
 
 

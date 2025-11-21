@@ -50,9 +50,11 @@ def main():
         "Interactive visualization of traffic intersections with safety metrics. "
         "**Higher safety index = More dangerous.**"
     )
-    
+
     # Navigation hint
-    st.info("💡 Use the sidebar to navigate to **📈 Trend Analysis** for time-based analysis and trend visualization.")
+    st.info(
+        "💡 Use the sidebar to navigate to **📈 Trend Analysis** for time-based analysis and trend visualization."
+    )
 
     # Sidebar controls
     with st.sidebar:

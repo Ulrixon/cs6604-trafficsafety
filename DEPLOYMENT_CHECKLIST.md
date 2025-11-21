@@ -51,6 +51,7 @@
 ## Rollback Plan
 
 If deployment fails:
+
 ```bash
 # Rollback backend
 gcloud run services update-traffic cs6604-trafficsafety-backend \
@@ -88,16 +89,19 @@ gcloud run services describe cs6604-trafficsafety-frontend --region europe-west1
 ## Troubleshooting
 
 ### Backend Issues
+
 - **Database connection failed**: Check firewall rules, verify DB credentials in Secret Manager
 - **Secret access denied**: Grant Secret Manager accessor role to Cloud Run service account
 - **Timeout**: Increase timeout or CPU/memory allocation
 
 ### Frontend Issues
+
 - **Can't reach backend**: Verify backend URL in Dockerfile, check backend is running
 - **Slow loading**: Increase memory/CPU, check API_CACHE_TTL setting
 - **Chart errors**: Check plotly is installed, verify data format from backend
 
 ### Common Fixes
+
 ```bash
 # Update backend environment variables
 gcloud run services update cs6604-trafficsafety-backend \

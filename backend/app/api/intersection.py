@@ -44,13 +44,15 @@ def list_available_intersections():
 
 @router.get("/time/specific", response_model=SafetyScoreTimePoint)
 def get_safety_score_at_time(
-    intersection: str = Query(..., description="Intersection name (e.g., 'glebe-potomac')"),
+    intersection: str = Query(
+        ..., description="Intersection name (e.g., 'glebe-potomac')"
+    ),
     time: datetime = Query(..., description="Target datetime (ISO 8601 format)"),
     bin_minutes: int = Query(15, description="Time bin size in minutes", ge=1, le=60),
 ):
     """
     Get safety score for a specific intersection at a specific time.
-    
+
     Example:
     ```
     GET /api/v1/safety/index/time/specific?intersection=glebe-potomac&time=2025-11-09T10:00:00&bin_minutes=15
@@ -58,34 +60,34 @@ def get_safety_score_at_time(
     """
     db_client = get_db_client()
     mcdm_service = MCDMSafetyIndexService(db_client)
-    
+
     result = mcdm_service.calculate_safety_score_for_time(
-        intersection=intersection,
-        target_time=time,
-        bin_minutes=bin_minutes
+        intersection=intersection, target_time=time, bin_minutes=bin_minutes
     )
-    
+
     if not result:
         raise HTTPException(
             status_code=404,
-            detail=f"No data available for intersection '{intersection}' at time {time}"
+            detail=f"No data available for intersection '{intersection}' at time {time}",
         )
-    
+
     return result
 
 
 @router.get("/time/range", response_model=list[SafetyScoreTimePoint])
 def get_safety_score_trend(
-    intersection: str = Query(..., description="Intersection name (e.g., 'glebe-potomac')"),
+    intersection: str = Query(
+        ..., description="Intersection name (e.g., 'glebe-potomac')"
+    ),
     start_time: datetime = Query(..., description="Start datetime (ISO 8601 format)"),
     end_time: datetime = Query(..., description="End datetime (ISO 8601 format)"),
     bin_minutes: int = Query(15, description="Time bin size in minutes", ge=1, le=60),
 ):
     """
     Get safety score trend for a specific intersection over a time range.
-    
+
     Returns time series data for creating trend charts.
-    
+
     Example:
     ```
     GET /api/v1/safety/index/time/range?intersection=glebe-potomac&start_time=2025-11-09T08:00:00&end_time=2025-11-09T18:00:00&bin_minutes=15
@@ -93,33 +95,29 @@ def get_safety_score_trend(
     """
     # Validate time range
     if end_time <= start_time:
-        raise HTTPException(
-            status_code=400,
-            detail="end_time must be after start_time"
-        )
-    
+        raise HTTPException(status_code=400, detail="end_time must be after start_time")
+
     # Limit to reasonable time range (e.g., 7 days)
     max_days = 7
     if (end_time - start_time).days > max_days:
         raise HTTPException(
-            status_code=400,
-            detail=f"Time range cannot exceed {max_days} days"
+            status_code=400, detail=f"Time range cannot exceed {max_days} days"
         )
-    
+
     db_client = get_db_client()
     mcdm_service = MCDMSafetyIndexService(db_client)
-    
+
     results = mcdm_service.calculate_safety_score_trend(
         intersection=intersection,
         start_time=start_time,
         end_time=end_time,
-        bin_minutes=bin_minutes
+        bin_minutes=bin_minutes,
     )
-    
+
     if not results:
         raise HTTPException(
             status_code=404,
-            detail=f"No data available for intersection '{intersection}' in the specified time range"
+            detail=f"No data available for intersection '{intersection}' in the specified time range",
         )
-    
+
     return results

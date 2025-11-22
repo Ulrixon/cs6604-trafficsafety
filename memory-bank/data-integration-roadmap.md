@@ -1,7 +1,7 @@
 # Data Integration & Extensibility Roadmap
 
 **Created**: 2025-11-20
-**Status**: IN PROGRESS (Phases 1-5 Complete)
+**Status**: IN PROGRESS (Phases 1-6 Complete)
 **Priority**: HIGH - Next Major Feature Set
 **Last Updated**: 2025-11-21
 
@@ -9,7 +9,7 @@
 
 ## Progress Summary
 
-### ✅ Completed Phases (Days 1-25 of Sprint)
+### ✅ Completed Phases (Days 1-28 of Sprint)
 
 **Phase 1: Plugin Architecture Foundation** ✓ DONE
 - Created base plugin classes (`DataSourcePlugin`, `PluginMetadata`, `PluginHealthStatus`)
@@ -50,11 +50,21 @@
 - Comprehensive test suite (`test_multi_source_indices.py`) with 6 test cases
 - **Commit**: `4296974` + `35de486`
 
+**Phase 6: UI Transparency** ✓ DONE
+- Created transparency API schemas (`SafetyIndexBreakdown`, `PluginBreakdown`, `FeatureBreakdown`, `RiskLevel`)
+- Implemented `/safety/transparency/{id}/breakdown` endpoint for formula visualization
+- Implemented `/safety/transparency/formula/documentation` endpoint
+- Risk level classification with color codes (Low/Medium/High/Critical)
+- Shows raw values, normalized values, plugin weights, and final formula
+- Comprehensive test suite (`test_transparency_api.py`) - all 4 tests passing
+- Created detailed formula documentation (`docs/safety-index-formula.md`)
+- **Commit**: `8e3b269`
+
 ### 🚧 Current Phase
 
-**Phase 6: UI Transparency** (STARTING)
-- Goal: Display safety index formula breakdown in dashboard
-- Next tasks: Create API endpoint for formula breakdown and transparency
+**Phase 7: Validation & Optimization** (STARTING)
+- Goal: Validate weather impact and optimize feature weights using crash data
+- Next tasks: Crash correlation analysis, feature weight tuning
 
 ---
 

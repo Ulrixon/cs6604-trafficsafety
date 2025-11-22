@@ -108,6 +108,57 @@ class Settings(BaseSettings):
         description="Enable uploading Parquet files to GCS"
     )
 
+    # Data Plugin System Configuration
+    ENABLE_DATA_PLUGINS: bool = Field(
+        False,
+        env="ENABLE_DATA_PLUGINS",
+        description="Enable plugin-based data source architecture"
+    )
+
+    # VCC Plugin Configuration
+    USE_VCC_PLUGIN: bool = Field(
+        False,
+        env="USE_VCC_PLUGIN",
+        description="Use VCC as a plugin (vs legacy VCC client)"
+    )
+    VCC_PLUGIN_WEIGHT: float = Field(
+        0.70,
+        env="VCC_PLUGIN_WEIGHT",
+        description="Weight of VCC features in safety index (0.0-1.0)"
+    )
+
+    # Weather Plugin Configuration
+    ENABLE_WEATHER_PLUGIN: bool = Field(
+        False,
+        env="ENABLE_WEATHER_PLUGIN",
+        description="Enable NOAA/NWS weather data plugin"
+    )
+    WEATHER_PLUGIN_WEIGHT: float = Field(
+        0.15,
+        env="WEATHER_PLUGIN_WEIGHT",
+        description="Weight of weather features in safety index (0.0-1.0)"
+    )
+    WEATHER_STATION_ID: str = Field(
+        "KRIC",
+        env="WEATHER_STATION_ID",
+        description="NOAA weather station ID (default: KRIC - Richmond Intl Airport)"
+    )
+    WEATHER_API_BASE: str = Field(
+        "https://api.weather.gov",
+        env="WEATHER_API_BASE",
+        description="NOAA API base URL"
+    )
+    WEATHER_API_TIMEOUT: int = Field(
+        10,
+        env="WEATHER_API_TIMEOUT",
+        description="Weather API request timeout (seconds)"
+    )
+    WEATHER_RETRY_ATTEMPTS: int = Field(
+        3,
+        env="WEATHER_RETRY_ATTEMPTS",
+        description="Number of retry attempts for weather API failures"
+    )
+
     model_config = SettingsConfigDict(
         env_file="backend/.env",
         env_file_encoding="utf-8",

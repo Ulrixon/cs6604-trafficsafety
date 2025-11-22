@@ -24,6 +24,7 @@ import argparse
 import pandas as pd
 import numpy as np
 from dataclasses import dataclass
+from math import radians, sin, cos, sqrt, atan2
 
 # Add backend to path
 backend_path = Path(__file__).parent.parent
@@ -83,7 +84,189 @@ def print_section(title: str):
     print(f"{'='*80}\n")
 
 
-def load_crash_data(start_date: datetime, end_date: datetime, locality: Optional[str] = None) -> pd.DataFrame:
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Calculate the great circle distance between two points on Earth in meters.
+
+    Uses the Haversine formula:
+    a = sin²(Δφ/2) + cos φ1 ⋅ cos φ2 ⋅ sin²(Δλ/2)
+    c = 2 ⋅ atan2( √a, √(1−a) )
+    d = R ⋅ c
+
+    Args:
+        lat1, lon1: Latitude and longitude of point 1 (degrees)
+        lat2, lon2: Latitude and longitude of point 2 (degrees)
+
+    Returns:
+        Distance in meters
+    """
+    R = 6371000  # Earth radius in meters
+
+    φ1 = radians(lat1)
+    φ2 = radians(lat2)
+    Δφ = radians(lat2 - lat1)
+    Δλ = radians(lon2 - lon1)
+
+    a = sin(Δφ/2)**2 + cos(φ1) * cos(φ2) * sin(Δλ/2)**2
+    c = 2 * atan2(sqrt(a), sqrt(1-a))
+
+    return R * c
+
+
+def load_monitored_intersections() -> pd.DataFrame:
+    """
+    Load monitored intersection coordinates from local PostgreSQL database.
+
+    Returns:
+        DataFrame with columns: intersection_id, name, latitude, longitude
+    """
+    print_section("Loading Monitored Intersections")
+
+    try:
+        from app.db.connection import db_session
+        from sqlalchemy import text
+
+        query = text("""
+            SELECT
+                id as intersection_id,
+                name,
+                latitude,
+                longitude
+            FROM intersections
+            ORDER BY id
+        """)
+
+        with db_session() as session:
+            result = session.execute(query)
+            rows = result.fetchall()
+
+            if not rows:
+                print("WARNING: No intersections found in local database")
+                return pd.DataFrame()
+
+            df = pd.DataFrame(rows, columns=['intersection_id', 'name', 'latitude', 'longitude'])
+
+            print(f"OK Loaded {len(df)} monitored intersections")
+            print(f"  Sample intersections:")
+            for _, row in df.head(3).iterrows():
+                print(f"    - {row['name']}: ({row['latitude']:.6f}, {row['longitude']:.6f})")
+
+            return df
+
+    except Exception as e:
+        print(f"ERROR loading intersections from database: {e}")
+        print("  Using fallback coordinates for testing")
+
+        # Fallback: Sample Virginia intersections for testing
+        return pd.DataFrame({
+            'intersection_id': [1, 2, 3],
+            'name': [
+                'I-66 & Route 28',
+                'Route 7 & Leesburg Pike',
+                'I-495 & Georgetown Pike'
+            ],
+            'latitude': [38.9547, 38.9186, 38.9539],
+            'longitude': [-77.4457, -77.2253, -77.1950]
+        })
+
+
+def filter_crashes_near_intersections(
+    crashes: pd.DataFrame,
+    intersections: pd.DataFrame,
+    proximity_radius_meters: float = 500.0
+) -> pd.DataFrame:
+    """
+    Filter crashes to only include those near monitored intersections.
+
+    For each crash, calculates distance to all monitored intersections.
+    Only keeps crashes within proximity_radius_meters of at least one intersection.
+
+    Args:
+        crashes: DataFrame with crash data (must have latitude, longitude columns)
+        intersections: DataFrame with intersection data (must have latitude, longitude columns)
+        proximity_radius_meters: Maximum distance from intersection (default: 500 meters)
+
+    Returns:
+        Filtered DataFrame with crashes near intersections, with additional columns:
+        - nearest_intersection_id: ID of nearest intersection
+        - nearest_intersection_name: Name of nearest intersection
+        - distance_to_intersection: Distance to nearest intersection in meters
+    """
+    print_section(f"Filtering Crashes Near Monitored Intersections (radius: {proximity_radius_meters}m)")
+
+    if crashes.empty or intersections.empty:
+        print("WARNING: No crashes or intersections to filter")
+        return crashes
+
+    # Check for required columns
+    if 'latitude' not in crashes.columns or 'longitude' not in crashes.columns:
+        print("ERROR: Crash data missing latitude/longitude columns")
+        return crashes
+
+    filtered_crashes = []
+
+    print(f"Checking {len(crashes):,} crashes against {len(intersections)} intersections...")
+
+    for idx, crash in crashes.iterrows():
+        crash_lat = crash['latitude']
+        crash_lon = crash['longitude']
+
+        # Skip crashes with invalid coordinates
+        if pd.isna(crash_lat) or pd.isna(crash_lon):
+            continue
+
+        # Calculate distance to all intersections
+        min_distance = float('inf')
+        nearest_intersection_id = None
+        nearest_intersection_name = None
+
+        for _, intersection in intersections.iterrows():
+            distance = haversine_distance(
+                crash_lat, crash_lon,
+                intersection['latitude'], intersection['longitude']
+            )
+
+            if distance < min_distance:
+                min_distance = distance
+                nearest_intersection_id = intersection['intersection_id']
+                nearest_intersection_name = intersection['name']
+
+        # Keep crash if within proximity radius
+        if min_distance <= proximity_radius_meters:
+            crash_dict = crash.to_dict()
+            crash_dict['nearest_intersection_id'] = nearest_intersection_id
+            crash_dict['nearest_intersection_name'] = nearest_intersection_name
+            crash_dict['distance_to_intersection'] = min_distance
+            filtered_crashes.append(crash_dict)
+
+    if not filtered_crashes:
+        print(f"WARNING: No crashes found within {proximity_radius_meters}m of monitored intersections")
+        return pd.DataFrame()
+
+    df_filtered = pd.DataFrame(filtered_crashes)
+
+    print(f"\nOK Spatial filtering complete:")
+    print(f"  Original crashes: {len(crashes):,}")
+    print(f"  Crashes near intersections: {len(df_filtered):,} ({len(df_filtered)/len(crashes)*100:.1f}%)")
+    print(f"  Avg distance to intersection: {df_filtered['distance_to_intersection'].mean():.1f}m")
+    print(f"  Max distance to intersection: {df_filtered['distance_to_intersection'].max():.1f}m")
+
+    # Show crash distribution by intersection
+    print(f"\n  Crashes by intersection:")
+    crash_counts = df_filtered['nearest_intersection_name'].value_counts().head(5)
+    for intersection, count in crash_counts.items():
+        print(f"    - {intersection}: {count} crashes")
+
+    return df_filtered
+
+
+def load_crash_data(
+    start_date: datetime,
+    end_date: datetime,
+    locality: Optional[str] = None,
+    intersections: Optional[pd.DataFrame] = None,
+    proximity_radius_meters: Optional[float] = None
+) -> pd.DataFrame:
     """
     Load historical crash data from GCP PostgreSQL vdot_crashes table.
 
@@ -91,11 +274,15 @@ def load_crash_data(start_date: datetime, end_date: datetime, locality: Optional
         start_date: Start of analysis period
         end_date: End of analysis period
         locality: Filter by Virginia locality (optional)
+        intersections: DataFrame with monitored intersections for spatial filtering (optional)
+        proximity_radius_meters: Maximum distance from intersection to include crashes (optional)
 
     Returns:
         DataFrame with columns: crash_id, timestamp, latitude, longitude, severity,
                               total_vehicles, total_injured, total_killed, weather,
                               light_condition, road_surface
+                              If spatial filtering applied, also includes:
+                              nearest_intersection_id, nearest_intersection_name, distance_to_intersection
     """
     print_section("Loading VDOT Crash Data from GCP PostgreSQL")
 
@@ -185,6 +372,10 @@ def load_crash_data(start_date: datetime, end_date: datetime, locality: Optional
         for severity, count in df['severity'].value_counts().head(5).items():
             print(f"    - {severity}: {count:,}")
         print(f"  Weather-related: {df['weather_related'].sum():,} ({df['weather_related'].sum()/len(df)*100:.1f}%)")
+
+        # Apply spatial filtering if intersections provided
+        if intersections is not None and proximity_radius_meters is not None:
+            df = filter_crashes_near_intersections(df, intersections, proximity_radius_meters)
 
         return df
 
@@ -525,6 +716,10 @@ def main():
                       help='Safety index threshold for high risk classification')
     parser.add_argument('--use-real-data', action='store_true',
                       help='Use real crash data (requires crash database)')
+    parser.add_argument('--proximity-radius', type=float, default=500.0,
+                      help='Maximum distance from intersection in meters (default: 500)')
+    parser.add_argument('--no-spatial-filter', action='store_true',
+                      help='Disable spatial filtering (include all crashes)')
 
     args = parser.parse_args()
 
@@ -542,11 +737,26 @@ def main():
     print(f"#  CRASH CORRELATION ANALYSIS (Phase 7)")
     print(f"#  Date: {datetime.now()}")
     print(f"#  Period: {start_date.date()} to {end_date.date()}")
+    print(f"#  Spatial filtering: {'DISABLED' if args.no_spatial_filter else f'ENABLED ({args.proximity_radius}m radius)'}")
     print(f"{'#'*80}")
+
+    # Load monitored intersections for spatial filtering
+    intersections = None
+    proximity_radius = None
+
+    if args.use_real_data and not args.no_spatial_filter:
+        intersections = load_monitored_intersections()
+        if not intersections.empty:
+            proximity_radius = args.proximity_radius
 
     # Load crash data
     if args.use_real_data:
-        crashes = load_crash_data(start_date, end_date)
+        crashes = load_crash_data(
+            start_date,
+            end_date,
+            intersections=intersections,
+            proximity_radius_meters=proximity_radius
+        )
         if crashes.empty:
             print("\nERROR: No crash data available. Exiting.")
             return

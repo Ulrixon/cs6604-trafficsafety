@@ -303,6 +303,18 @@ def render_trend_view(
 
     fig6 = go.Figure()
 
+    # Add MCDM Index (the combined average)
+    fig6.add_trace(
+        go.Scatter(
+            x=df["time_bin"],
+            y=df["mcdm_index"],
+            mode="lines+markers",
+            name="MCDM Index",
+            line=dict(width=3, dash="solid"),
+            marker=dict(size=7),
+        )
+    )
+
     fig6.add_trace(
         go.Scatter(
             x=df["time_bin"],
@@ -334,7 +346,7 @@ def render_trend_view(
     )
 
     fig6.update_layout(
-        title="MCDM Method Scores Comparison",
+        title="MCDM Method Scores Comparison (including Combined Index)",
         xaxis_title="Time",
         yaxis_title="Score",
         hovermode="x unified",
@@ -343,6 +355,82 @@ def render_trend_view(
     )
 
     st.plotly_chart(fig6, use_container_width=True)
+
+    # Normalized All Variables Comparison
+    st.markdown("### All Variables Normalized (0-100 Scale)")
+    st.caption("All metrics normalized to 0-100 scale for easy comparison")
+
+    # Create normalized DataFrame
+    df_normalized = df.copy()
+
+    # List of variables to normalize
+    variables_to_normalize = [
+        ("mcdm_index", "MCDM Index"),
+        ("safety_score", "Safety Score"),
+        ("vehicle_count", "Vehicle Count"),
+        ("incident_count", "Incident Count"),
+        ("vru_count", "VRU Count"),
+        ("avg_speed", "Avg Speed"),
+        ("speed_variance", "Speed Variance"),
+    ]
+
+    # Normalize each variable to 0-100 scale
+    for col, label in variables_to_normalize:
+        if col in df_normalized.columns:
+            col_max = df_normalized[col].max()
+            if col_max > 0:
+                # If max is greater than 100, normalize to 0-100
+                if col_max > 100:
+                    df_normalized[f"{col}_normalized"] = (
+                        df_normalized[col] / col_max
+                    ) * 100
+                else:
+                    # If max is already <= 100, keep as is
+                    df_normalized[f"{col}_normalized"] = df_normalized[col]
+            else:
+                df_normalized[f"{col}_normalized"] = 0
+
+    # Create the combined chart
+    fig_combined = go.Figure()
+
+    # Define colors for each variable
+    colors = {
+        "mcdm_index": "#1f77b4",
+        "safety_score": "#ff7f0e",
+        "vehicle_count": "#2ca02c",
+        "incident_count": "#d62728",
+        "vru_count": "#17becf",
+        "avg_speed": "#bcbd22",
+        "speed_variance": "#9467bd",
+    }
+
+    # Add traces for each variable
+    for col, label in variables_to_normalize:
+        if col in df.columns and f"{col}_normalized" in df_normalized.columns:
+            fig_combined.add_trace(
+                go.Scatter(
+                    x=df_normalized["time_bin"],
+                    y=df_normalized[f"{col}_normalized"],
+                    mode="lines+markers",
+                    name=label,
+                    line=dict(color=colors.get(col, "#000000"), width=2),
+                    marker=dict(size=4),
+                    hovertemplate=f"<b>{label}</b><br>Normalized: %{{y:.2f}}<br>Original: {df[col].round(2).astype(str)}<extra></extra>",
+                )
+            )
+
+    fig_combined.update_layout(
+        title="All Variables Normalized to 0-100 Scale",
+        xaxis_title="Time",
+        yaxis_title="Normalized Value (0-100)",
+        yaxis_range=[0, 105],  # Slight padding at top
+        hovermode="x unified",
+        height=500,
+        margin=dict(l=0, r=0, t=40, b=0),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+
+    st.plotly_chart(fig_combined, use_container_width=True)
 
     # Data table
     with st.expander("📊 View Data Table"):

@@ -281,16 +281,22 @@ def render_trend_view(
         fig3 = create_trend_chart(df, "incident_count", "Incident Count", "#d62728")
         st.plotly_chart(fig3, use_container_width=True)
 
-    # Speed Metrics
+    # VRU and Speed Metrics
     col1, col2 = st.columns(2)
 
     with col1:
+        fig_vru = create_trend_chart(
+            df, "vru_count", "VRU Count (Pedestrians & Cyclists)", "#17becf"
+        )
+        st.plotly_chart(fig_vru, use_container_width=True)
+
+    with col2:
         fig4 = create_trend_chart(df, "avg_speed", "Average Speed (mph)", "#ff7f0e")
         st.plotly_chart(fig4, use_container_width=True)
 
-    with col2:
-        fig5 = create_trend_chart(df, "speed_variance", "Speed Variance", "#9467bd")
-        st.plotly_chart(fig5, use_container_width=True)
+    # Speed Variance
+    fig5 = create_trend_chart(df, "speed_variance", "Speed Variance", "#9467bd")
+    st.plotly_chart(fig5, use_container_width=True)
 
     # MCDM Methods Comparison
     st.markdown("### MCDM Methods Comparison")
@@ -533,6 +539,37 @@ def main():
                         st.session_state.start_datetime + timedelta(hours=24)
                     )
                     st.rerun()
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                if st.button("1 Month", use_container_width=True):
+                    st.session_state.start_datetime = datetime.combine(
+                        start_date, start_time
+                    )
+                    st.session_state.end_datetime = (
+                        st.session_state.start_datetime + timedelta(days=30)
+                    )
+                    st.rerun()
+
+            with col2:
+                if st.button("3 Months", use_container_width=True):
+                    st.session_state.start_datetime = datetime.combine(
+                        start_date, start_time
+                    )
+                    st.session_state.end_datetime = (
+                        st.session_state.start_datetime + timedelta(days=90)
+                    )
+                    st.rerun()
+
+            if st.button("1 Year", use_container_width=True):
+                st.session_state.start_datetime = datetime.combine(
+                    start_date, start_time
+                )
+                st.session_state.end_datetime = (
+                    st.session_state.start_datetime + timedelta(days=365)
+                )
+                st.rerun()
 
         # About section
         with st.expander("ℹ️ About"):

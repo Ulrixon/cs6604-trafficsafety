@@ -44,6 +44,14 @@ except Exception as e:
     logger.warning(f"History router not available: {e}")
     HISTORY_AVAILABLE = False
 
+try:
+    from .api.transparency import router as transparency_router
+
+    TRANSPARENCY_AVAILABLE = True
+except Exception as e:
+    logger.warning(f"Transparency router not available: {e}")
+    TRANSPARENCY_AVAILABLE = False
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -136,6 +144,10 @@ def create_app() -> FastAPI:
     if HISTORY_AVAILABLE:
         app.include_router(history_router, prefix="/api/v1")
         logger.info("✓ History router registered")
+
+    if TRANSPARENCY_AVAILABLE:
+        app.include_router(transparency_router, prefix="/api/v1")
+        logger.info("✓ Transparency router registered")
 
     # Health‑check endpoint
     @app.get("/health", tags=["Health"])

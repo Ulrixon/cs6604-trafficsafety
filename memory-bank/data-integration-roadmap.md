@@ -1,7 +1,7 @@
 # Data Integration & Extensibility Roadmap
 
 **Created**: 2025-11-20
-**Status**: IN PROGRESS (Phases 1-4 Complete)
+**Status**: IN PROGRESS (Phases 1-5 Complete)
 **Priority**: HIGH - Next Major Feature Set
 **Last Updated**: 2025-11-21
 
@@ -9,7 +9,7 @@
 
 ## Progress Summary
 
-### ✅ Completed Phases (Days 1-14 of Sprint)
+### ✅ Completed Phases (Days 1-25 of Sprint)
 
 **Phase 1: Plugin Architecture Foundation** ✓ DONE
 - Created base plugin classes (`DataSourcePlugin`, `PluginMetadata`, `PluginHealthStatus`)
@@ -40,12 +40,21 @@
 - Triple-write architecture: PostgreSQL + Parquet + GCS
 - **Commit**: `b72ae83`
 
+**Phase 5: Multi-Source Safety Index Integration** ✓ DONE
+- Created `MultiSourceDataCollector` service for orchestrating plugin data collection
+- Implemented `compute_weather_index()` function (4 features: precip, vis, wind, temp)
+- Updated `compute_safety_indices()` to include Weather Index in Combined Index
+- Weighted formula: `Combined = 0.85×Traffic + 0.15×Weather` (configurable)
+- Added `compute_multi_source_safety_indices()` convenience function
+- Infrastructure updates: `IntersectionSafetyIndex` schema, optional GCS imports
+- Comprehensive test suite (`test_multi_source_indices.py`) with 6 test cases
+- **Commit**: `4296974` + `35de486`
+
 ### 🚧 Current Phase
 
-**Phase 5: Multi-Source Safety Index Integration** (IN PROGRESS)
-- Next steps: Integrate plugin registry with data collector
-- Combine VCC + Weather data for enhanced safety index
-- Update safety index calculation formula
+**Phase 6: UI Transparency** (STARTING)
+- Goal: Display safety index formula breakdown in dashboard
+- Next tasks: Create API endpoint for formula breakdown and transparency
 
 ---
 

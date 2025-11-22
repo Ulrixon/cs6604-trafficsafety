@@ -1,13 +1,45 @@
 # Active Context
 
-**Last Updated**: 2025-11-20 (Evening)
-**Status**: ✅ PRODUCTION SYSTEM OPERATIONAL | 📋 POSTGRESQL MIGRATION PLANNED
+**Last Updated**: 2025-11-22 (Afternoon)
+**Status**: ✅ PRODUCTION SYSTEM OPERATIONAL | 🔥 PHASE 7 VALIDATION IN PROGRESS
 
 ---
 
-## Current Sprint: PostgreSQL + GCP Migration Planning ✅
+## Current Sprint: Phase 7 - Crash Data Validation & Optimization 🔥
 
-### Just Completed (2025-11-20 Evening)
+### Just Completed (2025-11-22 Afternoon)
+
+**GCP PostgreSQL Database Connection & VDOT Crash Data Discovery:**
+
+1. ✅ **GCP Cloud SQL Connection Established**
+   - Connected to GCP project: `symbolic-cinema-305010`
+   - Database instance: `vtsi-postgres` (PostgreSQL 17.6)
+   - Location: europe-west1-d
+   - Public IP: 34.140.49.230
+   - Authentication: gcloud CLI (`djjay@vt.edu`) with IP allowlisting
+
+2. ✅ **VDOT Crashes Database Discovered**
+   - **vdot_crashes table**: 1,047,094 crash records!
+   - Columns: crash_date, crash_time, locality, longitude, latitude, severity, total_vehicles, total_injured, total_killed, weather, light_condition, road_surface
+   - Date range: 2017-present (7+ years of crash data)
+   - Location coverage: All Virginia localities
+
+3. ✅ **Database Query Utilities Created**
+   - `test_gcp_db.py` - Tests GCP database connection
+   - `query_vdot_crashes.py` - Loads crash data with filters
+   - `check_vdot_schema.py` - Inspects table schema
+   - `.env.gcp` - GCP database configuration
+
+4. ✅ **Phase 7 Validation Scripts**
+   - `crash_correlation_analysis.py` - Analyzes safety index vs crash correlation
+   - `optimize_feature_weights.py` - Grid search optimization for plugin weights
+   - Scripts working with synthetic data, ready for real crash data integration
+
+**Current Status**: Connected to GCP database with 1M+ crash records. Next: Update scripts to load and correlate real crash data with safety indices.
+
+---
+
+### Previous Work (2025-11-20 Evening)
 
 **Intersection History Feature + PostgreSQL Migration Planning:**
 
@@ -404,20 +436,38 @@ If deploying to production:
 
 ## Next Actions
 
-### Immediate (This Week)
-1. **Review Data Integration Roadmap** 🔥 URGENT
+### Immediate (Now - Phase 7 Validation) 🔥 CURRENT WORK
+1. **Update Crash Correlation Scripts for GCP Database**
+   - Modify `crash_correlation_analysis.py` to load from vdot_crashes table
+   - Add GCP database connection with IP allowlisting
+   - Implement spatial join (crashes × intersections using lat/lon)
+   - Filter crashes to monitored intersection areas
+
+2. **Run Real Crash Correlation Analysis**
+   - Query vdot_crashes for recent time periods
+   - Match crashes with computed safety indices
+   - Compute correlation metrics (precision, recall, F1, Pearson, Spearman)
+   - Analyze weather impact on crash rates
+
+3. **Optimize Plugin Weights**
+   - Use real crash data for weight optimization
+   - Run grid search to find optimal VCC/Weather weights
+   - Cross-validate results
+   - Document recommended weight configuration
+
+4. **Document Validation Results**
+   - Create findings report
+   - Provide recommendations for production weights
+   - Update roadmap with Phase 7 completion
+
+### This Week
+1. **Review Data Integration Roadmap**
    - Read `memory-bank/data-integration-roadmap.md`
    - Approve architecture approach
    - Prioritize phases (1-6)
    - Identify must-have features
 
-2. **Prototype Plugin System** (If approved)
-   - 1-week spike to validate approach
-   - Build minimal plugin framework
-   - Migrate VCC to plugin architecture
-   - Test with dummy second source
-
-3. **Design Admin UI Mockups** (If approved)
+2. **Design Admin UI Mockups** (If approved)
    - Create detailed wireframes
    - Get user feedback
    - Finalize screen designs

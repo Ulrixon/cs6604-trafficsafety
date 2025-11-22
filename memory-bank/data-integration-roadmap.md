@@ -62,12 +62,16 @@
 
 ### 🚧 Current Phase
 
-**Phase 7: Validation & Optimization** (IN PROGRESS - Day 28)
+**Phase 7: Validation & Optimization** (IN PROGRESS - Day 28-29)
 - Goal: Validate weather impact and optimize feature weights using crash data
 - **Deliverables**:
   - ✅ Crash correlation analysis script (`backend/scripts/crash_correlation_analysis.py`)
   - ✅ Feature weight optimization script (`backend/scripts/optimize_feature_weights.py`)
-  - 🔄 Run analysis with real crash data (pending)
+  - ✅ GCP PostgreSQL database connection established
+  - ✅ VDOT crashes database discovered (1,047,094 records)
+  - ✅ Database query utilities created
+  - 🔄 Update scripts to use real VDOT crash data (in progress)
+  - 🔄 Run correlation analysis with real data (pending)
   - 🔄 Document validation results (pending)
 - **Key Features**:
   - Comprehensive metrics: precision, recall, F1 score, accuracy, Pearson/Spearman correlation
@@ -76,7 +80,12 @@
   - Weather impact analysis (crash rates in bad vs clear weather)
   - Synthetic data generation for testing
   - Actionable recommendations for weight tuning
-- **Commit**: `be83944`
+- **Database Connection**:
+  - GCP Cloud SQL: `vtsi-postgres` (PostgreSQL 17.6)
+  - Location: europe-west1-d
+  - Database: `vtsi` with 8 tables including `vdot_crashes`
+  - Authentication: gcloud CLI with IP allowlisting
+- **Commits**: `be83944`, `9f7ab27`, `08fd4c6`
 
 ---
 

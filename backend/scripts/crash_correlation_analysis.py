@@ -35,6 +35,14 @@ from app.db.connection import db_session, init_db
 from app.core.config import settings
 from sqlalchemy import text
 import os
+import psycopg2
+
+# GCP PostgreSQL Database Configuration
+GCP_DB_HOST = "34.140.49.230"
+GCP_DB_PORT = 5432
+GCP_DB_NAME = "vtsi"
+GCP_DB_USER = "jason"
+GCP_DB_PASSWORD = "*9ZS^l(HGq].BA]6"
 
 
 @dataclass
@@ -75,45 +83,124 @@ def print_section(title: str):
     print(f"{'='*80}\n")
 
 
-def load_crash_data(start_date: datetime, end_date: datetime) -> pd.DataFrame:
+def load_crash_data(start_date: datetime, end_date: datetime, locality: Optional[str] = None) -> pd.DataFrame:
     """
-    Load historical crash data from database.
-
-    NOTE: This is a placeholder. In production, replace with actual crash database query.
-    For demonstration, generates synthetic crash data based on safety events.
+    Load historical crash data from GCP PostgreSQL vdot_crashes table.
 
     Args:
         start_date: Start of analysis period
         end_date: End of analysis period
+        locality: Filter by Virginia locality (optional)
 
     Returns:
-        DataFrame with columns: crash_id, intersection, timestamp, severity, weather_related
+        DataFrame with columns: crash_id, timestamp, latitude, longitude, severity,
+                              total_vehicles, total_injured, total_killed, weather,
+                              light_condition, road_surface
     """
-    print_section("Loading Crash Data")
+    print_section("Loading VDOT Crash Data from GCP PostgreSQL")
 
-    # For now, use safety events as proxy for crashes
-    # In production, query actual crash database
-    crash_events = collect_baseline_events(
-        intersection=None,
-        start_date=start_date,
-        end_date=end_date
-    )
+    print("NOTE: Before running, ensure your IP is allowlisted:")
+    print("  gcloud sql connect vtsi-postgres --user=jason --database=vtsi --quiet")
+    print()
 
-    if crash_events.empty:
-        print("WARNING: No crash data available for the specified period")
-        print("   Using synthetic data for demonstration")
+    try:
+        # Connect to GCP database
+        conn = psycopg2.connect(
+            host=GCP_DB_HOST,
+            port=GCP_DB_PORT,
+            database=GCP_DB_NAME,
+            user=GCP_DB_USER,
+            password=GCP_DB_PASSWORD,
+            connect_timeout=10
+        )
+
+        print(f"OK Connected to GCP database: {GCP_DB_NAME}")
+
+        # Build query with filters
+        where_clauses = ["crash_date >= %(start_date)s", "crash_date <= %(end_date)s"]
+        params = {
+            'start_date': start_date.date(),
+            'end_date': end_date.date()
+        }
+
+        if locality:
+            where_clauses.append("locality = %(locality)s")
+            params['locality'] = locality
+
+        where_clause = " AND ".join(where_clauses)
+
+        query = f"""
+            SELECT
+                document_nbr as crash_id,
+                crash_date,
+                crash_time,
+                latitude,
+                longitude,
+                severity,
+                total_vehicles,
+                total_injured,
+                total_killed,
+                weather,
+                light_condition,
+                road_surface,
+                locality
+            FROM vdot_crashes
+            WHERE {where_clause}
+            ORDER BY crash_date DESC, crash_time DESC
+        """
+
+        print(f"Querying crashes from {start_date.date()} to {end_date.date()}...")
+
+        # Execute query
+        df = pd.read_sql_query(query, conn, params=params)
+        conn.close()
+
+        if df.empty:
+            print("WARNING: No crash data found for the specified period")
+            print("   Falling back to synthetic data")
+            return generate_synthetic_crash_data(start_date, end_date)
+
+        # Create timestamp from crash_date and crash_time
+        # crash_time is in format like "845" for 8:45 AM
+        def parse_crash_time(row):
+            try:
+                time_str = str(int(row['crash_time'])).zfill(4)  # Pad to 4 digits: "0845"
+                hour = int(time_str[:2])
+                minute = int(time_str[2:])
+                return datetime.combine(row['crash_date'], datetime.min.time()).replace(hour=hour, minute=minute)
+            except:
+                # If parsing fails, use noon as default
+                return datetime.combine(row['crash_date'], datetime.min.time()).replace(hour=12, minute=0)
+
+        df['timestamp'] = df.apply(parse_crash_time, axis=1)
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+        # Determine if weather-related based on weather column
+        df['weather_related'] = df['weather'].notna() & ~df['weather'].isin(['CLEAR', 'CLOUDY', ''])
+
+        print(f"\nOK Loaded {len(df):,} crash records from VDOT database")
+        print(f"  Date range: {df['crash_date'].min()} to {df['crash_date'].max()}")
+        print(f"  Localities: {df['locality'].nunique()} unique")
+        print(f"  Severity breakdown:")
+        for severity, count in df['severity'].value_counts().head(5).items():
+            print(f"    - {severity}: {count:,}")
+        print(f"  Weather-related: {df['weather_related'].sum():,} ({df['weather_related'].sum()/len(df)*100:.1f}%)")
+
+        return df
+
+    except psycopg2.OperationalError as e:
+        if "timeout" in str(e).lower():
+            print(f"\nERROR: Connection timeout - Your IP may not be allowlisted")
+            print(f"       Run: gcloud sql connect vtsi-postgres --user=jason --database=vtsi --quiet")
+            print(f"       Then try again within 5 minutes")
+        else:
+            print(f"\nERROR: Database connection failed: {e}")
+        print(f"       Falling back to synthetic crash data")
         return generate_synthetic_crash_data(start_date, end_date)
-
-    # Convert safety events to crash format
-    crashes = crash_events[['event_id', 'intersection', 'event_time', 'severity_weight']].copy()
-    crashes.columns = ['crash_id', 'intersection', 'timestamp', 'severity']
-    crashes['weather_related'] = False  # TODO: Determine from event metadata
-
-    print(f"OK Loaded {len(crashes)} crash records")
-    print(f"  Date range: {crashes['timestamp'].min()} to {crashes['timestamp'].max()}")
-    print(f"  Intersections: {crashes['intersection'].nunique()}")
-
-    return crashes
+    except Exception as e:
+        print(f"\nERROR: Failed to load crash data: {e}")
+        print(f"       Falling back to synthetic crash data")
+        return generate_synthetic_crash_data(start_date, end_date)
 
 
 def load_safety_indices_from_db(start_date: datetime, end_date: datetime) -> pd.DataFrame:
@@ -233,15 +320,26 @@ def merge_crashes_with_indices(
     print_section("Merging Crashes with Safety Indices")
 
     # Floor crash timestamps to 15-minute bins
-    # Convert to UTC first to handle DST transitions
+    # Handle timezone-aware and timezone-naive timestamps
     crashes = crashes.copy()
-    crashes['timestamp'] = pd.to_datetime(crashes['timestamp']).dt.tz_convert('UTC')
+    crashes['timestamp'] = pd.to_datetime(crashes['timestamp'])
+
+    # Localize to UTC if timezone-naive, otherwise convert to UTC
+    if crashes['timestamp'].dt.tz is None:
+        crashes['timestamp'] = crashes['timestamp'].dt.tz_localize('UTC')
+    else:
+        crashes['timestamp'] = crashes['timestamp'].dt.tz_convert('UTC')
+
     crashes['time_bin'] = crashes['timestamp'].dt.floor(f'{time_window_minutes}min')
 
     # Floor index timestamps to 15-minute bins
     indices = indices.copy()
     if 'timestamp' in indices.columns:
-        indices['timestamp'] = pd.to_datetime(indices['timestamp']).dt.tz_localize('UTC', ambiguous='infer')
+        indices['timestamp'] = pd.to_datetime(indices['timestamp'])
+        if indices['timestamp'].dt.tz is None:
+            indices['timestamp'] = indices['timestamp'].dt.tz_localize('UTC', ambiguous='infer')
+        else:
+            indices['timestamp'] = indices['timestamp'].dt.tz_convert('UTC')
         indices['time_bin'] = indices['timestamp'].dt.floor(f'{time_window_minutes}min')
     else:
         indices['time_bin'] = indices.index

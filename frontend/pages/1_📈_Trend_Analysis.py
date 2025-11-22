@@ -420,14 +420,26 @@ def render_trend_view(
             )
 
     fig_combined.update_layout(
-        title="All Variables Normalized to 0-100 Scale",
+        title={
+            "text": "All Variables Normalized to 0-100 Scale",
+            "y": 0.98,
+            "x": 0.5,
+            "xanchor": "center",
+            "yanchor": "top",
+        },
         xaxis_title="Time",
         yaxis_title="Normalized Value (0-100)",
         yaxis_range=[0, 105],  # Slight padding at top
         hovermode="x unified",
-        height=500,
-        margin=dict(l=0, r=0, t=40, b=0),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        height=550,
+        margin=dict(l=0, r=0, t=80, b=0),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.15,
+            xanchor="center",
+            x=0.5,
+        ),
     )
 
     st.plotly_chart(fig_combined, use_container_width=True)

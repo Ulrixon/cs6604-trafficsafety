@@ -11,8 +11,15 @@ from datetime import date, datetime
 from typing import List, Optional, Dict
 import os
 
-from google.cloud import storage
-from google.cloud.exceptions import GoogleCloudError, NotFound
+try:
+    from google.cloud import storage
+    from google.cloud.exceptions import GoogleCloudError, NotFound
+    GOOGLE_CLOUD_AVAILABLE = True
+except ImportError:
+    GOOGLE_CLOUD_AVAILABLE = False
+    storage = None
+    GoogleCloudError = Exception
+    NotFound = Exception
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +35,12 @@ class GCSStorage:
             bucket_name: GCS bucket name (e.g., 'trafficsafety-prod-parquet')
             project_id: GCP project ID (optional, uses default from credentials)
         """
+        if not GOOGLE_CLOUD_AVAILABLE:
+            raise ImportError(
+                "Google Cloud Storage is not available. "
+                "Install with: pip install google-cloud-storage"
+            )
+
         self.bucket_name = bucket_name
 
         try:

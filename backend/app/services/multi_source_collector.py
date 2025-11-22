@@ -62,7 +62,7 @@ class MultiSourceDataCollector:
                 logger.warning(f"GCS storage initialization failed (continuing without GCS): {e}")
                 self.gcs_storage = None
 
-        logger.info(f"MultiSourceDataCollector initialized with {self.registry.count()} plugins")
+        logger.info(f"MultiSourceDataCollector initialized with {len(self.registry.list_plugins())} plugins")
 
     def _register_plugins(self):
         """Register all enabled plugins from settings."""
@@ -118,7 +118,7 @@ class MultiSourceDataCollector:
             # weather_precipitation, weather_visibility, ...
             ```
         """
-        logger.info(f"Collecting data from {self.registry.count()} plugins: {start_time} to {end_time}")
+        logger.info(f"Collecting data from {len(self.registry.list_plugins())} plugins: {start_time} to {end_time}")
 
         # Collect from all plugins (in parallel)
         merged_data = self.registry.collect_all(start_time, end_time, fail_fast=fail_fast)

@@ -108,6 +108,13 @@ class Settings(BaseSettings):
         description="Enable uploading Parquet files to GCS"
     )
 
+    # Parquet Storage Configuration
+    PARQUET_STORAGE_PATH: str = Field(
+        "./data/parquet",
+        env="PARQUET_STORAGE_PATH",
+        description="Local path for Parquet file storage"
+    )
+
     # Data Plugin System Configuration
     ENABLE_DATA_PLUGINS: bool = Field(
         False,

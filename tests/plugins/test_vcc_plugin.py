@@ -444,7 +444,7 @@ class TestVCCPluginFeatureNormalization:
 class TestVCCPluginFactoryFunction:
     """Test VCC plugin factory function."""
 
-    @patch('app.plugins.vcc_plugin.settings')
+    @patch('app.core.config.settings')
     def test_create_from_settings(self, mock_settings):
         """Test creating VCC plugin from settings."""
         mock_settings.VCC_BASE_URL = 'https://api.vcc.vtti.vt.edu'

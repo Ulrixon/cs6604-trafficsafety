@@ -22,6 +22,7 @@ from .exceptions import (
     PluginHealthCheckError,
 )
 from .vcc_plugin import VCCPlugin, create_vcc_plugin_from_settings
+from .noaa_weather_plugin import NOAAWeatherPlugin, create_weather_plugin_from_settings
 
 __all__ = [
     "DataSourcePlugin",
@@ -34,4 +35,6 @@ __all__ = [
     "PluginHealthCheckError",
     "VCCPlugin",
     "create_vcc_plugin_from_settings",
+    "NOAAWeatherPlugin",
+    "create_weather_plugin_from_settings",
 ]

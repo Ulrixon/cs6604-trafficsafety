@@ -1,213 +1,137 @@
 """
-Intersection service - Orchestrates the full safety index computation pipeline
-Phases 2-7: Data Collection → Feature Engineering → Index Computation
+Intersection service - Provides safety index using MCDM methodology
 """
 
-from typing import List, Optional
-from datetime import datetime, timedelta
-import pandas as pd
+from typing import List, Optional, Dict
+import logging
 
 from ..models.intersection import Intersection
 from ..core.config import settings
-from .data_collection import collect_baseline_events, collect_exposure_metrics
-from .feature_engineering import (
-    collect_bsm_features, collect_psm_features,
-    aggregate_safety_events, create_master_feature_table
-)
-from .index_computation import (
-    compute_normalization_constants,
-    compute_safety_indices,
-    apply_empirical_bayes
-)
-from .parquet_storage import parquet_storage
-from .vcc_historical_processor import process_historical_vcc_data
+from .db_client import get_db_client
+from .mcdm_service import MCDMSafetyIndexService
+
+logger = logging.getLogger(__name__)
+
+
+def get_intersection_coordinates() -> Dict[str, Dict[str, float]]:
+    """
+    Fetch intersection coordinates from PSM table.
+
+    PSM (Personal Safety Messages) contains latitude/longitude data for each intersection.
+    Calculates average coordinates from all PSM records per intersection.
+
+    Returns:
+        Dictionary mapping intersection names to their coordinates
+        Example: {"glebe-potomac": {"latitude": 38.8608, "longitude": -77.0530}}
+    """
+    try:
+        db_client = get_db_client()
+
+        # Fetch average lat/lon from PSM table for each intersection
+        query = """
+        SELECT 
+            intersection,
+            AVG(lat) as avg_latitude,
+            AVG(lon) as avg_longitude,
+            COUNT(*) as sample_count
+        FROM psm
+        WHERE lat IS NOT NULL 
+          AND lon IS NOT NULL
+          AND lat BETWEEN -90 AND 90
+          AND lon BETWEEN -180 AND 180
+        GROUP BY intersection
+        """
+
+        results = db_client.execute_query(query)
+
+        coords_map = {}
+        for row in results:
+            coords_map[row["intersection"]] = {
+                "latitude": float(row["avg_latitude"]),
+                "longitude": float(row["avg_longitude"]),
+            }
+            logger.info(
+                f"Loaded coordinates for {row['intersection']}: "
+                f"({row['avg_latitude']:.6f}, {row['avg_longitude']:.6f}) "
+                f"from {row['sample_count']} PSM records"
+            )
+
+        return coords_map
+
+    except Exception as e:
+        logger.error(
+            f"Error fetching intersection coordinates from PSM: {e}", exc_info=True
+        )
+        return {}
 
 
 def compute_current_indices() -> List[Intersection]:
     """
-    Compute current safety indices for all intersections using the complete pipeline.
+    Compute current safety indices for all intersections using MCDM methodology.
 
-    Supports multiple data sources:
-    - 'trino': Uses Trino database (default)
-    - 'vcc': Uses VCC API data from Parquet storage
-    - 'both': Merges data from both sources
-
-    Pipeline:
-    1. Phase 2: Collect baseline events + exposure metrics
-    2. Phase 3: Engineer features from BSM, PSM, and events
-    3. Phase 4: Create master feature table
-    4. Phase 5: Compute normalization constants
-    5. Phase 6: Compute VRU, Vehicle, Combined indices
-    6. Phase 7: Apply Empirical Bayes adjustment
+    Uses Multi-Criteria Decision Making (MCDM) approach with:
+    - CRITIC method for weight calculation
+    - Hybrid scoring combining SAW, EDAS, and CODAS methods
+    - Real-time data from PostgreSQL database
 
     Returns:
         List of Intersection objects with computed safety scores
     """
     try:
-        # Use configurable lookback period
-        end_dt = datetime.now()
-        start_dt = end_dt - timedelta(days=settings.DEFAULT_LOOKBACK_DAYS)
+        logger.info("Computing MCDM safety indices for intersections...")
 
-        print(f"\n{'='*80}")
-        print(f"TRAFFIC SAFETY INDEX COMPUTATION PIPELINE")
-        print(f"{'='*80}")
-        print(f"Data source: {settings.DATA_SOURCE}")
-        print(f"Time range: {start_dt.date()} to {end_dt.date()}")
-        print(f"Lookback period: {settings.DEFAULT_LOOKBACK_DAYS} days\n")
-        
-        # Check if using VCC data source
-        if settings.DATA_SOURCE in ['vcc', 'both']:
-            # Load indices from Parquet storage
-            try:
-                indices_df = parquet_storage.load_indices(
-                    start_dt.date(),
-                    end_dt.date()
-                )
-                
-                if len(indices_df) > 0:
-                    print(f"✓ Loaded {len(indices_df)} indices from VCC Parquet storage")
-                    
-                    # Get latest index per intersection
-                    if 'time_15min' in indices_df.columns:
-                        indices_df['time_15min'] = pd.to_datetime(indices_df['time_15min'])
-                        latest = indices_df.sort_values('time_15min').groupby('intersection').last().reset_index()
-                    else:
-                        latest = indices_df.groupby('intersection').last().reset_index()
-                    
-                    # Convert to Intersection objects
-                    intersections = []
-                    for idx, row in latest.iterrows():
-                        safety_index = float(row.get('Combined_Index_EB', row.get('Combined_Index', 0)))
-                        intersection_value = row.get('intersection')
-                        
-                        # Use actual intersection value as ID, converting to int if needed
-                        try:
-                            # Try to convert directly to int if it's numeric
-                            intersection_id = int(intersection_value) if intersection_value is not None else 100 + idx + 1
-                        except (ValueError, TypeError):
-                            # If it's a string or other type, use hash to get consistent int ID
-                            intersection_id = hash(str(intersection_value)) % (10**9) if intersection_value is not None else 100 + idx + 1
-                        
-                        intersections.append(
-                            Intersection(
-                                intersection_id=intersection_id,
-                                intersection_name=str(intersection_value if intersection_value is not None else f"Intersection_{idx+1}"),
-                                safety_index=safety_index,
-                                traffic_volume=int(row.get('vehicle_count', row.get('vehicle_volume', 0))),
-                                longitude=-77.053,  # Default coordinates (TODO: lookup from metadata)
-                                latitude=38.856
-                            )
-                        )
-                    
-                    if settings.DATA_SOURCE == 'vcc':
-                        # Return VCC-only results
-                        return intersections
-                    else:
-                        # Continue with Trino processing and merge
-                        print("⚠ 'both' mode not yet implemented - using VCC data only")
-                        return intersections
-                else:
-                    print("⚠ No VCC indices found in Parquet storage")
-                    if settings.DATA_SOURCE == 'vcc':
-                        print("⚠ Cannot compute indices without VCC data")
-                        return []
-            except Exception as e:
-                print(f"⚠ Error loading VCC indices: {e}")
-                if settings.DATA_SOURCE == 'vcc':
-                    print("⚠ Falling back to historical processing...")
-                    # Could trigger historical processing here if needed
-                    return []
+        # Get database client
+        db_client = get_db_client()
 
-        # ========== Phase 2: Data Collection ==========
-        print("[Phase 2] Collecting baseline events and exposure metrics...")
-        baseline_events = collect_baseline_events(start_date=start_dt, end_date=end_dt)
-        vehicle_counts, vru_counts = collect_exposure_metrics(start_date=start_dt, end_date=end_dt)
+        # Initialize MCDM service
+        mcdm_service = MCDMSafetyIndexService(db_client)
 
-        # ========== Phase 3: Feature Engineering ==========
-        print("\n[Phase 3] Engineering features from BSM, PSM, and safety events...")
-        bsm_features = collect_bsm_features(start_date=start_dt, end_date=end_dt)
-
-        if len(bsm_features) == 0:
-            print("⚠ No BSM features available - cannot compute indices")
-            return []
-
-        psm_features = collect_psm_features(start_date=start_dt, end_date=end_dt)
-        aggregated_events = aggregate_safety_events(start_date=start_dt, end_date=end_dt)
-
-        # ========== Phase 4: Master Feature Table ==========
-        print("\n[Phase 4] Creating master feature table...")
-        master_features = create_master_feature_table(
-            bsm_features=bsm_features,
-            psm_features=psm_features,
-            aggregated_events=aggregated_events,
-            vehicle_counts=vehicle_counts,
-            vru_counts=vru_counts
+        # Calculate latest safety scores
+        safety_scores = mcdm_service.calculate_latest_safety_scores(
+            bin_minutes=settings.MCDM_BIN_MINUTES,
+            lookback_hours=settings.MCDM_LOOKBACK_HOURS,
         )
 
-        if len(master_features) == 0:
-            print("⚠ Master feature table is empty - cannot compute indices")
+        if not safety_scores:
+            logger.warning("No safety scores computed - no data available")
             return []
 
-        # ========== Phase 5: Normalization Constants ==========
-        print("\n[Phase 5] Computing normalization constants...")
-        norm_constants = compute_normalization_constants(master_features)
+        # Fetch intersection coordinates from BSM table
+        intersection_coords = get_intersection_coordinates()
 
-        # ========== Phase 6: Safety Index Computation ==========
-        print("\n[Phase 6] Computing VRU, Vehicle, and Combined Safety Indices...")
-        indices_df = compute_safety_indices(master_features, norm_constants)
-
-        if len(indices_df) == 0:
-            print("⚠ No indices computed")
-            return []
-
-        # ========== Phase 7: Empirical Bayes Adjustment ==========
-        print("\n[Phase 7] Applying Empirical Bayes stabilization...")
-        indices_df = apply_empirical_bayes(
-            indices_df,
-            baseline_events,
-            k=settings.EMPIRICAL_BAYES_K
-        )
-
-        # ========== Get Latest Index per Intersection ==========
-        print("\n[Final] Aggregating latest indices per intersection...")
-        latest = indices_df.sort_values('time_15min').groupby('intersection').last().reset_index()
-
-        print(f"\n{'='*80}")
-        print(f"✓ PIPELINE COMPLETE: Computed indices for {len(latest)} intersections")
-        print(f"{'='*80}\n")
+        # Default fallback coordinates (center of Arlington, VA)
+        DEFAULT_COORDS = {"latitude": 38.8816, "longitude": -77.1945}
 
         # Convert to Intersection objects
         intersections = []
-        for idx, row in latest.iterrows():
-            # Use EB-adjusted Combined Index if available, otherwise raw
-            safety_index = float(row.get('Combined_Index_EB', row.get('Combined_Index', 0)))
-            intersection_value = row.get('intersection')
-            
-            # Use actual intersection value as ID, converting to int if needed
-            try:
-                # Try to convert directly to int if it's numeric
-                intersection_id = int(intersection_value) if intersection_value is not None else 100 + idx + 1
-            except (ValueError, TypeError):
-                # If it's a string or other type, use hash to get consistent int ID
-                intersection_id = hash(str(intersection_value)) % (10**9) if intersection_value is not None else 100 + idx + 1
+        for idx, score_data in enumerate(safety_scores):
+            intersection_name = score_data["intersection"]
+
+            # Use coordinates from BSM data, or fallback to default
+            coords = intersection_coords.get(intersection_name, DEFAULT_COORDS)
+
+            if intersection_name not in intersection_coords:
+                logger.warning(
+                    f"No coordinates found in BSM for '{intersection_name}', "
+                    f"using default: ({DEFAULT_COORDS['latitude']}, {DEFAULT_COORDS['longitude']})"
+                )
 
             intersections.append(
                 Intersection(
-                    intersection_id=intersection_id,
-                    intersection_name=str(intersection_value if intersection_value is not None else f"Intersection_{idx+1}"),
-                    safety_index=safety_index,
-                    traffic_volume=int(row.get('vehicle_count', 0)),
-                    longitude=-77.053,  # Default coordinates (TODO: lookup from metadata)
-                    latitude=38.856
+                    intersection_id=100 + idx + 1,  # Generate sequential IDs
+                    intersection_name=intersection_name,
+                    safety_index=score_data["safety_score"],
+                    traffic_volume=score_data["vehicle_count"],
+                    longitude=coords["longitude"],
+                    latitude=coords["latitude"],
                 )
             )
 
+        logger.info(f"✓ Computed MCDM indices for {len(intersections)} intersections")
         return intersections
 
     except Exception as e:
-        print(f"\n⚠ ERROR in safety index pipeline: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error computing MCDM safety indices: {e}", exc_info=True)
         return []
 
 

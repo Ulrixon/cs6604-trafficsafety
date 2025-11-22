@@ -16,17 +16,33 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .services.intersection_service import get_all
-from .schemas.intersection import IntersectionRead
-
-# Import configuration (if any) and routers
-from .core.config import settings  # type: ignore
-from .api.intersection import router as intersection_router
-from .api.vcc import router as vcc_router
-from .api.history import router as history_router
-from .db.connection import init_db, close_db, check_db_health
+from contextlib import asynccontextmanager
+import logging
 
 logger = logging.getLogger(__name__)
+
+from .schemas.intersection import IntersectionRead
+from .core.config import settings  # type: ignore
+from .api.intersection import router as intersection_router
+from .db.connection import init_db, close_db, check_db_health
+from .services.db_client import get_db_client, close_db_client
+
+# Optional routers - import conditionally to avoid startup failures
+try:
+    from .api.vcc import router as vcc_router
+
+    VCC_AVAILABLE = True
+except Exception as e:
+    logger.warning(f"VCC router not available: {e}")
+    VCC_AVAILABLE = False
+
+try:
+    from .api.history import router as history_router
+
+    HISTORY_AVAILABLE = True
+except Exception as e:
+    logger.warning(f"History router not available: {e}")
+    HISTORY_AVAILABLE = False
 
 
 @asynccontextmanager
@@ -35,13 +51,14 @@ async def lifespan(app: FastAPI):
     Lifespan context manager for application startup and shutdown.
 
     Handles:
-    - Database connection initialization
+    - PostgreSQL database connection initialization (if enabled)
+    - MCDM database connection (lazy initialization)
     - Database connection cleanup
     """
     # Startup
-    logger.info("Starting application...")
+    logger.info("Starting Traffic Safety API...")
 
-    # Initialize database connection if PostgreSQL is enabled
+    # Initialize PostgreSQL connection if enabled (for safety index storage)
     if settings.USE_POSTGRESQL:
         try:
             logger.info("Initializing PostgreSQL connection...")
@@ -65,13 +82,27 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("PostgreSQL disabled - using Parquet storage only")
 
+    # MCDM database connection will be established lazily on first request
+
     yield  # Application is running
 
     # Shutdown
-    logger.info("Shutting down application...")
+    logger.info("Shutting down Traffic Safety API...")
+
+    # Close PostgreSQL connection
     if settings.USE_POSTGRESQL:
-        close_db()
-        logger.info("Database connections closed")
+        try:
+            close_db()
+            logger.info("✓ PostgreSQL connections closed")
+        except Exception as e:
+            logger.warning(f"Error closing PostgreSQL: {e}")
+
+    # Close MCDM database connection
+    try:
+        close_db_client()
+        logger.info("✓ MCDM database connection closed")
+    except Exception as e:
+        logger.warning(f"Error closing MCDM database: {e}")
 
 
 def create_app() -> FastAPI:
@@ -81,7 +112,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.PROJECT_NAME,
         version=settings.VERSION,
-        description="Traffic safety API for intersections.",
+        description="Traffic safety API for intersections with MCDM-based safety scoring.",
         lifespan=lifespan,
     )
 
@@ -96,8 +127,15 @@ def create_app() -> FastAPI:
 
     # Include API routers
     app.include_router(intersection_router, prefix="/api/v1")
-    app.include_router(vcc_router, prefix="/api/v1")
-    app.include_router(history_router, prefix="/api/v1")
+
+    # Optional routers
+    if VCC_AVAILABLE:
+        app.include_router(vcc_router, prefix="/api/v1")
+        logger.info("✓ VCC router registered")
+
+    if HISTORY_AVAILABLE:
+        app.include_router(history_router, prefix="/api/v1")
+        logger.info("✓ History router registered")
 
     # Health‑check endpoint
     @app.get("/health", tags=["Health"])
@@ -146,6 +184,6 @@ if __name__ == "__main__":
     uvicorn.run(
         "backend.app.main:app",
         host="0.0.0.0",
-        port=8000,
+        port=8080,
         reload=True,
     )

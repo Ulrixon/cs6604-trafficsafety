@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
 
@@ -8,12 +8,12 @@ class Settings(BaseSettings):
     """
 
     # Project metadata
-    PROJECT_NAME: str = Field("Traffic Safety API", env="PROJECT_NAME")
-    VERSION: str = Field("0.1.0", env="VERSION")
-    DEBUG: bool = Field(True, env="DEBUG")
+    PROJECT_NAME: str = "Traffic Safety API"
+    VERSION: str = "0.1.0"
+    DEBUG: bool = True
 
     # Base URL for the service
-    BASE_URL: str = Field("http://localhost:8000", env="BASE_URL")
+    BASE_URL: str = "http://localhost:8000"
 
     # PostgreSQL + PostGIS database configuration
     DATABASE_URL: str = Field(
@@ -33,57 +33,46 @@ class Settings(BaseSettings):
     )
 
     # Trino database configuration
-    TRINO_HOST: str = Field(
-        "smart-cities-trino.pre-prod.cloud.vtti.vt.edu",
-        env="TRINO_HOST"
-    )
-    TRINO_PORT: int = Field(443, env="TRINO_PORT")
-    TRINO_HTTP_SCHEME: str = Field("https", env="TRINO_HTTP_SCHEME")
-    TRINO_CATALOG: str = Field("smartcities_iceberg", env="TRINO_CATALOG")
+    TRINO_HOST: str = "smart-cities-trino.pre-prod.cloud.vtti.vt.edu"
+    TRINO_PORT: int = 443
+    TRINO_HTTP_SCHEME: str = "https"
+    TRINO_CATALOG: str = "smartcities_iceberg"
 
     # Safety Index computation settings
     EMPIRICAL_BAYES_K: int = Field(
-        50,
-        env="EMPIRICAL_BAYES_K",
-        description="Tuning parameter for Empirical Bayes adjustment"
+        default=50, description="Tuning parameter for Empirical Bayes adjustment"
     )
     DEFAULT_LOOKBACK_DAYS: int = Field(
-        7,
-        env="DEFAULT_LOOKBACK_DAYS",
-        description="Default number of days to analyze"
+        default=7, description="Default number of days to analyze"
     )
 
-    # VCC API configuration
-    VCC_BASE_URL: str = Field(
-        "https://vcc.vtti.vt.edu",
-        env="VCC_BASE_URL",
-        description="Base URL for VCC API"
+    # PostgreSQL database configuration (for MCDM calculations)
+    # For local development: use VTTI_DB_HOST and VTTI_DB_PORT
+    # For Cloud Run: use VTTI_DB_INSTANCE_CONNECTION_NAME (Unix socket)
+    VTTI_DB_HOST: str = "127.0.0.1"
+    VTTI_DB_PORT: int = 9470
+    VTTI_DB_NAME: str = "vtsi"
+    VTTI_DB_USER: str = "postgres"
+    VTTI_DB_PASSWORD: str = ""  # Must be set in .env file
+    VTTI_DB_INSTANCE_CONNECTION_NAME: str = (
+        ""  # Cloud SQL instance (e.g., project:region:instance)
     )
-    VCC_CLIENT_ID: str = Field(
-        "",
-        env="VCC_CLIENT_ID",
-        description="OAuth2 client ID for VCC API"
+
+    # MCDM Safety Index settings
+    MCDM_BIN_MINUTES: int = Field(
+        default=15, description="Time bin size in minutes for MCDM calculation"
     )
-    VCC_CLIENT_SECRET: str = Field(
-        "",
-        env="VCC_CLIENT_SECRET",
-        description="OAuth2 client secret for VCC API"
+    MCDM_LOOKBACK_HOURS: int = Field(
+        default=24,
+        description="Hours of historical data to use for MCDM CRITIC weights",
     )
-    DATA_SOURCE: str = Field(
-        "trino",
-        env="DATA_SOURCE",
-        description="Data source: 'trino', 'vcc', or 'both'"
-    )
-    PARQUET_STORAGE_PATH: str = Field(
-        "backend/data/parquet",
-        env="PARQUET_STORAGE_PATH",
-        description="Path to Parquet storage directory"
-    )
-    REALTIME_ENABLED: bool = Field(
-        False,
-        env="REALTIME_ENABLED",
-        description="Enable real-time WebSocket streaming"
-    )
+
+    # VCC API configuration (optional, for other services)
+    VCC_BASE_URL: str = "https://api.vcc.vtti.vt.edu"
+    VCC_CLIENT_ID: str = ""
+    VCC_CLIENT_SECRET: str = ""
+    DATA_SOURCE: str = "vcc"  # Data source for VCC API
+    REALTIME_ENABLED: bool = False  # Enable real-time streaming
 
     # Feature flags for PostgreSQL migration
     USE_POSTGRESQL: bool = Field(
@@ -119,9 +108,11 @@ class Settings(BaseSettings):
         description="Enable uploading Parquet files to GCS"
     )
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        env_file="backend/.env",
+        env_file_encoding="utf-8",
+        extra="ignore",  # Allow extra fields from .env
+    )
 
 
 # Export a singleton for easy import

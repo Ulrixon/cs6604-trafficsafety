@@ -112,3 +112,6 @@ ENVIRONMENT/
 # Misc
 *.swp
 *~
+
+# Data integration folder
+data-integration/

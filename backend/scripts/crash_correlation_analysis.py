@@ -31,6 +31,10 @@ sys.path.insert(0, str(backend_path))
 
 from app.services.data_collection import collect_baseline_events
 from app.services.index_computation import compute_multi_source_safety_indices
+from app.db.connection import db_session, init_db
+from app.core.config import settings
+from sqlalchemy import text
+import os
 
 
 @dataclass
@@ -112,6 +116,62 @@ def load_crash_data(start_date: datetime, end_date: datetime) -> pd.DataFrame:
     return crashes
 
 
+def load_safety_indices_from_db(start_date: datetime, end_date: datetime) -> pd.DataFrame:
+    """
+    Load safety indices from PostgreSQL database.
+
+    Args:
+        start_date: Start of analysis period
+        end_date: End of analysis period
+
+    Returns:
+        DataFrame with columns: timestamp, intersection_id, combined_index, vru_index, vehicle_index
+    """
+    print_section("Loading Safety Indices from PostgreSQL")
+
+    query = text("""
+        SELECT
+            timestamp,
+            intersection_id,
+            combined_index AS "Combined_Index",
+            vru_index AS "VRU_Index",
+            vehicle_index AS "Vehicle_Index",
+            traffic_volume,
+            vru_count
+        FROM safety_indices_realtime
+        WHERE timestamp >= :start_date
+          AND timestamp <= :end_date
+        ORDER BY timestamp
+    """)
+
+    try:
+        with db_session() as session:
+            result = session.execute(query, {
+                'start_date': start_date,
+                'end_date': end_date
+            })
+            rows = result.fetchall()
+
+            if not rows:
+                print("WARNING: No safety indices found in database for the specified period")
+                return pd.DataFrame()
+
+            # Convert to DataFrame
+            indices = pd.DataFrame(rows, columns=['timestamp', 'intersection_id', 'Combined_Index',
+                                                  'VRU_Index', 'Vehicle_Index', 'traffic_volume', 'vru_count'])
+
+            print(f"OK Loaded {len(indices)} safety index records from PostgreSQL")
+            print(f"  Date range: {indices['timestamp'].min()} to {indices['timestamp'].max()}")
+            print(f"  Intersections: {indices['intersection_id'].nunique()}")
+            print(f"  Avg Combined Index: {indices['Combined_Index'].mean():.1f}")
+
+            return indices
+    except Exception as e:
+        print(f"ERROR loading safety indices from database: {e}")
+        print("  Falling back to synthetic data generation")
+        return pd.DataFrame()
+
+
 def generate_synthetic_crash_data(start_date: datetime, end_date: datetime) -> pd.DataFrame:
     """
     Generate synthetic crash data for testing when real data unavailable.
@@ -173,13 +233,16 @@ def merge_crashes_with_indices(
     print_section("Merging Crashes with Safety Indices")
 
     # Floor crash timestamps to 15-minute bins
+    # Convert to UTC first to handle DST transitions
     crashes = crashes.copy()
+    crashes['timestamp'] = pd.to_datetime(crashes['timestamp']).dt.tz_convert('UTC')
     crashes['time_bin'] = crashes['timestamp'].dt.floor(f'{time_window_minutes}min')
 
     # Floor index timestamps to 15-minute bins
     indices = indices.copy()
     if 'timestamp' in indices.columns:
-        indices['time_bin'] = pd.to_datetime(indices['timestamp']).dt.floor(f'{time_window_minutes}min')
+        indices['timestamp'] = pd.to_datetime(indices['timestamp']).dt.tz_localize('UTC', ambiguous='infer')
+        indices['time_bin'] = indices['timestamp'].dt.floor(f'{time_window_minutes}min')
     else:
         indices['time_bin'] = indices.index
 
@@ -370,6 +433,13 @@ def main():
     start_date = datetime.strptime(args.start_date, '%Y-%m-%d')
     end_date = datetime.strptime(args.end_date, '%Y-%m-%d')
 
+    # Initialize database connection
+    # Replace 'db:5432' with 'localhost:5433' when running outside Docker
+    database_url = settings.DATABASE_URL
+    if '@db:5432' in database_url and not os.getenv('DOCKER_CONTAINER'):
+        database_url = database_url.replace('@db:5432', '@localhost:5433')
+    init_db(database_url, settings.DB_POOL_SIZE, settings.DB_MAX_OVERFLOW)
+
     print(f"\n{'#'*80}")
     print(f"#  CRASH CORRELATION ANALYSIS (Phase 7)")
     print(f"#  Date: {datetime.now()}")
@@ -401,30 +471,21 @@ def main():
         print(f"Generated {len(crashes)} synthetic crash records")
         print(f"  Crash rate: {len(crashes) / ((end_date - start_date).days * 24):.1f} crashes/hour")
 
-    # Compute safety indices for the same period
-    # NOTE: This requires real-time data availability
-    # For demonstration, we'll use a mock approach
-    print_section("Computing Safety Indices")
-    print("! NOTE: Computing safety indices requires real-time VCC/Weather data")
-    print("   Using simplified approach for demonstration")
+    # Load safety indices from PostgreSQL
+    indices = load_safety_indices_from_db(start_date, end_date)
 
-    # Create mock indices DataFrame
-    # In production, call compute_multi_source_safety_indices() for each time window
-    time_bins = pd.date_range(
-        start=start_date,
-        end=end_date,
-        freq='15min'
-    )
-
-    # Generate synthetic indices (in production, compute from real data)
-    indices = pd.DataFrame({
-        'timestamp': time_bins,
-        'Combined_Index': np.random.uniform(30, 80, len(time_bins)),
-        'Weather_Index': np.random.uniform(20, 70, len(time_bins)),
-        'Traffic_Index': np.random.uniform(40, 85, len(time_bins))
-    })
-
-    print(f"OK Generated {len(indices)} safety index records")
+    if indices.empty:
+        print("\nWARNING: No safety indices available in database")
+        print("         Generating synthetic indices for demonstration")
+        # Fallback to synthetic data
+        time_bins = pd.date_range(start=start_date, end=end_date, freq='15min')
+        indices = pd.DataFrame({
+            'timestamp': time_bins,
+            'Combined_Index': np.random.uniform(30, 80, len(time_bins)),
+            'Weather_Index': np.random.uniform(20, 70, len(time_bins)),
+            'Traffic_Index': np.random.uniform(40, 85, len(time_bins))
+        })
+        print(f"OK Generated {len(indices)} synthetic safety index records")
 
     # Merge crashes with indices
     merged_data = merge_crashes_with_indices(crashes, indices)

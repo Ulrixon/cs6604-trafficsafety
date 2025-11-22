@@ -451,3 +451,248 @@ def get_high_risk_intersections() -> List[IntersectionSafetyIndex]:
     except Exception as e:
         logger.error(f"Failed to get high-risk intersections: {e}")
         return []
+
+
+@dataclass
+class WeatherObservationRecord:
+    """Weather observation record for database insertion."""
+    station_id: str
+    observation_time: datetime
+    temperature_c: Optional[float] = None
+    precipitation_mm: Optional[float] = None
+    visibility_m: Optional[float] = None
+    wind_speed_ms: Optional[float] = None
+    wind_direction_deg: Optional[float] = None
+    weather_condition: Optional[str] = None
+    temperature_normalized: Optional[float] = None
+    precipitation_normalized: Optional[float] = None
+    visibility_normalized: Optional[float] = None
+    wind_speed_normalized: Optional[float] = None
+
+
+def insert_weather_observation(record: WeatherObservationRecord) -> bool:
+    """
+    Insert a single weather observation record into the database.
+
+    Args:
+        record: WeatherObservationRecord to insert
+
+    Returns:
+        True if successful, False otherwise
+
+    Example:
+        ```python
+        record = WeatherObservationRecord(
+            station_id='KRIC',
+            observation_time=datetime.now(),
+            temperature_c=18.3,
+            precipitation_mm=2.5,
+            visibility_m=8000,
+            wind_speed_ms=5.2,
+            temperature_normalized=0.1,
+            precipitation_normalized=0.125
+        )
+        success = insert_weather_observation(record)
+        ```
+    """
+    try:
+        sql = text("""
+            INSERT INTO weather_observations (
+                station_id, observation_time,
+                temperature_c, precipitation_mm, visibility_m,
+                wind_speed_ms, wind_direction_deg, weather_condition,
+                temperature_normalized, precipitation_normalized,
+                visibility_normalized, wind_speed_normalized
+            )
+            VALUES (
+                :station_id, :observation_time,
+                :temperature_c, :precipitation_mm, :visibility_m,
+                :wind_speed_ms, :wind_direction_deg, :weather_condition,
+                :temperature_normalized, :precipitation_normalized,
+                :visibility_normalized, :wind_speed_normalized
+            )
+            ON CONFLICT (station_id, observation_time) DO UPDATE SET
+                temperature_c = EXCLUDED.temperature_c,
+                precipitation_mm = EXCLUDED.precipitation_mm,
+                visibility_m = EXCLUDED.visibility_m,
+                wind_speed_ms = EXCLUDED.wind_speed_ms,
+                wind_direction_deg = EXCLUDED.wind_direction_deg,
+                weather_condition = EXCLUDED.weather_condition,
+                temperature_normalized = EXCLUDED.temperature_normalized,
+                precipitation_normalized = EXCLUDED.precipitation_normalized,
+                visibility_normalized = EXCLUDED.visibility_normalized,
+                wind_speed_normalized = EXCLUDED.wind_speed_normalized
+        """)
+
+        with db_session() as session:
+            session.execute(sql, {
+                "station_id": record.station_id,
+                "observation_time": record.observation_time,
+                "temperature_c": record.temperature_c,
+                "precipitation_mm": record.precipitation_mm,
+                "visibility_m": record.visibility_m,
+                "wind_speed_ms": record.wind_speed_ms,
+                "wind_direction_deg": record.wind_direction_deg,
+                "weather_condition": record.weather_condition,
+                "temperature_normalized": record.temperature_normalized,
+                "precipitation_normalized": record.precipitation_normalized,
+                "visibility_normalized": record.visibility_normalized,
+                "wind_speed_normalized": record.wind_speed_normalized
+            })
+
+        logger.debug(f"Inserted weather observation for station {record.station_id} at {record.observation_time}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to insert weather observation: {e}")
+        return False
+
+
+def insert_weather_observations_batch(records: List[WeatherObservationRecord]) -> int:
+    """
+    Insert multiple weather observation records in a batch.
+
+    Args:
+        records: List of WeatherObservationRecord to insert
+
+    Returns:
+        Number of successfully inserted records
+
+    Example:
+        ```python
+        records = [
+            WeatherObservationRecord(
+                station_id='KRIC',
+                observation_time=dt1,
+                temperature_c=18.3,
+                temperature_normalized=0.1
+            ),
+            WeatherObservationRecord(
+                station_id='KRIC',
+                observation_time=dt2,
+                temperature_c=20.0,
+                temperature_normalized=0.0
+            ),
+        ]
+        count = insert_weather_observations_batch(records)
+        ```
+    """
+    if not records:
+        return 0
+
+    success_count = 0
+    sql = text("""
+        INSERT INTO weather_observations (
+            station_id, observation_time,
+            temperature_c, precipitation_mm, visibility_m,
+            wind_speed_ms, wind_direction_deg, weather_condition,
+            temperature_normalized, precipitation_normalized,
+            visibility_normalized, wind_speed_normalized
+        )
+        VALUES (
+            :station_id, :observation_time,
+            :temperature_c, :precipitation_mm, :visibility_m,
+            :wind_speed_ms, :wind_direction_deg, :weather_condition,
+            :temperature_normalized, :precipitation_normalized,
+            :visibility_normalized, :wind_speed_normalized
+        )
+        ON CONFLICT (station_id, observation_time) DO UPDATE SET
+            temperature_c = EXCLUDED.temperature_c,
+            precipitation_mm = EXCLUDED.precipitation_mm,
+            visibility_m = EXCLUDED.visibility_m,
+            wind_speed_ms = EXCLUDED.wind_speed_ms,
+            wind_direction_deg = EXCLUDED.wind_direction_deg,
+            weather_condition = EXCLUDED.weather_condition,
+            temperature_normalized = EXCLUDED.temperature_normalized,
+            precipitation_normalized = EXCLUDED.precipitation_normalized,
+            visibility_normalized = EXCLUDED.visibility_normalized,
+            wind_speed_normalized = EXCLUDED.wind_speed_normalized
+    """)
+
+    try:
+        with db_session() as session:
+            for record in records:
+                try:
+                    session.execute(sql, {
+                        "station_id": record.station_id,
+                        "observation_time": record.observation_time,
+                        "temperature_c": record.temperature_c,
+                        "precipitation_mm": record.precipitation_mm,
+                        "visibility_m": record.visibility_m,
+                        "wind_speed_ms": record.wind_speed_ms,
+                        "wind_direction_deg": record.wind_direction_deg,
+                        "weather_condition": record.weather_condition,
+                        "temperature_normalized": record.temperature_normalized,
+                        "precipitation_normalized": record.precipitation_normalized,
+                        "visibility_normalized": record.visibility_normalized,
+                        "wind_speed_normalized": record.wind_speed_normalized
+                    })
+                    success_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to insert weather record for station {record.station_id}: {e}")
+                    continue
+
+        logger.info(f"Batch inserted {success_count}/{len(records)} weather observations")
+        return success_count
+
+    except Exception as e:
+        logger.error(f"Weather batch insert failed: {e}")
+        return success_count
+
+
+def get_weather_observations(
+    station_id: str,
+    start_time: datetime,
+    end_time: datetime
+) -> List[Dict[str, Any]]:
+    """
+    Get weather observations for a station within a time range.
+
+    Args:
+        station_id: Weather station ID (e.g., 'KRIC')
+        start_time: Start datetime
+        end_time: End datetime
+
+    Returns:
+        List of dictionaries with weather observation data
+
+    Example:
+        ```python
+        observations = get_weather_observations(
+            'KRIC',
+            datetime(2024, 11, 21, 0, 0),
+            datetime(2024, 11, 21, 23, 59)
+        )
+        ```
+    """
+    sql = """
+        SELECT
+            station_id,
+            observation_time,
+            temperature_c,
+            precipitation_mm,
+            visibility_m,
+            wind_speed_ms,
+            wind_direction_deg,
+            weather_condition,
+            temperature_normalized,
+            precipitation_normalized,
+            visibility_normalized,
+            wind_speed_normalized
+        FROM weather_observations
+        WHERE station_id = :station_id
+          AND observation_time >= :start_time
+          AND observation_time <= :end_time
+        ORDER BY observation_time ASC
+    """
+
+    try:
+        rows = execute_raw_sql(sql, {
+            "station_id": station_id,
+            "start_time": start_time,
+            "end_time": end_time
+        })
+        return rows
+    except Exception as e:
+        logger.error(f"Failed to get weather observations for station {station_id}: {e}")
+        return []

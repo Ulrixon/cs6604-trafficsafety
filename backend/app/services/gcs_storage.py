@@ -186,6 +186,52 @@ class GCSStorage:
 
         return self.upload_parquet(local_path, gcs_path, metadata)
 
+    def upload_weather_observations(
+        self,
+        local_path: Path,
+        target_date: date,
+        station_id: Optional[str] = None
+    ) -> str:
+        """
+        Upload weather observations Parquet file to GCS.
+
+        Directory structure: weather/YYYY/MM/DD/weather_YYYYMMDD.parquet
+
+        Args:
+            local_path: Path to local weather Parquet file
+            target_date: Date of the weather observations
+            station_id: Optional weather station ID for metadata
+
+        Returns:
+            GCS URI
+
+        Example:
+            ```python
+            gcs = GCSStorage('trafficsafety-prod-parquet')
+            uri = gcs.upload_weather_observations(
+                local_path=Path('/tmp/weather_2024-11-21.parquet'),
+                target_date=date(2024, 11, 21),
+                station_id='KRIC'
+            )
+            # Returns: gs://bucket/weather/2024/11/21/weather_20241121.parquet
+            ```
+        """
+        gcs_path = (
+            f"weather/{target_date.year}/{target_date.month:02d}/"
+            f"{target_date.day:02d}/weather_{target_date.strftime('%Y%m%d')}.parquet"
+        )
+
+        metadata = {
+            'data_type': 'weather',
+            'collection_date': target_date.isoformat(),
+            'upload_timestamp': datetime.now().isoformat()
+        }
+
+        if station_id:
+            metadata['station_id'] = station_id
+
+        return self.upload_parquet(local_path, gcs_path, metadata)
+
     def upload_indices(
         self,
         local_path: Path,

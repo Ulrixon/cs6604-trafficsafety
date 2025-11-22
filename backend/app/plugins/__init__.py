@@ -21,6 +21,7 @@ from .exceptions import (
     PluginConfigError,
     PluginHealthCheckError,
 )
+from .vcc_plugin import VCCPlugin, create_vcc_plugin_from_settings
 
 __all__ = [
     "DataSourcePlugin",
@@ -31,4 +32,6 @@ __all__ = [
     "PluginCollectionError",
     "PluginConfigError",
     "PluginHealthCheckError",
+    "VCCPlugin",
+    "create_vcc_plugin_from_settings",
 ]

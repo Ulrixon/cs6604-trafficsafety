@@ -62,9 +62,21 @@
 
 ### 🚧 Current Phase
 
-**Phase 7: Validation & Optimization** (STARTING)
+**Phase 7: Validation & Optimization** (IN PROGRESS - Day 28)
 - Goal: Validate weather impact and optimize feature weights using crash data
-- Next tasks: Crash correlation analysis, feature weight tuning
+- **Deliverables**:
+  - ✅ Crash correlation analysis script (`backend/scripts/crash_correlation_analysis.py`)
+  - ✅ Feature weight optimization script (`backend/scripts/optimize_feature_weights.py`)
+  - 🔄 Run analysis with real crash data (pending)
+  - 🔄 Document validation results (pending)
+- **Key Features**:
+  - Comprehensive metrics: precision, recall, F1 score, accuracy, Pearson/Spearman correlation
+  - Grid search optimization for plugin weights (VCC vs Weather)
+  - Cross-validation to prevent overfitting
+  - Weather impact analysis (crash rates in bad vs clear weather)
+  - Synthetic data generation for testing
+  - Actionable recommendations for weight tuning
+- **Commit**: `be83944`
 
 ---
 

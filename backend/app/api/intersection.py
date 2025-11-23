@@ -374,7 +374,7 @@ def get_safety_score_trend(
       - Pearson/Spearman correlations between variables and safety indices
       - Monotonic trend analysis (e.g., "higher speed variance → higher incidents")
       - Partial correlations showing independent contributions of each factor
-      
+
     - metadata: Query information and statistics
 
     This response validates that each component corresponds to a real safety mechanism.

@@ -67,23 +67,100 @@ class CorrelationAnalysisService:
                 "vehicle_index",
             ]
 
-            safety_indices = ["mcdm_index", "rt_si_score", "saw_score", "edas_score", "codas_score"]
+            safety_indices = [
+                "mcdm_index",
+                "rt_si_score",
+                "saw_score",
+                "edas_score",
+                "codas_score",
+            ]
 
-            # Compute correlations for each variable group
+            # Get all available variables
+            all_vars = [
+                col for col in df.columns if col not in ["time_bin", "intersection"]
+            ]
+
+            # Compute all pairwise correlations
+            variable_correlations = {}
+
+            for i, var1 in enumerate(all_vars):
+                for var2 in all_vars[i + 1 :]:
+                    # Align data (drop NaN in either variable)
+                    mask = df[var1].notna() & df[var2].notna()
+                    x = df.loc[mask, var1].values
+                    y = df.loc[mask, var2].values
+
+                    if len(x) < 3:
+                        continue
+
+                    try:
+                        # Pearson correlation (linear relationship)
+                        pearson_result = pearsonr(x, y)
+                        pearson_r = float(pearson_result[0])
+                        pearson_p = float(pearson_result[1])
+
+                        # Spearman correlation (monotonic relationship)
+                        spearman_result = spearmanr(x, y)
+                        spearman_r = float(spearman_result[0])
+                        spearman_p = float(spearman_result[1])
+
+                        variable_correlations[f"{var1}_vs_{var2}"] = {
+                            "variable_1": var1,
+                            "variable_2": var2,
+                            "pearson": {
+                                "correlation": float(pearson_r),
+                                "p_value": float(pearson_p),
+                                "significant": pearson_p < 0.05,
+                            },
+                            "spearman": {
+                                "correlation": float(spearman_r),
+                                "p_value": float(spearman_p),
+                                "significant": spearman_p < 0.05,
+                            },
+                            "n_samples": len(x),
+                            "description": self._describe_relationship(
+                                pearson_r, spearman_r, pearson_p, spearman_p
+                            ),
+                        }
+
+                    except Exception as e:
+                        logger.warning(
+                            f"Error computing correlation between {var1} and {var2}: {e}"
+                        )
+                        continue
+
+            # Compute summary statistics
+            summary = {
+                "total_variables": len(all_vars),
+                "total_correlations": len(variable_correlations),
+                "significant_pearson": sum(
+                    1
+                    for v in variable_correlations.values()
+                    if v["pearson"]["significant"]
+                ),
+                "significant_spearman": sum(
+                    1
+                    for v in variable_correlations.values()
+                    if v["spearman"]["significant"]
+                ),
+                "strong_correlations": sum(
+                    1
+                    for v in variable_correlations.values()
+                    if abs(v["pearson"]["correlation"]) > 0.7
+                    or abs(v["spearman"]["correlation"]) > 0.7
+                ),
+                "moderate_correlations": sum(
+                    1
+                    for v in variable_correlations.values()
+                    if (0.3 < abs(v["pearson"]["correlation"]) <= 0.7)
+                    or (0.3 < abs(v["spearman"]["correlation"]) <= 0.7)
+                ),
+            }
+
             results = {
                 "data_points": len(df),
-                "traffic_to_safety": self._compute_variable_correlations(
-                    df, traffic_vars, safety_indices
-                ),
-                "rtsi_components_to_rtsi": self._compute_variable_correlations(
-                    df, rtsi_components, ["rt_si_score"]
-                ),
-                "traffic_to_incidents": self._compute_variable_correlations(
-                    df, traffic_vars, ["incident_count"]
-                ),
-                "monotonic_trends": self._analyze_monotonic_trends(df),
-                "partial_correlations": self._compute_partial_correlations(df),
-                "summary": self._generate_summary(df),
+                "variable_correlations": variable_correlations,
+                "summary": summary,
             }
 
             return results
@@ -198,7 +275,9 @@ class CorrelationAnalysisService:
             strength = "Strong"
 
         # Determine direction
-        direction = "positive" if (pearson_r if pearson_sig else spearman_r) > 0 else "negative"
+        direction = (
+            "positive" if (pearson_r if pearson_sig else spearman_r) > 0 else "negative"
+        )
 
         # Determine type
         if pearson_sig and spearman_sig:
@@ -212,113 +291,6 @@ class CorrelationAnalysisService:
             relationship_type = "monotonic"
 
         return f"{strength} {direction} {relationship_type}"
-
-    def _analyze_monotonic_trends(self, df: pd.DataFrame) -> Dict:
-        """
-        Analyze monotonic trends to validate safety mechanisms.
-
-        Returns trends like "higher speed variance → higher incident rate"
-        """
-        trends = {}
-
-        # Key safety mechanism hypotheses to test
-        hypotheses = [
-            {
-                "predictor": "speed_variance",
-                "target": "incident_count",
-                "expected": "positive",
-                "mechanism": "Higher speed variance increases crash risk",
-            },
-            {
-                "predictor": "avg_speed",
-                "target": "incident_count",
-                "expected": "positive",
-                "mechanism": "Higher speed increases severity",
-            },
-            {
-                "predictor": "vehicle_count",
-                "target": "incident_count",
-                "expected": "positive",
-                "mechanism": "Higher volume increases exposure",
-            },
-            {
-                "predictor": "vru_count",
-                "target": "incident_count",
-                "expected": "positive",
-                "mechanism": "More VRUs increase conflict potential",
-            },
-            {
-                "predictor": "F_speed",
-                "target": "rt_si_score",
-                "expected": "positive",
-                "mechanism": "Speed reduction factor increases risk",
-            },
-            {
-                "predictor": "F_variance",
-                "target": "rt_si_score",
-                "expected": "positive",
-                "mechanism": "Speed variance factor increases risk",
-            },
-            {
-                "predictor": "F_conflict",
-                "target": "rt_si_score",
-                "expected": "positive",
-                "mechanism": "Conflict factor increases risk",
-            },
-            {
-                "predictor": "eb_crash_rate",
-                "target": "rt_si_score",
-                "expected": "positive",
-                "mechanism": "EB crash rate predicts RT-SI",
-            },
-        ]
-
-        for hyp in hypotheses:
-            predictor = hyp["predictor"]
-            target = hyp["target"]
-
-            if predictor not in df.columns or target not in df.columns:
-                continue
-
-            # Align data
-            mask = df[predictor].notna() & df[target].notna()
-            x = df.loc[mask, predictor].values
-            y = df.loc[mask, target].values
-
-            if len(x) < 3:
-                continue
-
-            try:
-                # Spearman correlation for monotonic trend
-                spearman_result = spearmanr(x, y)  # type: ignore
-                spearman_r = float(spearman_result[0])  # type: ignore
-                spearman_p = float(spearman_result[1])  # type: ignore
-
-                # Check if trend matches expectation
-                expected_direction = hyp["expected"]
-                observed_direction = "positive" if spearman_r > 0 else "negative"
-                matches_expectation = expected_direction == observed_direction
-                is_significant = spearman_p < 0.05
-
-                trends[f"{predictor}_to_{target}"] = {
-                    "predictor": predictor,
-                    "target": target,
-                    "mechanism": hyp["mechanism"],
-                    "expected_direction": expected_direction,
-                    "observed_direction": observed_direction,
-                    "spearman_r": float(spearman_r),
-                    "p_value": float(spearman_p),
-                    "significant": is_significant,
-                    "matches_expectation": matches_expectation,
-                    "validated": matches_expectation and is_significant,
-                    "n_samples": len(x),
-                }
-
-            except Exception as e:
-                logger.warning(f"Error analyzing trend {predictor} → {target}: {e}")
-                continue
-
-        return trends
 
     def _compute_partial_correlations(self, df: pd.DataFrame) -> Dict:
         """
@@ -392,7 +364,9 @@ class CorrelationAnalysisService:
                     }
 
             except Exception as e:
-                logger.warning(f"Error computing partial correlation for {analysis['name']}: {e}")
+                logger.warning(
+                    f"Error computing partial correlation for {analysis['name']}: {e}"
+                )
                 continue
 
         return results

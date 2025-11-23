@@ -111,7 +111,7 @@ class TrendMetadata(BaseModel):
 class SafetyScoreTrendWithCorrelations(BaseModel):
     """
     Safety score trend with correlation analysis.
-    
+
     This response includes time series data plus statistical analysis showing
     how each component of RT-SI and MCDM indices relates to real safety outcomes.
     """

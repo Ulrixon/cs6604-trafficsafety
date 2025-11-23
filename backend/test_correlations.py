@@ -10,7 +10,9 @@ from datetime import datetime
 import json
 
 # Configuration
-BASE_URL = "https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safety/index"
+BASE_URL = (
+    "https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safety/index"
+)
 INTERSECTION = "glebe-potomac"
 START_TIME = "2025-11-01T08:00:00"
 END_TIME = "2025-11-01T18:00:00"  # 10-hour range for testing
@@ -84,7 +86,9 @@ def test_correlation_analysis():
                     if "summary" in corr:
                         summary = corr["summary"]
                         print("Summary:")
-                        print(f"  Total observations: {summary.get('total_observations')}")
+                        print(
+                            f"  Total observations: {summary.get('total_observations')}"
+                        )
                         print(
                             f"  Variables analyzed: {len(summary.get('variables_analyzed', []))}"
                         )
@@ -135,7 +139,9 @@ def test_correlation_analysis():
 
                     # Monotonic Trends (Safety Mechanism Validation)
                     if "monotonic_trends" in corr:
-                        print("📈 Monotonic Trend Analysis (Safety Mechanism Validation)")
+                        print(
+                            "📈 Monotonic Trend Analysis (Safety Mechanism Validation)"
+                        )
                         print("-" * 80)
                         trends = corr["monotonic_trends"]
 
@@ -160,9 +166,17 @@ def test_correlation_analysis():
                             print(
                                 f"  Expected: {trend_data.get('expected_direction')} | Observed: {trend_data.get('observed_direction')}"
                             )
-                            print(
-                                f"  Spearman r: {trend_data.get('spearman_r'):.3f} (p={trend_data.get('p_value'):.4f})"
-                            )
+
+                            # Handle None values in spearman_r and p_value
+                            spearman_r = trend_data.get("spearman_r")
+                            p_value = trend_data.get("p_value")
+                            if spearman_r is not None and p_value is not None:
+                                print(
+                                    f"  Spearman r: {spearman_r:.3f} (p={p_value:.4f})"
+                                )
+                            else:
+                                print(f"  Spearman r: N/A (insufficient data)")
+
                             print(f"  N samples: {trend_data.get('n_samples')}")
 
                         print()
@@ -179,7 +193,9 @@ def test_correlation_analysis():
 
                         for name, data in partial.items():
                             print(f"\n{name}:")
-                            print(f"  {data.get('x_variable')} → {data.get('y_variable')}")
+                            print(
+                                f"  {data.get('x_variable')} → {data.get('y_variable')}"
+                            )
                             print(
                                 f"  Controlling for: {', '.join(data.get('control_variables', []))}"
                             )

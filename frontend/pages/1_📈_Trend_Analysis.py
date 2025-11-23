@@ -297,10 +297,8 @@ def create_trend_chart(df: pd.DataFrame, metric: str, title: str, color: str):
 
 def render_correlation_analysis(correlation_data: dict):
     """Render comprehensive correlation analysis visualizations."""
-    st.markdown("## 🔬 Correlation Analysis: Safety Mechanism Validation")
-    st.caption(
-        "Statistical analysis showing how each component corresponds to real safety mechanisms"
-    )
+    st.markdown("## 🔬 Correlation Analysis: Variable Relationships")
+    st.caption("Statistical correlations between all pairs of variables")
 
     if not correlation_data or "error" in correlation_data:
         st.warning(
@@ -319,17 +317,16 @@ def render_correlation_analysis(correlation_data: dict):
 
         with col1:
             st.metric(
-                "Valid Relationships",
-                summary.get("valid_relationships", 0),
-                help="Number of statistically valid correlations (p < 0.05)",
+                "Total Variables",
+                summary.get("total_variables", 0),
+                help="Number of variables analyzed",
             )
 
         with col2:
-            validation_pct = summary.get("validation_percentage", 0)
             st.metric(
-                "Validation Rate",
-                f"{validation_pct:.1f}%",
-                help="Percentage of safety mechanisms validated by monotonic trend analysis",
+                "Total Correlations",
+                summary.get("total_correlations", 0),
+                help="Number of pairwise correlations computed",
             )
 
         with col3:
@@ -351,239 +348,121 @@ def render_correlation_analysis(correlation_data: dict):
     # Variable Correlations Section
     var_corr = correlation_data.get("variable_correlations", {})
     if var_corr:
-        with st.expander("🔗 **Variable Correlations: Traffic vs Safety Indices**", expanded=True):
+        with st.expander("🔗 **All Variable Correlations**", expanded=True):
             st.caption(
-                "Pearson (linear) and Spearman (monotonic) correlations between traffic variables and safety indices"
+                "Pearson (linear) and Spearman (monotonic) correlations between all variable pairs"
             )
 
-            # Organize correlations by group
-            groups = {}
+            # Convert to dataframe for easier filtering and display
+            corr_list = []
             for key, corr in var_corr.items():
-                var1, var2 = key.split("_vs_")
-                # Group by second variable (safety index)
-                if var2 not in groups:
-                    groups[var2] = []
-                groups[var2].append((var1, corr))
-
-            # Create heatmaps for each group
-            for safety_index, correlations in groups.items():
-                st.markdown(f"#### 📈 Correlations with `{safety_index}`")
-
-                # Prepare data for heatmap
-                variables = [c[0] for c in correlations]
-                pearson_values = [c[1]["pearson"]["correlation"] for c in correlations]
-                spearman_values = [
-                    c[1]["spearman"]["correlation"] for c in correlations
-                ]
-                pearson_pvals = [c[1]["pearson"]["p_value"] for c in correlations]
-                spearman_pvals = [c[1]["spearman"]["p_value"] for c in correlations]
-
-                # Create heatmap
-                fig = go.Figure()
-
-                # Add Pearson correlation bars
-                fig.add_trace(
-                    go.Bar(
-                        name="Pearson (Linear)",
-                        x=variables,
-                        y=pearson_values,
-                        marker_color=[
-                            "#e74c3c" if p < 0.05 else "#95a5a6" for p in pearson_pvals
-                        ],
-                        text=[f"{v:.3f}" for v in pearson_values],
-                        textposition="outside",
-                        hovertemplate="<b>%{x}</b><br>Pearson: %{y:.3f}<br>p-value: %{customdata:.4f}<extra></extra>",
-                        customdata=pearson_pvals,
-                    )
-                )
-
-                # Add Spearman correlation bars
-                fig.add_trace(
-                    go.Bar(
-                        name="Spearman (Monotonic)",
-                        x=variables,
-                        y=spearman_values,
-                        marker_color=[
-                            "#3498db" if p < 0.05 else "#bdc3c7" for p in spearman_pvals
-                        ],
-                        text=[f"{v:.3f}" for v in spearman_values],
-                        textposition="outside",
-                        hovertemplate="<b>%{x}</b><br>Spearman: %{y:.3f}<br>p-value: %{customdata:.4f}<extra></extra>",
-                        customdata=spearman_pvals,
-                    )
-                )
-
-                fig.update_layout(
-                    title=f"Correlations with {safety_index}",
-                    xaxis_title="Traffic Variables",
-                    yaxis_title="Correlation Coefficient",
-                    barmode="group",
-                    height=400,
-                    yaxis_range=[-1.1, 1.1],
-                    hovermode="x unified",
-                )
-
-                st.plotly_chart(fig, use_container_width=True)
-
-                # Show detailed stats in table
-                corr_df = pd.DataFrame(
+                corr_list.append(
                     {
-                        "Variable": variables,
-                        "Pearson r": pearson_values,
-                        "Pearson p": pearson_pvals,
-                        "Spearman ρ": spearman_values,
-                        "Spearman p": spearman_pvals,
-                        "Pearson Significant": [
-                            "✅" if p < 0.05 else "❌" for p in pearson_pvals
-                        ],
-                        "Spearman Significant": [
-                            "✅" if p < 0.05 else "❌" for p in spearman_pvals
-                        ],
+                        "Variable 1": corr["variable_1"],
+                        "Variable 2": corr["variable_2"],
+                        "Pearson r": corr["pearson"]["correlation"],
+                        "Pearson p": corr["pearson"]["p_value"],
+                        "Pearson Sig": "✅" if corr["pearson"]["significant"] else "❌",
+                        "Spearman ρ": corr["spearman"]["correlation"],
+                        "Spearman p": corr["spearman"]["p_value"],
+                        "Spearman Sig": (
+                            "✅" if corr["spearman"]["significant"] else "❌"
+                        ),
+                        "N": corr["n_samples"],
+                        "Description": corr["description"],
                     }
                 )
 
-                st.dataframe(
-                    corr_df.style.format(
-                        {
-                            "Pearson r": "{:.3f}",
-                            "Pearson p": "{:.4f}",
-                            "Spearman ρ": "{:.3f}",
-                            "Spearman p": "{:.4f}",
-                        }
-                    ),
-                    use_container_width=True,
-                    hide_index=True,
-                )
+            corr_df = pd.DataFrame(corr_list)
 
-    st.divider()
-
-    # Monotonic Trends Section
-    monotonic = correlation_data.get("monotonic_trends", {})
-    if monotonic:
-        with st.expander(
-            "📈 **Monotonic Trend Analysis: Safety Mechanism Validation**", expanded=True
-        ):
-            st.caption(
-                "Validates specific safety hypotheses (e.g., 'higher speed variance → higher incidents')"
-            )
-
-            # Count validated vs not validated
-            validated = [h for h in monotonic.values() if h.get("validated")]
-            not_validated = [h for h in monotonic.values() if not h.get("validated")]
-
+            # Filter options
             col1, col2 = st.columns(2)
             with col1:
-                st.metric(
-                    "✅ Validated Hypotheses",
-                    len(validated),
-                    help="Trends matching expected direction with p < 0.05",
+                filter_sig = st.checkbox(
+                    "Show only significant correlations (p < 0.05)", value=False
                 )
             with col2:
-                st.metric(
-                    "❌ Not Validated",
-                    len(not_validated),
-                    help="Trends not matching expected direction or not significant",
-                )
+                min_strength = st.slider("Minimum |correlation|", 0.0, 1.0, 0.0, 0.1)
 
-            st.markdown("---")
+            # Apply filters
+            if filter_sig:
+                corr_df = corr_df[
+                    (corr_df["Pearson Sig"] == "✅") | (corr_df["Spearman Sig"] == "✅")
+                ]
 
-            # Display each hypothesis
-            for hypothesis_name, hypothesis_data in monotonic.items():
-                validated = hypothesis_data.get("validated", False)
-                expected_dir = hypothesis_data.get("expected_direction", "")
-                spearman_corr = hypothesis_data.get("spearman_correlation", 0)
-                p_value = hypothesis_data.get("p_value", 1.0)
-                description = hypothesis_data.get("description", "")
+            if min_strength > 0:
+                corr_df = corr_df[
+                    (corr_df["Pearson r"].abs() >= min_strength)
+                    | (corr_df["Spearman ρ"].abs() >= min_strength)
+                ]
 
-                # Status badge
-                if validated:
-                    badge = "✅ **VALIDATED**"
-                    color = "#27ae60"
-                else:
-                    badge = "❌ **NOT VALIDATED**"
-                    color = "#e74c3c"
-
-                with st.container():
-                    st.markdown(
-                        f'<div style="border-left: 4px solid {color}; padding-left: 15px; margin: 10px 0;">'
-                        f"<p style='margin: 0;'><strong>{hypothesis_name.replace('_', ' ').title()}</strong> {badge}</p>"
-                        f"<p style='margin: 5px 0; font-size: 0.9em; color: #7f8c8d;'>{description}</p>"
-                        f"<p style='margin: 5px 0; font-size: 0.85em;'>"
-                        f"Expected: <strong>{expected_dir}</strong> | "
-                        f"Spearman ρ: <strong>{spearman_corr:.3f}</strong> | "
-                        f"p-value: <strong>{p_value:.4f}</strong>"
-                        f"</p></div>",
-                        unsafe_allow_html=True,
-                    )
-
-    st.divider()
-
-    # Partial Correlations Section
-    partial_corr = correlation_data.get("partial_correlations", {})
-    if partial_corr:
-        with st.expander(
-            "🎯 **Partial Correlations: Independent Contributions**", expanded=True
-        ):
-            st.caption(
-                "Shows the independent contribution of each factor after controlling for confounders"
+            # Sort by absolute Pearson correlation
+            corr_df = corr_df.sort_values(
+                by="Pearson r", key=lambda x: x.abs(), ascending=False
             )
 
-            # Extract data for visualization
-            analyses = []
-            for analysis_name, analysis_data in partial_corr.items():
-                analyses.append(
+            st.markdown(f"**Showing {len(corr_df)} of {len(corr_list)} correlations**")
+
+            # Display table
+            st.dataframe(
+                corr_df.style.format(
                     {
-                        "Analysis": analysis_name.replace("_", " ").title(),
-                        "Target": analysis_data.get("target", ""),
-                        "Variable": analysis_data.get("variable", ""),
-                        "Controls": ", ".join(analysis_data.get("controlling_for", [])),
-                        "Partial r": analysis_data.get("partial_correlation", 0),
-                        "p-value": analysis_data.get("p_value", 1.0),
-                        "Interpretation": analysis_data.get("interpretation", ""),
+                        "Pearson r": "{:.3f}",
+                        "Pearson p": "{:.4f}",
+                        "Spearman ρ": "{:.3f}",
+                        "Spearman p": "{:.4f}",
                     }
-                )
+                ),
+                use_container_width=True,
+                hide_index=True,
+                height=400,
+            )
 
-            if analyses:
-                # Create bar chart
-                df_partial = pd.DataFrame(analyses)
+            # Create correlation heatmap for top correlations
+            st.markdown("#### 🔥 Top Correlations Heatmap")
 
-                fig = go.Figure()
+            # Get top 20 by absolute correlation
+            top_corr = corr_df.head(20)
 
-                fig.add_trace(
-                    go.Bar(
-                        x=df_partial["Variable"],
-                        y=df_partial["Partial r"],
-                        marker_color=[
-                            "#2ecc71" if p < 0.05 else "#95a5a6"
-                            for p in df_partial["p-value"]
-                        ],
-                        text=[f"{v:.3f}" for v in df_partial["Partial r"]],
-                        textposition="outside",
-                        hovertemplate="<b>%{x}</b><br>"
-                        + "Partial r: %{y:.3f}<br>"
-                        + "p-value: %{customdata:.4f}<extra></extra>",
-                        customdata=df_partial["p-value"],
+            if len(top_corr) > 0:
+                # Create matrix for heatmap
+                variables = list(
+                    set(
+                        top_corr["Variable 1"].tolist()
+                        + top_corr["Variable 2"].tolist()
                     )
+                )
+                matrix = pd.DataFrame(np.nan, index=variables, columns=variables)
+
+                # Fill matrix
+                for _, row in top_corr.iterrows():
+                    v1, v2 = row["Variable 1"], row["Variable 2"]
+                    corr_val = row["Pearson r"]
+                    matrix.loc[v1, v2] = corr_val
+                    matrix.loc[v2, v1] = corr_val
+
+                # Diagonal = 1
+                for v in variables:
+                    matrix.loc[v, v] = 1.0
+
+                # Create heatmap
+                fig = px.imshow(
+                    matrix,
+                    labels=dict(x="Variable", y="Variable", color="Pearson r"),
+                    x=variables,
+                    y=variables,
+                    color_continuous_scale="RdBu_r",
+                    aspect="auto",
+                    zmin=-1,
+                    zmax=1,
                 )
 
                 fig.update_layout(
-                    title="Independent Contributions of Factors (Partial Correlations)",
-                    xaxis_title="Variable",
-                    yaxis_title="Partial Correlation Coefficient",
-                    height=400,
-                    yaxis_range=[-1.1, 1.1],
+                    title="Correlation Matrix (Top 20 Pairs)",
+                    height=600,
                 )
 
                 st.plotly_chart(fig, use_container_width=True)
-
-                # Show detailed table
-                st.dataframe(
-                    df_partial.style.format(
-                        {"Partial r": "{:.3f}", "p-value": "{:.4f}"}
-                    ),
-                    use_container_width=True,
-                    hide_index=True,
-                )
 
 
 def render_trend_view(
@@ -602,7 +481,9 @@ def render_trend_view(
         return
 
     with st.spinner("Fetching trend data..."):
-        response = get_safety_score_trend(intersection, start_time, end_time, bin_minutes)
+        response = get_safety_score_trend(
+            intersection, start_time, end_time, bin_minutes
+        )
 
     # Handle new response structure with time_series and correlation_analysis
     if isinstance(response, dict):

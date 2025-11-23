@@ -516,10 +516,12 @@ def merge_crashes_with_indices(
     crashes['timestamp'] = pd.to_datetime(crashes['timestamp'])
 
     # Localize to UTC if timezone-naive, otherwise convert to UTC
+    # Handle DST ambiguity by inferring (use first occurrence for ambiguous times)
     if crashes['timestamp'].dt.tz is None:
-        crashes['timestamp'] = crashes['timestamp'].dt.tz_localize('UTC')
+        crashes['timestamp'] = crashes['timestamp'].dt.tz_localize('UTC', ambiguous='infer', nonexistent='shift_forward')
     else:
-        crashes['timestamp'] = crashes['timestamp'].dt.tz_convert('UTC')
+        # First remove timezone info, then reapply as UTC to avoid DST issues
+        crashes['timestamp'] = crashes['timestamp'].dt.tz_localize(None).dt.tz_localize('UTC', ambiguous='infer', nonexistent='shift_forward')
 
     crashes['time_bin'] = crashes['timestamp'].dt.floor(f'{time_window_minutes}min')
 

@@ -351,7 +351,7 @@ def upsert_intersection(
     """
     sql = text("""
         INSERT INTO intersections (id, name, latitude, longitude, lane_count, revision, metadata)
-        VALUES (:id, :name, :lat, :lon, :lane_count, :revision, :metadata::jsonb)
+        VALUES (:id, :name, :lat, :lon, :lane_count, :revision, CAST(:metadata AS jsonb))
         ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             latitude = EXCLUDED.latitude,

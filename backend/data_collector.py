@@ -32,7 +32,7 @@ from app.services.vcc_feature_engineering import (
 from app.services.index_computation import compute_safety_indices
 from app.core.config import settings
 from app.db.connection import init_db, close_db
-from app.services.db_service import insert_safety_indices_batch, SafetyIndexRecord
+from app.services.db_service import insert_safety_indices_batch, SafetyIndexRecord, upsert_intersection
 from app.services.gcs_storage import GCSStorage
 import pandas as pd
 import logging
@@ -120,6 +120,46 @@ class DataCollector:
             'gcs_errors': 0
         }
 
+        # Intersection name to ID mapping (in-memory cache)
+        self.intersection_id_map = {}
+        self.next_intersection_id = 1
+
+    def get_or_create_intersection_id(self, intersection_name: str, lat: float = None, lon: float = None) -> int:
+        """
+        Get or create an intersection ID for a given intersection name.
+        Upserts the intersection into the database if it doesn't exist.
+
+        Args:
+            intersection_name: Name of the intersection (e.g., "US-50 & Nutley")
+            lat: Optional latitude (average from BSM data)
+            lon: Optional longitude (average from BSM data)
+
+        Returns:
+            Integer intersection ID
+        """
+        # Check cache first
+        if intersection_name in self.intersection_id_map:
+            return self.intersection_id_map[intersection_name]
+
+        # Assign new ID
+        intersection_id = self.next_intersection_id
+        self.intersection_id_map[intersection_name] = intersection_id
+        self.next_intersection_id += 1
+
+        # Upsert into database if initialized
+        if self.db_initialized:
+            try:
+                upsert_intersection(
+                    intersection_id=intersection_id,
+                    name=intersection_name,
+                    latitude=lat or 0.0,
+                    longitude=lon or 0.0
+                )
+            except Exception as e:
+                print(f"  ⚠ Failed to upsert intersection '{intersection_name}': {e}")
+
+        return intersection_id
+
     def setup_signal_handlers(self):
         """Setup graceful shutdown on SIGINT/SIGTERM"""
         def shutdown_handler(signum, frame):
@@ -165,8 +205,12 @@ class DataCollector:
                 # Convert DataFrame rows to SafetyIndexRecord objects
                 records = []
                 for _, row in indices_df.iterrows():
-                    # Extract intersection ID (stored as float in Parquet)
-                    intersection_id = int(row['intersection']) if pd.notna(row['intersection']) else 0
+                    # Get or create intersection ID from name
+                    intersection_name = row['intersection'] if pd.notna(row['intersection']) else None
+                    if not intersection_name:
+                        continue  # Skip records without intersection name
+
+                    intersection_id = self.get_or_create_intersection_id(intersection_name)
 
                     # Extract timestamp (column is named time_15min but contains 1-minute timestamps)
                     timestamp = pd.to_datetime(row['time_15min'])

@@ -42,6 +42,12 @@ services:
 
       # Database
       - DATABASE_URL=postgresql://trafficsafety:trafficsafety_dev@db:5432/trafficsafety
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-5}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-10}
+
+      # Enable PostgreSQL for safety indices
+      - USE_POSTGRESQL=${USE_POSTGRESQL:-true}
+      - FALLBACK_TO_PARQUET=${FALLBACK_TO_PARQUET:-false}
 
       # Trino connection
       - TRINO_HOST=${TRINO_HOST:-smart-cities-trino.pre-prod.cloud.vtti.vt.edu}
@@ -106,10 +112,10 @@ services:
       - DB_POOL_SIZE=${DB_POOL_SIZE:-5}
       - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-10}
 
-      # Feature flags for PostgreSQL migration (disabled by default)
-      - USE_POSTGRESQL=${USE_POSTGRESQL:-false}
+      # Feature flags for PostgreSQL migration (ENABLED for local development)
+      - USE_POSTGRESQL=${USE_POSTGRESQL:-true}
       - FALLBACK_TO_PARQUET=${FALLBACK_TO_PARQUET:-true}
-      - ENABLE_DUAL_WRITE=${ENABLE_DUAL_WRITE:-false}
+      - ENABLE_DUAL_WRITE=${ENABLE_DUAL_WRITE:-true}
 
       # GCP Cloud Storage configuration (disabled by default)
       - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-}
@@ -156,6 +162,19 @@ services:
       - "8501:8501"
     environment:
       - PORT=8501
+      # Override API URL to point to local backend
+      - API_URL=http://api:8000/api/v1/safety/index/
+      - API_TIMEOUT=30
+      - API_MAX_RETRIES=3
+      - API_CACHE_TTL=300
+      - DEFAULT_LATITUDE=38.86
+      - DEFAULT_LONGITUDE=-77.055
+      - DEFAULT_ZOOM=13
+      - MAP_HEIGHT=650
+      - MIN_RADIUS_PX=6
+      - MAX_RADIUS_PX=30
+      - COLOR_LOW_THRESHOLD=60
+      - COLOR_HIGH_THRESHOLD=75
     volumes:
       # Mount app directory for development (optional)
       - ./frontend/app:/app/app

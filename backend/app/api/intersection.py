@@ -400,35 +400,41 @@ def get_safety_score_trend(
 
     if crash_intersection_id:
         try:
-            # Calculate RT-SI trend
+            # Calculate RT-SI trend using optimized method
+            # This calculates RT-SI for each time bin with data (no lookback)
             logger.info(
                 f"Calculating RT-SI trend for {intersection} "
                 f"(crash ID: {crash_intersection_id}) from {start_time} to {end_time}"
             )
 
-            # Add RT-SI data to each time point
+            rt_si_results = rt_si_service.calculate_rt_si_trend(
+                crash_intersection_id,
+                start_time,
+                end_time,
+                bin_minutes=bin_minutes,
+                realtime_intersection=intersection,
+            )
+
+            # Create a map of timestamp -> RT-SI result for quick lookup
+            rt_si_map = {
+                datetime.fromisoformat(r["timestamp"]): r for r in rt_si_results
+            }
+
+            # Add RT-SI data to matching MCDM time points
             for result in results:
-                try:
-                    rt_si_result = rt_si_service.calculate_rt_si(
-                        crash_intersection_id,
-                        result["time_bin"],
-                        bin_minutes=bin_minutes,
-                        realtime_intersection=intersection,
-                    )
-
-                    if rt_si_result is not None:
-                        result["rt_si_score"] = rt_si_result["RT_SI"]
-                        result["vru_index"] = rt_si_result["VRU_index"]
-                        result["vehicle_index"] = rt_si_result["VEH_index"]
-
-                except Exception as e:
-                    logger.debug(
-                        f"Error calculating RT-SI for time {result['time_bin']}: {e}"
-                    )
+                time_bin = result["time_bin"]
+                if time_bin in rt_si_map:
+                    rt_si_data = rt_si_map[time_bin]
+                    result["rt_si_score"] = rt_si_data["RT_SI"]
+                    result["vru_index"] = rt_si_data["VRU_index"]
+                    result["vehicle_index"] = rt_si_data["VEH_index"]
+                else:
+                    # No RT-SI data for this time bin - leave as None
+                    logger.debug(f"No RT-SI data for time bin {time_bin}")
 
             logger.info(
-                f"Successfully calculated safety scores for {len(results)} time points "
-                f"(blending to be done in frontend)"
+                f"Successfully calculated safety scores: {len(results)} MCDM points, "
+                f"{len(rt_si_results)} RT-SI points (blending to be done in frontend)"
             )
 
         except Exception as e:

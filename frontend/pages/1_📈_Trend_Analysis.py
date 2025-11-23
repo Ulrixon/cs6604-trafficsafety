@@ -180,9 +180,10 @@ def render_single_time_view(
 
         with col3:
             # Calculate blend percentage
+            final_index = data.get("final_safety_index") or 0
             rt_si_contribution = (
-                (alpha * data["rt_si_score"]) / data.get("final_safety_index", 1) * 100
-                if data.get("final_safety_index", 0) > 0
+                (alpha * data["rt_si_score"]) / final_index * 100
+                if final_index > 0
                 else 0
             )
             st.metric(

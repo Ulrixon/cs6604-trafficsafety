@@ -25,12 +25,14 @@ The initial implementation used Apache Parquet files for all data storage (raw a
 We will migrate to a **hybrid storage architecture**:
 
 **PostgreSQL + PostGIS** for operational data:
+
 - Fast indexed queries for real-time dashboard
 - Spatial indexing and geospatial operations
 - ACID transactions and data integrity
 - Automated aggregation and retention
 
 **GCP Cloud Storage** for raw data:
+
 - Immutable archive of raw BSM/PSM/MapData messages
 - Cost-effective long-term storage with lifecycle policies
 - Source of truth for data reprocessing
@@ -49,6 +51,7 @@ VCC API → Data Collector → Dual Write
 ```
 
 **Data Flow:**
+
 1. Collect from VCC every 60 seconds
 2. Save raw to GCS (BSM/PSM/MapData)
 3. Compute safety indices
@@ -59,6 +62,7 @@ VCC API → Data Collector → Dual Write
 ### Rationale
 
 **Why PostgreSQL?**
+
 - Industry-standard relational database
 - Excellent PostGIS support for spatial operations
 - Mature ecosystem (backups, replication, monitoring)
@@ -67,6 +71,7 @@ VCC API → Data Collector → Dual Write
 - Team already familiar with SQL
 
 **Why GCP Cloud Storage?**
+
 - Significantly cheaper than database storage for archives
 - Automatic lifecycle transitions (Standard → Nearline → Coldline)
 - Durability: 99.999999999% (11 9's)
@@ -76,17 +81,20 @@ VCC API → Data Collector → Dual Write
 
 **Why Not Alternatives?**
 
-*TimescaleDB alone:*
+_TimescaleDB alone:_
+
 - Vendor lock-in
 - Still need separate archival storage
 - Higher costs for long-term retention
 
-*AWS S3 instead of GCS:*
+_AWS S3 instead of GCS:_
+
 - GCP chosen for future integration with BigQuery
 - Closer to VCC servers (latency)
 - Consistent GCP ecosystem
 
-*NoSQL (MongoDB, Cassandra):*
+_NoSQL (MongoDB, Cassandra):_
+
 - Overkill for our data model
 - Less mature spatial support
 - No ACID guarantees
@@ -94,6 +102,7 @@ VCC API → Data Collector → Dual Write
 ### Consequences
 
 **Positive:**
+
 - 10-100x faster API queries
 - Enable spatial features (proximity, routing)
 - Automated data lifecycle management
@@ -102,12 +111,14 @@ VCC API → Data Collector → Dual Write
 - Can scale to 1000+ intersections
 
 **Negative:**
+
 - Increased complexity (dual-write, two storage systems)
 - PostgreSQL operational overhead (backups, monitoring)
 - GCS costs (minimal but not free)
 - Migration effort (~80-100 hours)
 
 **Neutral:**
+
 - More moving parts to manage
 - Need to learn GCS APIs
 - Database administration skills required
@@ -115,6 +126,7 @@ VCC API → Data Collector → Dual Write
 ### Implementation
 
 See detailed plans:
+
 - Requirements: `construction/requirements/postgresql-migration-requirements.md`
 - Design: `construction/design/postgresql-migration-design.md`
 - Sprint: `construction/sprints/sprint-postgresql-migration.md`
@@ -153,17 +165,20 @@ Change base time granularity from 15-minute to **1-minute intervals** for safety
 ### Consequences
 
 **Positive:**
+
 - 15x higher temporal resolution
 - Can detect brief safety incidents
 - More accurate real-time monitoring
 - Better data for machine learning
 
 **Negative:**
+
 - 15x more data to store and process
 - Higher database write throughput required
 - More aggressive aggregation needed for historical queries
 
 **Mitigations:**
+
 - PostgreSQL partitioning handles volume
 - Automated hourly/daily aggregation reduces query load
 - Retention policies limit growth
@@ -191,6 +206,7 @@ Migrating from Parquet-only to PostgreSQL+GCS while maintaining uptime requires 
 ### Decision
 
 Implement **dual-write** architecture during migration:
+
 - Data collector writes to both GCS and PostgreSQL simultaneously
 - API can query from either source (feature flag controlled)
 - Gradual rollout with validation at each step
@@ -213,12 +229,14 @@ Implement **dual-write** architecture during migration:
 ### Consequences
 
 **Positive:**
+
 - No service interruption
 - Can validate before committing
 - Easy rollback path
 - Team gains confidence gradually
 
 **Negative:**
+
 - Temporary increased complexity
 - Both systems must be maintained during transition
 - Higher write load temporarily
@@ -247,13 +265,13 @@ Historical queries can span hours to years. Returning all 1-minute data points i
 
 Implement **smart query routing** based on time range:
 
-| Time Range | Data Source | Aggregation | Points Returned |
-|------------|-------------|-------------|-----------------|
-| ≤ 1 day | Realtime table | 1-minute | 1,440 |
-| ≤ 7 days | Realtime table | Hourly | 168 |
-| ≤ 30 days | Hourly table | Daily | 30 |
-| ≤ 90 days | Hourly table | Weekly | 12-13 |
-| > 90 days | Daily table | Monthly | Varies |
+| Time Range | Data Source    | Aggregation | Points Returned |
+| ---------- | -------------- | ----------- | --------------- |
+| ≤ 1 day    | Realtime table | 1-minute    | 1,440           |
+| ≤ 7 days   | Realtime table | Hourly      | 168             |
+| ≤ 30 days  | Hourly table   | Daily       | 30              |
+| ≤ 90 days  | Hourly table   | Weekly      | 12-13           |
+| > 90 days  | Daily table    | Monthly     | Varies          |
 
 ### Rationale
 
@@ -265,12 +283,14 @@ Implement **smart query routing** based on time range:
 ### Consequences
 
 **Positive:**
+
 - Faster queries for long time ranges
 - Better user experience (appropriate detail level)
 - Lower bandwidth usage
 - Leverages database capabilities
 
 **Negative:**
+
 - Complexity in query routing logic
 - Loss of granularity for older data
 - Must maintain aggregation jobs
@@ -291,6 +311,7 @@ Implement **smart query routing** based on time range:
 ### Context
 
 Future features require spatial operations:
+
 - Find intersections within radius
 - Find intersections along route
 - Proximity analysis
@@ -311,16 +332,19 @@ Use **PostGIS extension** for PostgreSQL to handle all spatial operations.
 ### Spatial Features Enabled
 
 1. **Proximity Queries:**
+
    ```sql
    ST_DWithin(geometry, point, radius)
    ```
 
 2. **Distance Calculations:**
+
    ```sql
    ST_Distance(geometry::geography, point::geography)
    ```
 
 3. **Route Buffers:**
+
    ```sql
    ST_Buffer(linestring, buffer_distance)
    ```
@@ -333,12 +357,14 @@ Use **PostGIS extension** for PostgreSQL to handle all spatial operations.
 ### Consequences
 
 **Positive:**
+
 - Enables planned spatial features
 - Performant spatial queries
 - Standard GeoJSON support
 - Integration with mapping libraries
 
 **Negative:**
+
 - Learning curve for PostGIS
 - Slightly larger Docker image
 - Additional extension to manage
@@ -357,6 +383,7 @@ The `safety_indices_realtime` table will receive 1,440 rows per intersection per
 ### Decision
 
 Implement **daily range partitioning** on the realtime table:
+
 - Partition by `timestamp` column
 - One partition per day
 - Automated partition creation (7 days ahead)
@@ -385,12 +412,14 @@ CREATE FUNCTION drop_old_realtime_partitions()...
 ### Consequences
 
 **Positive:**
+
 - 10-100x faster queries on time ranges
 - Efficient old data deletion
 - Smaller individual indexes
 - Better VACUUM performance
 
 **Negative:**
+
 - More complex schema
 - Need partition management jobs
 - Queries must include partition key for best performance
@@ -405,6 +434,7 @@ CREATE FUNCTION drop_old_realtime_partitions()...
 ### Context
 
 Storing years of raw Parquet files in GCS Standard class would be expensive. Data access patterns show:
+
 - Frequent access: Last 30 days
 - Occasional access: 31-365 days
 - Rare access: >365 days
@@ -413,12 +443,12 @@ Storing years of raw Parquet files in GCS Standard class would be expensive. Dat
 
 Implement **automatic lifecycle transitions**:
 
-| Age | Storage Class | Cost (per GB/month) | Access Time |
-|-----|---------------|---------------------|-------------|
-| 0-30 days | Standard | $0.020 | Immediate |
-| 31-365 days | Nearline | $0.010 | ~1 second |
-| 366-730 days | Coldline | $0.004 | ~1-2 seconds |
-| >730 days | Delete | $0 | N/A |
+| Age          | Storage Class | Cost (per GB/month) | Access Time  |
+| ------------ | ------------- | ------------------- | ------------ |
+| 0-30 days    | Standard      | $0.020              | Immediate    |
+| 31-365 days  | Nearline      | $0.010              | ~1 second    |
+| 366-730 days | Coldline      | $0.004              | ~1-2 seconds |
+| >730 days    | Delete        | $0                  | N/A          |
 
 ### Rationale
 
@@ -429,6 +459,7 @@ Implement **automatic lifecycle transitions**:
 ### Cost Projection
 
 **100GB/month write rate:**
+
 - Month 1: 100GB Standard = $2.00
 - Month 6: 100 Standard + 500 Nearline = $7.00
 - Month 12: 100 Standard + 500 Nearline + 1000 Coldline = $11.00
@@ -437,11 +468,13 @@ Implement **automatic lifecycle transitions**:
 ### Consequences
 
 **Positive:**
+
 - Significant cost savings (68% reduction)
 - Automated management
 - Transparent to applications
 
 **Negative:**
+
 - Slightly slower access for old data (acceptable)
 - Need to monitor lifecycle transitions
 - Cannot easily change policies retroactively
@@ -456,6 +489,7 @@ Implement **automatic lifecycle transitions**:
 ### Context
 
 Cutover from Parquet to PostgreSQL is risky. Need ability to:
+
 - Test in production with subset of traffic
 - Rollback quickly if issues detected
 - Compare performance before full commit
@@ -488,21 +522,119 @@ ENABLE_GCS_UPLOAD: bool = True/False
 ### Consequences
 
 **Positive:**
+
 - Low-risk deployment
 - Quick rollback capability
 - Can measure impact empirically
 - Team confidence increases gradually
 
 **Negative:**
+
 - Temporary code complexity
 - Need to remove flags eventually
 - Monitoring must track both paths
 
 ---
 
+## ADR-009: In-Memory Calculation for Sensitivity Analysis
+
+**Date:** 2025-11-21
+**Status:** Implemented
+**Decision Makers:** Traffic Safety Index Team
+
+### Context
+
+The Sensitivity Analysis feature requires calculating safety indices for multiple perturbation scenarios (e.g., varying weights by ±10%, ±25%) over a time range.
+
+- **Initial Approach:** For each perturbation, query the database/service to recalculate indices.
+- **Problem:** With 50-100 perturbations and a 30-day range (43,200 minutes), this resulted in thousands of database queries, causing timeouts (>30s) and poor user experience.
+
+### Decision
+
+Implement **In-Memory Calculation** for sensitivity analysis:
+
+1. Fetch raw traffic data (volume, speed, conflicts) **once** for the requested time range.
+2. Store data in memory (list of dictionaries or Pandas DataFrame).
+3. Iterate through perturbation scenarios in a tight loop, applying the safety index formula to the in-memory data.
+4. Aggregate results and return.
+
+### Rationale
+
+- **Performance:** Reduces database round-trips from $O(P \times T)$ to $O(1)$, where $P$ is perturbations and $T$ is time segments.
+- **Efficiency:** Python's in-memory operations are orders of magnitude faster than network/disk I/O.
+- **Scalability:** Allows for hundreds of perturbations without degrading database performance.
+
+### Consequences
+
+**Positive:**
+
+- API response time reduced from >30s (timeout) to <2s for 30-day ranges.
+- Reduced load on the database.
+- smoother frontend experience.
+
+**Negative:**
+
+- Higher memory usage on the API server (proportional to the time range size).
+- Logic duplication: The safety index formula must be available to the sensitivity service (refactored to `calculate_rt_si_from_data`).
+
+### Implementation
+
+- Refactored `RTSIService` to expose `calculate_rt_si_from_data(data, weights)`.
+- Updated `SensitivityAnalysisService` to fetch bulk data and loop in memory.
+
+---
+
+## ADR-010: Zero-Filling for Time Series Continuity
+
+**Date:** 2025-11-21
+**Status:** Implemented
+**Decision Makers:** Traffic Safety Index Team
+
+### Context
+
+Traffic data is sparse; periods with no vehicles result in missing rows in the database.
+
+- **Problem:** Time series analysis (trends, correlation) requires a continuous timeline. Missing data was interpreted as "unknown" rather than "safe/quiet", skewing analysis.
+- **Example:** 3 AM often has zero traffic. If omitted, the average safety index might look artificially high/low based only on busy hours.
+
+### Decision
+
+Implement **Zero-Filling** for data retrieval:
+
+1. Generate a complete date-time index for the requested range (at 15-min or 1-hour granularity).
+2. Left-join actual data with this index.
+3. Fill missing values with **0** for volume/conflicts and **NaN** (or carry-forward) for speed, as appropriate.
+4. For Safety Index, 0 volume implies 0 risk (Safety Index = 0 or Baseline).
+
+### Rationale
+
+- **Accuracy:** Reflects the reality that "no traffic" = "no accidents" (high safety).
+- **Consistency:** Ensures charts and statistics cover the full time period.
+- **Analysis:** Enables correct correlation and trend analysis without gaps.
+
+### Consequences
+
+**Positive:**
+
+- Continuous line charts in frontend.
+- Accurate daily averages (denominator includes quiet hours).
+- Robust statistical analysis.
+
+**Negative:**
+
+- Slightly larger data payloads (returning rows for empty periods).
+- Need to handle "0" correctly in formulas (avoid divide-by-zero).
+
+### Implementation
+
+- Updated `get_bulk_traffic_data` in `RTSIService` to reindex and fill zeros.
+
+---
+
 ## Decision Review Schedule
 
 These decisions will be reviewed:
+
 - **Quarterly:** Check if assumptions still valid
 - **Annually:** Major architecture review
 - **As-Needed:** When requirements change
@@ -510,4 +642,4 @@ These decisions will be reviewed:
 ---
 
 **Document Maintainers:** Traffic Safety Index Team
-**Last Updated:** 2025-11-20
+**Last Updated:** 2025-11-21

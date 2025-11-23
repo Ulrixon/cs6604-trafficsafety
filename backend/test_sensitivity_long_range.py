@@ -81,8 +81,8 @@ def test_sensitivity_analysis_long_range():
             baseline = data["baseline"]
             print(f"\n📊 Baseline RT-SI Scores:")
             print(f"  Time Points: {len(baseline['timestamps'])}")
-            
-            if baseline['rt_si_scores']:
+
+            if baseline["rt_si_scores"]:
                 print(
                     f"  Mean Score: {sum(baseline['rt_si_scores'])/len(baseline['rt_si_scores']):.2f}"
                 )

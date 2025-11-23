@@ -138,13 +138,15 @@ class SensitivityAnalysisService:
         )
 
         # 2. Fetch Bulk Traffic Data (ONCE)
-        logger.info(f"Fetching bulk traffic data for {intersection} ({start_time} to {end_time})")
+        logger.info(
+            f"Fetching bulk traffic data for {intersection} ({start_time} to {end_time})"
+        )
         traffic_data_map = self.base_rt_si_service.get_bulk_traffic_data(
             intersection, start_time, end_time, bin_minutes
         )
-        
+
         if not traffic_data_map:
-             return {
+            return {
                 "error": "No traffic data available for this range",
                 "intersection": intersection,
             }
@@ -152,10 +154,7 @@ class SensitivityAnalysisService:
         # 3. Calculate Baseline Scores (In Memory)
         logger.info(f"Computing baseline RT-SI trend")
         baseline_results = self.base_rt_si_service.calculate_rt_si_from_data(
-            crash_intersection_id,
-            traffic_data_map,
-            capacity,
-            bin_minutes
+            crash_intersection_id, traffic_data_map, capacity, bin_minutes
         )
 
         baseline_scores = [r["RT_SI"] for r in baseline_results]
@@ -174,7 +173,7 @@ class SensitivityAnalysisService:
 
             # Create temporary service with perturbed parameters
             temp_service = RTSIService(self.db_client)
-            
+
             # Override parameters
             temp_service.LAMBDA = params["LAMBDA"]
             temp_service.BETA1 = params["BETA1"]
@@ -190,10 +189,7 @@ class SensitivityAnalysisService:
 
             # Calculate scores using pre-fetched data
             perturbed_results = temp_service.calculate_rt_si_from_data(
-                crash_intersection_id,
-                traffic_data_map,
-                capacity,
-                bin_minutes
+                crash_intersection_id, traffic_data_map, capacity, bin_minutes
             )
 
             if perturbed_results:

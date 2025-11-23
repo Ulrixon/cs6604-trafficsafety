@@ -284,10 +284,6 @@ class RTSIService:
                 else 0
             )
 
-        # If no vehicle data, return None to indicate no data for this time bin
-        if vehicle_count == 0:
-            return None
-
         avg_speed = 0.0
         free_flow_speed = 30.0  # Default
         speed_variance = 0.0
@@ -473,7 +469,7 @@ class RTSIService:
             },
         )
 
-        # Extract results
+        # Extract results - set to 0 if no data exists
         vehicle_count = 0
         turning_count = 0
         if vehicle_results and vehicle_results[0]["vehicle_count"]:

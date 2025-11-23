@@ -422,28 +422,32 @@ def render_correlation_analysis(correlation_data: dict):
             # Create full correlation matrix heatmap
             st.markdown("#### 🌐 Full Correlation Matrix")
             st.caption("Complete correlation matrix showing all variable relationships")
-            
+
             # Get all unique variables from the original correlations
-            all_variables = list(set(
-                [corr["variable_1"] for corr in var_corr.values()] +
-                [corr["variable_2"] for corr in var_corr.values()]
-            ))
+            all_variables = list(
+                set(
+                    [corr["variable_1"] for corr in var_corr.values()]
+                    + [corr["variable_2"] for corr in var_corr.values()]
+                )
+            )
             all_variables.sort()
-            
+
             # Create full matrix
-            full_matrix = pd.DataFrame(np.nan, index=all_variables, columns=all_variables)
-            
+            full_matrix = pd.DataFrame(
+                np.nan, index=all_variables, columns=all_variables
+            )
+
             # Fill matrix with all correlations
             for key, corr in var_corr.items():
                 v1, v2 = corr["variable_1"], corr["variable_2"]
                 corr_val = corr["pearson"]["correlation"]
                 full_matrix.loc[v1, v2] = corr_val
                 full_matrix.loc[v2, v1] = corr_val
-            
+
             # Diagonal = 1
             for v in all_variables:
                 full_matrix.loc[v, v] = 1.0
-            
+
             # Create full heatmap
             fig_full = px.imshow(
                 full_matrix,
@@ -456,15 +460,15 @@ def render_correlation_analysis(correlation_data: dict):
                 zmax=1,
                 text_auto=".2f",
             )
-            
+
             fig_full.update_layout(
                 title="Complete Correlation Matrix (All Variables)",
                 height=max(600, len(all_variables) * 30),
                 xaxis=dict(tickangle=-45),
             )
-            
+
             st.plotly_chart(fig_full, use_container_width=True)
-            
+
             st.divider()
 
             # Create correlation heatmap for top correlations
@@ -581,7 +585,7 @@ def render_trend_view(
     st.markdown("### Summary Statistics")
 
     if has_final_index:
-        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        col1, col2, col3, col5, col6 = st.columns(5)
 
         with col1:
             st.metric("Avg Final Index", f"{df['final_safety_index'].mean():.2f}")
@@ -594,9 +598,6 @@ def render_trend_view(
                 st.metric("Avg RT-SI", "N/A")
 
         with col3:
-            st.metric("Avg MCDM", f"{df['mcdm_index'].mean():.2f}")
-
-        with col4:
             st.metric("Avg MCDM", f"{df['mcdm_index'].mean():.2f}")
 
         with col5:

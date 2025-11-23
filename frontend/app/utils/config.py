@@ -12,7 +12,7 @@ env_path = Path(__file__).parent.parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # API Configuration
-API_URL = os.getenv("API_URL", "http://localhost:8000/api/v1/safety/index/")
+API_URL = os.getenv("API_URL", "http://localhost:8000/api/v1")
 API_TIMEOUT = int(os.getenv("API_TIMEOUT", "10"))  # seconds
 API_MAX_RETRIES = int(os.getenv("API_MAX_RETRIES", "3"))
 API_CACHE_TTL = int(os.getenv("API_CACHE_TTL", "300"))  # seconds (5 minutes)

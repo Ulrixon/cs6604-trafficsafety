@@ -13,7 +13,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
+import plotly.express as px
 from typing import Optional
 from datetime import datetime, timedelta
 import requests
@@ -21,7 +23,7 @@ import requests
 from app.utils.config import APP_ICON, API_URL
 
 # API configuration - use the full API_URL as base (already includes /api/v1/safety/index/)
-API_BASE_URL = API_URL.rstrip("/")
+API_BASE_URL = API_URL.rstrip("/") + "/safety/index"
 
 
 def get_available_intersections():
@@ -63,25 +65,27 @@ def get_safety_score_trend(
     start_time: datetime,
     end_time: datetime,
     bin_minutes: int = 15,
+    include_correlations: bool = True,
 ):
-    """Fetch safety score trend over time range (returns MCDM and RT-SI separately)."""
+    """Fetch safety score trend over time range with optional correlation analysis."""
     try:
         params = {
             "intersection": intersection,
             "start_time": start_time.isoformat(),
             "end_time": end_time.isoformat(),
             "bin_minutes": bin_minutes,
+            "include_correlations": include_correlations,
         }
         response = requests.get(f"{API_BASE_URL}/time/range", params=params, timeout=60)
         response.raise_for_status()
         return response.json()
     except requests.HTTPError as e:
         if e.response.status_code == 404:
-            return []
+            return {"time_series": [], "correlation_analysis": None, "metadata": {}}
         raise
     except Exception as e:
         st.error(f"Error fetching trend data: {e}")
-        return []
+        return {"time_series": [], "correlation_analysis": None, "metadata": {}}
 
 
 def blend_safety_scores(mcdm: float, rt_si: Optional[float], alpha: float) -> float:
@@ -152,13 +156,6 @@ def render_single_time_view(
             help="Multi-Criteria Decision Making index (0-100, higher = safer)",
         )
 
-    with col4:
-        st.metric(
-            "Safety Score",
-            f"{data['safety_score']:.2f}",
-            help="Overall MCDM safety score (0-100, higher = safer)",
-        )
-
     # RT-SI Sub-indices (if available)
     if data.get("rt_si_score") is not None:
         st.markdown("#### 🚦 RT-SI Sub-Indices")
@@ -180,9 +177,10 @@ def render_single_time_view(
 
         with col3:
             # Calculate blend percentage
+            final_index = data.get("final_safety_index") or 0
             rt_si_contribution = (
-                (alpha * data["rt_si_score"]) / data.get("final_safety_index", 1) * 100
-                if data.get("final_safety_index", 0) > 0
+                (alpha * data["rt_si_score"]) / final_index * 100
+                if final_index > 0
                 else 0
             )
             st.metric(
@@ -298,6 +296,230 @@ def create_trend_chart(df: pd.DataFrame, metric: str, title: str, color: str):
     return fig
 
 
+def render_correlation_analysis(correlation_data: dict):
+    """Render comprehensive correlation analysis visualizations."""
+    st.markdown("## 🔬 Correlation Analysis: Variable Relationships")
+    st.caption("Statistical correlations between all pairs of variables")
+
+    if not correlation_data or "error" in correlation_data:
+        st.warning(
+            "⚠️ Correlation analysis not available. "
+            "Minimum 3 data points required for statistical analysis."
+        )
+        if "error" in correlation_data:
+            st.error(f"Error: {correlation_data['error']}")
+        return
+
+    # Summary Section
+    summary = correlation_data.get("summary", {})
+    if summary:
+        st.markdown("### 📊 Statistical Summary")
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric(
+                "Total Variables",
+                summary.get("total_variables", 0),
+                help="Number of variables analyzed",
+            )
+
+        with col2:
+            st.metric(
+                "Total Correlations",
+                summary.get("total_correlations", 0),
+                help="Number of pairwise correlations computed",
+            )
+
+        with col3:
+            st.metric(
+                "Strong Correlations",
+                summary.get("strong_correlations", 0),
+                help="Correlations with |r| > 0.7",
+            )
+
+        with col4:
+            st.metric(
+                "Moderate Correlations",
+                summary.get("moderate_correlations", 0),
+                help="Correlations with 0.3 < |r| < 0.7",
+            )
+
+    st.divider()
+
+    # Variable Correlations Section
+    var_corr = correlation_data.get("variable_correlations", {})
+    if var_corr:
+        with st.expander("🔗 **All Variable Correlations**", expanded=True):
+            st.caption(
+                "Pearson (linear) and Spearman (monotonic) correlations between all variable pairs"
+            )
+
+            # Convert to dataframe for easier filtering and display
+            corr_list = []
+            for key, corr in var_corr.items():
+                corr_list.append(
+                    {
+                        "Variable 1": corr["variable_1"],
+                        "Variable 2": corr["variable_2"],
+                        "Pearson r": corr["pearson"]["correlation"],
+                        "Pearson p": corr["pearson"]["p_value"],
+                        "Pearson Sig": "✅" if corr["pearson"]["significant"] else "❌",
+                        "Spearman ρ": corr["spearman"]["correlation"],
+                        "Spearman p": corr["spearman"]["p_value"],
+                        "Spearman Sig": (
+                            "✅" if corr["spearman"]["significant"] else "❌"
+                        ),
+                        "N": corr["n_samples"],
+                        "Description": corr["description"],
+                    }
+                )
+
+            corr_df = pd.DataFrame(corr_list)
+
+            # Filter options
+            col1, col2 = st.columns(2)
+            with col1:
+                filter_sig = st.checkbox(
+                    "Show only significant correlations (p < 0.05)", value=False
+                )
+            with col2:
+                min_strength = st.slider("Minimum |correlation|", 0.0, 1.0, 0.0, 0.1)
+
+            # Apply filters
+            if filter_sig:
+                corr_df = corr_df[
+                    (corr_df["Pearson Sig"] == "✅") | (corr_df["Spearman Sig"] == "✅")
+                ]
+
+            if min_strength > 0:
+                corr_df = corr_df[
+                    (corr_df["Pearson r"].abs() >= min_strength)
+                    | (corr_df["Spearman ρ"].abs() >= min_strength)
+                ]
+
+            # Sort by absolute Pearson correlation
+            corr_df = corr_df.sort_values(
+                by="Pearson r", key=lambda x: x.abs(), ascending=False
+            )
+
+            st.markdown(f"**Showing {len(corr_df)} of {len(corr_list)} correlations**")
+
+            # Display table
+            st.dataframe(
+                corr_df.style.format(
+                    {
+                        "Pearson r": "{:.3f}",
+                        "Pearson p": "{:.4f}",
+                        "Spearman ρ": "{:.3f}",
+                        "Spearman p": "{:.4f}",
+                    }
+                ),
+                use_container_width=True,
+                hide_index=True,
+                height=400,
+            )
+
+            # Create full correlation matrix heatmap
+            st.markdown("#### 🌐 Full Correlation Matrix")
+            st.caption("Complete correlation matrix showing all variable relationships")
+
+            # Get all unique variables from the original correlations
+            all_variables = list(
+                set(
+                    [corr["variable_1"] for corr in var_corr.values()]
+                    + [corr["variable_2"] for corr in var_corr.values()]
+                )
+            )
+            all_variables.sort()
+
+            # Create full matrix
+            full_matrix = pd.DataFrame(
+                np.nan, index=all_variables, columns=all_variables
+            )
+
+            # Fill matrix with all correlations
+            for key, corr in var_corr.items():
+                v1, v2 = corr["variable_1"], corr["variable_2"]
+                corr_val = corr["pearson"]["correlation"]
+                full_matrix.loc[v1, v2] = corr_val
+                full_matrix.loc[v2, v1] = corr_val
+
+            # Diagonal = 1
+            for v in all_variables:
+                full_matrix.loc[v, v] = 1.0
+
+            # Create full heatmap
+            fig_full = px.imshow(
+                full_matrix,
+                labels=dict(x="Variable", y="Variable", color="Pearson r"),
+                x=all_variables,
+                y=all_variables,
+                color_continuous_scale="RdBu_r",
+                aspect="auto",
+                zmin=-1,
+                zmax=1,
+                text_auto=".2f",
+            )
+
+            fig_full.update_layout(
+                title="Complete Correlation Matrix (All Variables)",
+                height=max(600, len(all_variables) * 30),
+                xaxis=dict(tickangle=-45),
+            )
+
+            st.plotly_chart(fig_full, use_container_width=True)
+
+            st.divider()
+
+            # Create correlation heatmap for top correlations
+            st.markdown("#### 🔥 Top Correlations Heatmap")
+            st.caption("Focused view of the strongest correlations")
+
+            # Get top 20 by absolute correlation
+            top_corr = corr_df.head(20)
+
+            if len(top_corr) > 0:
+                # Create matrix for heatmap
+                variables = list(
+                    set(
+                        top_corr["Variable 1"].tolist()
+                        + top_corr["Variable 2"].tolist()
+                    )
+                )
+                matrix = pd.DataFrame(np.nan, index=variables, columns=variables)
+
+                # Fill matrix
+                for _, row in top_corr.iterrows():
+                    v1, v2 = row["Variable 1"], row["Variable 2"]
+                    corr_val = row["Pearson r"]
+                    matrix.loc[v1, v2] = corr_val
+                    matrix.loc[v2, v1] = corr_val
+
+                # Diagonal = 1
+                for v in variables:
+                    matrix.loc[v, v] = 1.0
+
+                # Create heatmap
+                fig = px.imshow(
+                    matrix,
+                    labels=dict(x="Variable", y="Variable", color="Pearson r"),
+                    x=variables,
+                    y=variables,
+                    color_continuous_scale="RdBu_r",
+                    aspect="auto",
+                    zmin=-1,
+                    zmax=1,
+                    text_auto=".2f",
+                )
+
+                fig.update_layout(
+                    title="Correlation Matrix (Top 20 Pairs)",
+                    height=600,
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+
 def render_trend_view(
     intersection: str,
     start_time: datetime,
@@ -314,7 +536,20 @@ def render_trend_view(
         return
 
     with st.spinner("Fetching trend data..."):
-        data = get_safety_score_trend(intersection, start_time, end_time, bin_minutes)
+        response = get_safety_score_trend(
+            intersection, start_time, end_time, bin_minutes
+        )
+
+    # Handle new response structure with time_series and correlation_analysis
+    if isinstance(response, dict):
+        data = response.get("time_series", [])
+        correlation_analysis = response.get("correlation_analysis")
+        metadata = response.get("metadata", {})
+    else:
+        # Fallback for old format (list)
+        data = response
+        correlation_analysis = None
+        metadata = {}
 
     if not data:
         st.warning(
@@ -350,7 +585,7 @@ def render_trend_view(
     st.markdown("### Summary Statistics")
 
     if has_final_index:
-        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        col1, col2, col3, col5, col6 = st.columns(5)
 
         with col1:
             st.metric("Avg Final Index", f"{df['final_safety_index'].mean():.2f}")
@@ -365,9 +600,6 @@ def render_trend_view(
         with col3:
             st.metric("Avg MCDM", f"{df['mcdm_index'].mean():.2f}")
 
-        with col4:
-            st.metric("Avg Safety Score", f"{df['safety_score'].mean():.2f}")
-
         with col5:
             st.metric("Total Vehicles", f"{df['vehicle_count'].sum():,}")
 
@@ -377,13 +609,13 @@ def render_trend_view(
         col1, col2, col3, col4, col5 = st.columns(5)
 
         with col1:
-            st.metric("Avg Safety Score", f"{df['safety_score'].mean():.2f}")
+            st.metric("Avg MCDM", f"{df['mcdm_index'].mean():.2f}")
 
         with col2:
-            st.metric("Min Safety Score", f"{df['safety_score'].min():.2f}")
+            st.metric("Min MCDM", f"{df['mcdm_index'].min():.2f}")
 
         with col3:
-            st.metric("Max Safety Score", f"{df['safety_score'].max():.2f}")
+            st.metric("Max MCDM", f"{df['mcdm_index'].max():.2f}")
 
         with col4:
             st.metric("Total Vehicles", f"{df['vehicle_count'].sum():,}")
@@ -463,6 +695,19 @@ def render_trend_view(
 
             fig_sub = go.Figure()
 
+            # Add RT-SI Score
+            fig_sub.add_trace(
+                go.Scatter(
+                    x=df["time_bin"],
+                    y=df["rt_si_score"],
+                    mode="lines+markers",
+                    name="RT-SI Score",
+                    line=dict(color="#e74c3c", width=3, dash="solid"),
+                    marker=dict(size=7),
+                    hovertemplate="<b>RT-SI Score</b>: %{y:.2f}<extra></extra>",
+                )
+            )
+
             fig_sub.add_trace(
                 go.Scatter(
                     x=df["time_bin"],
@@ -488,9 +733,9 @@ def render_trend_view(
             )
 
             fig_sub.update_layout(
-                title="RT-SI Sub-Indices (VRU vs Vehicle Risk)",
+                title="RT-SI Score & Sub-Indices (VRU vs Vehicle Risk)",
                 xaxis_title="Time",
-                yaxis_title="Risk Index",
+                yaxis_title="Risk Index / Score",
                 hovermode="x unified",
                 height=350,
                 margin=dict(l=0, r=0, t=40, b=0),
@@ -498,10 +743,8 @@ def render_trend_view(
 
             st.plotly_chart(fig_sub, use_container_width=True)
 
-    # Safety Score Trend
-    fig1 = create_trend_chart(
-        df, "safety_score", "MCDM Safety Score Over Time", "#1f77b4"
-    )
+    # MCDM Index Trend
+    fig1 = create_trend_chart(df, "mcdm_index", "MCDM Index Over Time", "#1f77b4")
     st.plotly_chart(fig1, use_container_width=True)
 
     # Traffic Metrics
@@ -600,7 +843,7 @@ def render_trend_view(
     # List of variables to normalize
     variables_to_normalize = [
         ("mcdm_index", "MCDM Index"),
-        ("safety_score", "Safety Score"),
+        ("rt_si_score", "RT-SI Score"),
         ("vehicle_count", "Vehicle Count"),
         ("incident_count", "Incident Count"),
         ("vru_count", "VRU Count"),
@@ -630,7 +873,7 @@ def render_trend_view(
     # Define colors for each variable
     colors = {
         "mcdm_index": "#1f77b4",
-        "safety_score": "#ff7f0e",
+        "rt_si_score": "#e74c3c",
         "vehicle_count": "#2ca02c",
         "incident_count": "#d62728",
         "vru_count": "#17becf",
@@ -678,12 +921,24 @@ def render_trend_view(
 
     st.plotly_chart(fig_combined, use_container_width=True)
 
+    st.divider()
+
+    # Correlation Analysis Section
+    if correlation_analysis:
+        render_correlation_analysis(correlation_analysis)
+    elif len(df) >= 3:
+        st.info(
+            "💡 Correlation analysis is available for this time range but was not included. "
+            "This may be due to a backend error or missing scipy package."
+        )
+
+    st.divider()
+
     # Data table
     with st.expander("📊 View Data Table"):
         st.dataframe(
             df.style.format(
                 {
-                    "safety_score": "{:.2f}",
                     "mcdm_index": "{:.2f}",
                     "avg_speed": "{:.2f}",
                     "speed_variance": "{:.2f}",

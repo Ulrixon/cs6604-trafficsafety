@@ -19,11 +19,13 @@ print()
 print("1. Testing module imports...")
 try:
     from app.main import app
+
     print("   ✓ Main module imported successfully")
 except Exception as e:
     print(f"   ✗ FAILED to import main module:")
     print(f"   Error: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 
@@ -45,8 +47,8 @@ print()
 # Test 3: List all routes
 print("3. Listing registered routes:")
 for route in app.routes:
-    if hasattr(route, 'path') and hasattr(route, 'methods'):
-        methods = ','.join(route.methods) if route.methods else 'N/A'
+    if hasattr(route, "path") and hasattr(route, "methods"):
+        methods = ",".join(route.methods) if route.methods else "N/A"
         print(f"   {methods:10} {route.path}")
 
 print()
@@ -55,6 +57,7 @@ print()
 print("4. Testing FastAPI test client...")
 try:
     from fastapi.testclient import TestClient
+
     client = TestClient(app)
     print("   ✓ Test client created")
 except Exception as e:
@@ -78,6 +81,7 @@ except Exception as e:
     print(f"   ✗ FAILED to test health endpoint:")
     print(f"   Error: {e}")
     import traceback
+
     traceback.print_exc()
 
 print()
@@ -86,9 +90,10 @@ print()
 print("6. Testing database connection...")
 try:
     from app.services.db_client import get_db_client
+
     db = get_db_client()
     print("   ✓ Database client created (connection will be tested on first query)")
-    
+
     # Try a simple query
     result = db.execute_query("SELECT 1 as test;")
     if result:

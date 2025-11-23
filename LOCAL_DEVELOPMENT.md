@@ -15,6 +15,7 @@ chmod +x start_local.sh
 ```
 
 This will start:
+
 - **Backend**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
 - **Frontend**: http://localhost:8501
@@ -42,6 +43,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 **Backend will be available at:**
+
 - API: http://localhost:8000
 - Interactive API Docs: http://localhost:8000/docs
 - Alternative Docs: http://localhost:8000/redoc
@@ -63,6 +65,7 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0
 ```
 
 **Frontend will be available at:**
+
 - Dashboard: http://localhost:8501
 
 ---
@@ -89,13 +92,13 @@ chmod +x start.sh
 
 ## Quick Commands Summary
 
-| Action | Command |
-|--------|---------|
-| **Start Both** | `./start_local.sh` (from root) |
-| **Backend Only** | `cd backend && uvicorn app.main:app --reload` |
-| **Frontend Only** | `cd frontend && streamlit run app.py` |
-| **Stop Servers** | `Ctrl+C` in terminal |
-| **View Logs** | `tail -f backend/backend.log` or `tail -f frontend/frontend.log` |
+| Action            | Command                                                          |
+| ----------------- | ---------------------------------------------------------------- |
+| **Start Both**    | `./start_local.sh` (from root)                                   |
+| **Backend Only**  | `cd backend && uvicorn app.main:app --reload`                    |
+| **Frontend Only** | `cd frontend && streamlit run app.py`                            |
+| **Stop Servers**  | `Ctrl+C` in terminal                                             |
+| **View Logs**     | `tail -f backend/backend.log` or `tail -f frontend/frontend.log` |
 
 ---
 
@@ -166,12 +169,14 @@ cd frontend && pip install -r requirements.txt
 ### Auto-reload
 
 Both servers support auto-reload:
+
 - **Backend**: Changes to Python files automatically reload (uvicorn --reload)
 - **Frontend**: Streamlit detects changes and prompts to rerun
 
 ### API Testing
 
 Use the interactive API docs:
+
 1. Go to http://localhost:8000/docs
 2. Expand any endpoint
 3. Click "Try it out"
@@ -181,11 +186,13 @@ Use the interactive API docs:
 ### Debugging
 
 **Backend logs:**
+
 ```bash
 tail -f backend/backend.log
 ```
 
 **Frontend logs:**
+
 ```bash
 tail -f frontend/frontend.log
 ```

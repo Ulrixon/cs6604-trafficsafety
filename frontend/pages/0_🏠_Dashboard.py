@@ -43,6 +43,25 @@ def main():
     with st.sidebar:
         st.header("⚙️ Controls")
 
+        # Alpha blending coefficient
+        st.subheader("⚖️ Safety Index Blending")
+        alpha = st.slider(
+            "RT-SI Weight (α)",
+            min_value=0.0,
+            max_value=1.0,
+            value=0.7,
+            step=0.1,
+            help=f"Final Index = α×RT-SI + (1-α)×MCDM\n\n"
+                 f"• α=0.0: Use only MCDM (long-term prioritization)\n"
+                 f"• α=0.7: Balanced (recommended for dashboards)\n"
+                 f"• α=1.0: Use only RT-SI (real-time safety focus)",
+        )
+        
+        st.caption(f"📊 Current blend: {alpha*100:.0f}% RT-SI + {(1-alpha)*100:.0f}% MCDM")
+        st.caption("Note: Final Index combines real-time conditions (RT-SI) with long-term patterns (MCDM)")
+
+        st.divider()
+
         # Refresh button
         if st.button("🔄 Refresh Data", use_container_width=True):
             clear_cache()
@@ -50,9 +69,38 @@ def main():
 
         st.divider()
 
-        # Load data
+        # Load data - use blended scores if alpha is configured
         with st.spinner("Loading intersection data..."):
-            intersections, error, stats = get_intersections()
+            # Import the new function
+            from app.services.api_client import fetch_latest_blended_scores
+            
+            # Use blended scores to incorporate RT-SI
+            raw_data, blend_error = fetch_latest_blended_scores(alpha)
+            
+            if raw_data:
+                # Convert to Intersection objects
+                intersections = []
+                stats = {
+                    "total_raw": len(raw_data),
+                    "valid": 0,
+                    "invalid": 0,
+                    "skipped_reasons": [],
+                }
+                
+                for item in raw_data:
+                    try:
+                        from app.models.intersection import Intersection
+                        intersection = Intersection(**item)
+                        intersections.append(intersection)
+                        stats["valid"] += 1
+                    except Exception as e:
+                        stats["invalid"] += 1
+                        stats["skipped_reasons"].append(f"ID {item.get('intersection_id', '?')}: {str(e)}")
+                
+                error = blend_error
+            else:
+                # Fallback to original method
+                intersections, error, stats = get_intersections()
 
         # Show data status
         render_data_status(error, stats)
@@ -76,10 +124,10 @@ def main():
         # About section
         with st.expander("ℹ️ About"):
             st.markdown(
-                """
-            This dashboard visualizes traffic intersection safety data.
+                f"""
+            This dashboard visualizes traffic intersection safety data using a blended safety index.
             
-            **Data Source:** Traffic Safety API
+            **Data Source:** Traffic Safety API (Real-time + Historical)
             
             **Visual Encoding:**
             - Circle size represents traffic volume
@@ -87,9 +135,23 @@ def main():
             
             **Safety Index:** A higher value indicates a more dangerous intersection.
             
+            **Blended Safety Index (α={alpha:.1f}):**
+            ```
+            Final Index = {alpha:.1f} × RT-SI + {1-alpha:.1f} × MCDM
+            ```
+            
+            - **RT-SI (Real-Time Safety Index):** Based on current traffic conditions, speed patterns, and historical crash data with Empirical Bayes stabilization
+            - **MCDM (Multi-Criteria Decision Making):** Long-term prioritization using CRITIC weighting and hybrid methods (SAW, EDAS, CODAS)
+            - **Alpha (α):** Controls the balance between real-time (RT-SI) and long-term (MCDM) assessment
+            
+            **Adjust α slider above to change emphasis:**
+            - α=0.0: Pure MCDM (long-term patterns)
+            - α=0.7: Balanced (recommended)
+            - α=1.0: Pure RT-SI (real-time focus)
+            
             **Navigation:**
-            - Trend Analysis: Time-based analysis and trend charts (Home Page)
-            - Dashboard: Interactive map and overview
+            - Dashboard: Interactive map with latest blended safety scores
+            - Trend Analysis: Time-based analysis and detailed trend charts
             """
             )
 
@@ -171,8 +233,8 @@ def main():
     # Footer
     st.divider()
     st.caption(
-        "Traffic Safety Index Dashboard | "
-        "Built with Streamlit, Folium, and Pydantic | "
+        f"Traffic Safety Dashboard | Blended Index (α={alpha:.1f}) | "
+        "RT-SI + MCDM | Built with Streamlit, Folium, and Pydantic | "
         "Data updates every 5 minutes"
     )
 

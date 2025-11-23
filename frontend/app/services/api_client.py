@@ -176,6 +176,102 @@ def clear_cache():
     st.cache_data.clear()
 
 
+@st.cache_data(ttl=300, show_spinner=False)  # Cache for 5 minutes
+def fetch_latest_blended_scores(alpha: float = 0.7) -> tuple[List[dict], Optional[str]]:
+    """
+    Fetch latest safety scores with RT-SI blending for all intersections.
+    
+    This queries each intersection's latest available data point with the
+    specified alpha blending coefficient.
+    
+    Args:
+        alpha: Blending coefficient (0.0 = MCDM only, 1.0 = RT-SI only)
+        
+    Returns:
+        Tuple of (list of intersection dicts with blended scores, error message or None)
+    """
+    try:
+        # First, get the list of available intersections
+        api_base = API_URL.rstrip("/")
+        intersections_url = f"{api_base}/intersections/list"
+        
+        session = _get_session_with_retries()
+        response = session.get(intersections_url, timeout=API_TIMEOUT)
+        response.raise_for_status()
+        
+        data = response.json()
+        intersection_names = data.get("intersections", [])
+        
+        if not intersection_names:
+            return _load_fallback_data(), "No intersections available"
+        
+        # For each intersection, fetch the latest blended score
+        from datetime import datetime, timedelta
+        
+        results = []
+        errors = []
+        
+        # Use current time as the target
+        current_time = datetime.now()
+        
+        for intersection in intersection_names[:10]:  # Limit to first 10 for performance
+            try:
+                # Query for latest time point (using current time)
+                params = {
+                    "intersection": intersection,
+                    "time": current_time.isoformat(),
+                    "bin_minutes": 15,
+                    "alpha": alpha,
+                }
+                
+                score_response = session.get(
+                    f"{api_base}/time/specific",
+                    params=params,
+                    timeout=10
+                )
+                
+                if score_response.status_code == 200:
+                    score_data = score_response.json()
+                    
+                    # Transform to expected format for dashboard
+                    intersection_data = {
+                        "intersection_id": intersection,  # Use name as ID
+                        "intersection_name": score_data.get("intersection", intersection).replace("-", " ").title(),
+                        "safety_index": score_data.get("final_safety_index", score_data.get("mcdm_index", 50.0)),
+                        "mcdm_index": score_data.get("mcdm_index", 50.0),
+                        "rt_si_score": score_data.get("rt_si_score"),
+                        "final_safety_index": score_data.get("final_safety_index", score_data.get("mcdm_index", 50.0)),
+                        "traffic_volume": float(score_data.get("vehicle_count", 0)),
+                        "vru_index": score_data.get("vru_index"),
+                        "vehicle_index": score_data.get("vehicle_index"),
+                        "latitude": 38.86,  # Default - would need PSM lookup for actual coords
+                        "longitude": -77.055,
+                    }
+                    
+                    # Try to get coordinates from a separate lookup if available
+                    # For now, use default DC area coordinates
+                    
+                    results.append(intersection_data)
+                    
+            except Exception as e:
+                errors.append(f"{intersection}: {str(e)}")
+                continue
+        
+        if not results:
+            error_msg = f"Failed to fetch blended scores. Errors: {'; '.join(errors[:3])}"
+            return _load_fallback_data(), error_msg
+        
+        error_msg = f"Loaded {len(results)} intersections" + (
+            f" (errors: {len(errors)})" if errors else ""
+        )
+        
+        return results, None
+        
+    except Exception as e:
+        error_msg = f"Error fetching blended scores: {str(e)}"
+        return _load_fallback_data(), error_msg
+
+
 # ============================================================================
 # HISTORICAL DATA API METHODS
 # ============================================================================

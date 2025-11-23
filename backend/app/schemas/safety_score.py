@@ -23,6 +23,33 @@ class SafetyScoreTimePoint(BaseModel):
     edas_score: float = Field(..., ge=0, le=100, example=67.8)
     codas_score: float = Field(..., ge=0, le=100, example=72.1)
 
+    # RT-SI components
+    rt_si_score: Optional[float] = Field(
+        None,
+        ge=0,
+        le=100,
+        example=71.79,
+        description="Real-Time Safety Index (0-100, higher=safer)",
+    )
+    vru_index: Optional[float] = Field(
+        None, ge=0, example=0.0, description="VRU sub-index from RT-SI calculation"
+    )
+    vehicle_index: Optional[float] = Field(
+        None,
+        ge=0,
+        example=0.071,
+        description="Vehicle sub-index from RT-SI calculation",
+    )
+
+    # Final blended safety index
+    final_safety_index: Optional[float] = Field(
+        None,
+        ge=0,
+        le=100,
+        example=69.5,
+        description="Blended final safety index: α*RT-SI + (1-α)*MCDM",
+    )
+
 
 class SafetyScoreTrend(BaseModel):
     """Safety score trend over time for an intersection."""

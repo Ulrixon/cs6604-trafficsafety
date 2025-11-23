@@ -10,6 +10,7 @@ from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from typing import List, Dict, Any, Optional
 from contextlib import contextmanager
+import load_dotenv
 import logging
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ class VTTIPostgresClient:
             min_connections: Minimum connections in pool
             max_connections: Maximum connections in pool
         """
+        load_dotenv.load_dotenv()  # Load environment variables from .env file
         self.database = database or os.getenv("VTTI_DB_NAME", "vtsi")
         self.user = user or os.getenv("VTTI_DB_USER", "postgres")
         self.password = password or os.getenv("VTTI_DB_PASSWORD")

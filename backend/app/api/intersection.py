@@ -188,16 +188,16 @@ def debug_status():
     try:
         db_client = get_db_client()
         mcdm_service = MCDMSafetyIndexService(db_client)
-        
+
         # Check available intersections
         available_intersections = mcdm_service.get_available_intersections()
-        
+
         # Try to calculate latest scores
         safety_scores = mcdm_service.calculate_latest_safety_scores(
             bin_minutes=15,
             lookback_hours=24,
         )
-        
+
         return {
             "status": "ok",
             "database_connected": True,

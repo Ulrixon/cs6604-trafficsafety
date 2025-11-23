@@ -1,55 +1,56 @@
 # Active Context
 
-**Last Updated**: 2025-11-22 (Afternoon)
-**Status**: ✅ PRODUCTION SYSTEM OPERATIONAL | 🔥 PHASE 7 VALIDATION IN PROGRESS
+**Last Updated**: 2025-11-21 (Morning)
+**Status**: ✅ PRODUCTION SYSTEM OPERATIONAL | 🔬 SENSITIVITY ANALYSIS COMPLETE | 📋 POSTGRESQL MIGRATION PLANNED
 
 ---
 
-## Current Sprint: Phase 7 - Crash Data Validation & Optimization 🔥
+## Current Sprint: Sensitivity Analysis & Optimization ✅
 
-### Just Completed (2025-11-22 Afternoon)
+### Just Completed (2025-11-21 Morning)
 
-**GCP PostgreSQL Database Connection & VDOT Crash Data Discovery:**
+**Sensitivity Analysis & Performance Optimization:**
 
-1. ✅ **GCP Cloud SQL Connection Established**
-   - Connected to GCP project: `symbolic-cinema-305010`
-   - Database instance: `vtsi-postgres` (PostgreSQL 17.6)
-   - Location: europe-west1-d
-   - Public IP: 34.140.49.230
-   - Authentication: gcloud CLI (`djjay@vt.edu`) with IP allowlisting
+1. ✅ **Sensitivity Analysis Feature (COMPLETE)**
 
-2. ✅ **VDOT Crashes Database Discovered**
-   - **vdot_crashes table**: 1,047,094 crash records!
-   - Columns: crash_date, crash_time, locality, longitude, latitude, severity, total_vehicles, total_injured, total_killed, weather, light_condition, road_surface
-   - Date range: 2017-present (7+ years of crash data)
-   - Location coverage: All Virginia localities
+   - **Backend**: Implemented `SensitivityAnalysisService` to perturb parameters (β, k, λ, ω) and measure stability using Spearman rank correlation.
+   - **Frontend**: Created `3_🔬_Sensitivity_Analysis.py` with comprehensive visualizations:
+     - **Stability Gauge**: Visualizes the mean Spearman correlation.
+     - **Heatmaps**: Shows correlation across different perturbation levels.
+     - **Trajectory Plots**: Visualizes how safety scores change under perturbation.
+   - **Date Range Support**: Updated frontend to support multi-day analysis (Start Date/End Date).
 
-3. ✅ **Database Query Utilities Created**
-   - `test_gcp_db.py` - Tests GCP database connection
-   - `query_vdot_crashes.py` - Loads crash data with filters
-   - `check_vdot_schema.py` - Inspects table schema
-   - `.env.gcp` - GCP database configuration
+2. ✅ **Performance Optimization (In-Memory Calculation)**
 
-4. ✅ **Phase 7 Validation Scripts**
-   - `crash_correlation_analysis.py` - Analyzes safety index vs crash correlation
-   - `optimize_feature_weights.py` - Grid search optimization for plugin weights
-   - Scripts working with synthetic data, ready for real crash data integration
+   - **Issue**: Long date ranges (e.g., 23 days) caused timeouts due to N*M database queries (Perturbations * Time Bins).
+   - **Solution**: Refactored `SensitivityAnalysisService` to fetch traffic data **once** and perform all 50-100 perturbation calculations in memory.
+   - **Result**: Reduced database queries from thousands to 1, eliminating timeouts.
 
-**Current Status**: Connected to GCP database with 1M+ crash records. Next: Update scripts to load and correlate real crash data with safety indices.
+3. ✅ **RT-SI Zero-Fill Logic**
+
+   - **Issue**: Time series data had gaps where no traffic was recorded, causing issues for continuous analysis.
+   - **Solution**: Updated `rt_si_service.py` to generate a complete time index and fill missing intervals with zero-traffic data.
+
+4. ✅ **Correlation Analysis**
+   - Implemented pairwise correlation analysis between safety scores and input features (Volume, Speed, etc.).
 
 ---
 
-### Previous Work (2025-11-20 Evening)
+## Current Sprint: COMPLETED ✅ (Historical Context)
+
+### What We Just Completed (2025-11-20)
 
 **Intersection History Feature + PostgreSQL Migration Planning:**
 
 1. ✅ **Intersection History Feature (COMPLETE)**
+
    - Backend: Created history API endpoints with smart aggregation
    - Frontend: Built Plotly time series charts and statistics cards
    - Integration: Added "View Historical Data" toggle in dashboard
    - Status: Fully implemented and tested
 
 2. ✅ **Data Verification**
+
    - Created data verification notebook
    - Identified: Only tracking 1 intersection (0.0) out of 4 available from VCC
    - Root cause: Feature extraction not mapping vehicles to all intersections
@@ -64,56 +65,10 @@
 
 ---
 
-## Current Sprint: COMPLETED ✅ (Historical Context)
-
-### What We Just Completed (2025-11-20)
-
-**Complete End-to-End Traffic Safety Index Pipeline:**
-
-1. ✅ **Data Collection Service**
-   - Continuous VCC API polling (60-second intervals)
-   - OAuth2 JWT authentication working
-   - Collecting BSM, PSM, and MapData messages
-   - Persisting to Parquet storage with Docker volumes
-   - 1,678+ BSM messages, 21 PSM messages collected
-
-2. ✅ **Historical Batch Processing**
-   - Created `process_historical.py` script
-   - Full 7-phase pipeline implementation:
-     - Load raw Parquet data
-     - Extract features (15-minute intervals)
-     - Detect conflicts (VRU-vehicle, vehicle-vehicle)
-     - Create master feature table
-     - Compute normalization constants
-     - Calculate safety indices
-     - ~~Apply Empirical Bayes~~ (skipped for now)
-   - Successfully processed 4 time intervals
-
-3. ✅ **Real-time Processing**
-   - Integrated into data collector
-   - Computes indices at 1-minute intervals
-   - Uses pre-computed normalization constants
-   - Saves indices to Parquet after each cycle
-
-4. ✅ **API Endpoints**
-   - FastAPI running on port 8001
-   - GET `/api/v1/safety/index/` - List all intersections
-   - GET `/api/v1/safety/index/{id}` - Get specific intersection
-   - GET `/health` - Health check
-   - Returning real safety scores (not dummy data!)
-
-5. ✅ **Docker Infrastructure**
-   - PostgreSQL (port 5433)
-   - Redis cache (port 6380)
-   - API service (port 8001)
-   - Data collector service
-   - Named volumes for data persistence
-
----
-
 ## Current System Metrics
 
 ### Data Collection
+
 - **BSM Messages**: 1,678+
 - **PSM Messages**: 21 (limited - no pedestrians in area)
 - **MapData**: 4 intersections
@@ -121,6 +76,7 @@
 - **Uptime**: Continuous
 
 ### Safety Indices (Latest)
+
 ```json
 {
   "intersection_name": "0.0",
@@ -131,6 +87,7 @@
 ```
 
 ### Normalization Constants
+
 - **I_max**: 1.0 (Maximum incident rate)
 - **V_max**: 182.0 (Maximum vehicle volume)
 - **σ_max**: 8.3 (Maximum speed variance)
@@ -163,18 +120,30 @@ Parquet Storage (/app/data/parquet/)
 FastAPI (http://localhost:8001)
     ├── GET /health
     ├── GET /api/v1/safety/index/
-    └── GET /api/v1/safety/index/{id}
+    ├── GET /api/v1/safety/index/{id}
+    ├── POST /api/v1/analysis/sensitivity
+    └── POST /api/v1/analysis/correlation
     ↓
-External Clients (Dashboards, Apps, etc.)
+External Clients (Streamlit Dashboards, Apps, etc.)
 ```
 
 ---
 
 ## What We're Working On Next
 
-**NEW: PostgreSQL + GCP Migration Sprint**
+**Documentation & Handoff**
 
-### Current Focus: Database Migration Architecture 🔥 HIGH PRIORITY
+### Current Focus: Documentation Updates
+
+- 📋 **Status**: In Progress
+- 🎯 **Goal**: Ensure `memory-bank` reflects the latest features (Sensitivity Analysis, Optimization).
+- 📄 **Documents**:
+  - `memory-bank/active-context.md` (Updating now)
+  - `memory-bank/architectural-decisions.md` (Adding In-Memory Calculation ADR)
+  - `memory-bank/operational-guide.md` (Adding Sensitivity Analysis usage)
+
+### Future Focus: PostgreSQL + GCP Migration (Planned)
+
 - 📋 **Status**: Planning complete, ready to implement
 - 🎯 **Goal**: Migrate from Parquet-only to PostgreSQL + GCP Cloud Storage
 - 📄 **Documents**:
@@ -184,6 +153,7 @@ External Clients (Dashboards, Apps, etc.)
   - ADRs: `memory-bank/architectural-decisions.md`
 
 **Why This Migration:**
+
 1. **Performance**: 10-100x faster API queries with indexed database
 2. **Scalability**: Support 100+ intersections and concurrent users
 3. **Spatial Features**: PostGIS enables proximity, routing, heatmaps
@@ -191,6 +161,7 @@ External Clients (Dashboards, Apps, etc.)
 5. **Data Management**: Automated aggregation, retention, lifecycle policies
 
 **Architecture:**
+
 ```
 VCC API → Data Collector → Dual Write
                              ├─→ GCS (raw Parquet archives)
@@ -202,6 +173,7 @@ VCC API → Data Collector → Dual Write
 ```
 
 **Key Technologies:**
+
 - PostgreSQL 15 + PostGIS 3.3 for operational database
 - GCP Cloud Storage for raw data archival (Parquet)
 - Dual-write during migration for zero downtime
@@ -212,6 +184,7 @@ VCC API → Data Collector → Dual Write
 **Cost:** ~$35/month for GCS (PostgreSQL free in Docker)
 
 **Next Steps:**
+
 1. Review and approve migration plan
 2. Begin Phase 1: Database setup (Days 1-3)
 3. Phase 2: GCP Cloud Storage setup (Days 4-5)
@@ -224,11 +197,13 @@ VCC API → Data Collector → Dual Write
 ---
 
 ### Future Focus: Data Integration & Extensibility Roadmap
+
 - 📋 **Status**: Planning complete, deferred until after PostgreSQL migration
 - 🎯 **Goal**: Transform from VCC-only to multi-source pluggable platform
 - 📄 **Document**: `memory-bank/data-integration-roadmap.md`
 
 **Key Initiatives** (postponed):
+
 1. **Pluggable Data Source Architecture** - Allow easy addition of new data sources (weather, crash data, traffic)
 2. **Configurable Safety Index** - Make features and weights adjustable without code changes
 3. **Admin UI** - Build dashboard for data analysis and index tuning
@@ -243,6 +218,7 @@ VCC API → Data Collector → Dual Write
 ## What Decisions Are We Facing?
 
 ### 1. **PostgreSQL + GCP Migration Approval** 🔥 URGENT - NEW
+
 - **Status**: Planning complete, ready to implement
 - **Documents**:
   - `construction/requirements/postgresql-migration-requirements.md`
@@ -259,6 +235,7 @@ VCC API → Data Collector → Dual Write
 **Recommendation:** Approve and start immediately. Current Parquet-only architecture cannot scale beyond 1-2 intersections efficiently.
 
 **Benefits:**
+
 - 10-100x faster API queries
 - Support for 100+ intersections
 - Spatial queries (proximity, routing, heatmaps)
@@ -270,6 +247,7 @@ VCC API → Data Collector → Dual Write
 ---
 
 ### 2. **Data Integration Roadmap Approval** (Deferred)
+
 - **Status**: Roadmap complete, deferred until after PostgreSQL migration
 - **Document**: `memory-bank/data-integration-roadmap.md`
 - **Key Decisions Needed**:
@@ -277,6 +255,7 @@ VCC API → Data Collector → Dual Write
   - Will revisit after database migration complete
 
 **Proposed Architecture**:
+
 - Pluggable data source framework (abstract interface + registry)
 - Configurable feature definitions (YAML-based)
 - Dynamic feature engine (compute from config, not code)
@@ -284,16 +263,19 @@ VCC API → Data Collector → Dual Write
 - A/B testing framework for index formulas
 
 **Proposed New Data Sources** (Phase 3):
+
 1. Weather API (OpenWeatherMap) - precipitation, visibility, temperature
 2. VDOT Crash Data - historical crashes for validation
 3. Traffic Volume API - additional traffic metrics
 
 ### 2. **Configuration Storage Strategy**
+
 - **Question**: Database vs. files vs. hybrid approach?
 - **Recommendation**: Hybrid - files for defaults, database for runtime changes
 - **Impact**: Affects admin UI implementation and deployment
 
 ### 3. **Admin UI Technology Choice**
+
 - **Options**:
   - React + TypeScript (full-featured, production-grade)
   - Streamlit (rapid prototyping, Python-native)
@@ -302,12 +284,14 @@ VCC API → Data Collector → Dual Write
 - **Decision Needed**: Start with MVP or go straight to production UI?
 
 ### 4. **Empirical Bayes Implementation** (Deferred)
+
 - **Current Status**: Skipped due to data structure mismatch
 - **Decision**: Keep as backlog item or redesign baseline data structure?
 - **Impact**: Low - raw indices are still meaningful
 - **Recommendation**: Address in Phase 2 or 3 of roadmap
 
 ### 5. **PSM Data Scarcity** (Monitoring)
+
 - **Observation**: Only 21 PSM messages vs 1,678 BSM
 - **Question**: Is this normal or a collection issue?
 - **Investigation Needed**: Check VCC API coverage for pedestrian-heavy areas
@@ -315,6 +299,7 @@ VCC API → Data Collector → Dual Write
 - **Action**: Continue monitoring, investigate if needed
 
 ### 6. **Production Deployment** (Future)
+
 - **Current**: Running on localhost
 - **Needed**: Cloud deployment strategy (AWS, Azure, GCP?)
 - **Timeline**: After roadmap Phase 4-5 (admin UI complete)
@@ -335,22 +320,26 @@ VCC API → Data Collector → Dual Write
 **Implemented Formulas:**
 
 1. **VRU Safety Index**:
+
    ```
    I_VRU = (I_VRU_raw × w1) + (V × w2) + (σ_v × w3)
    Where: I_VRU_raw, V, σ_v are normalized values
    ```
 
 2. **Vehicle Safety Index**:
+
    ```
    I_vehicle = (I_vehicle_raw × w4) + (V × w5) + (Δθ × w6) + (S × w7)
    ```
 
 3. **Combined Index**:
+
    ```
    Combined_Index = I_VRU + I_vehicle
    ```
 
 4. **Normalization** (working correctly):
+
    ```
    I_max = max(incident_rates)
    V_max = max(vehicle_volumes)
@@ -367,11 +356,13 @@ VCC API → Data Collector → Dual Write
 ### Remaining Technical Questions
 
 1. **Conflict Detection Thresholds**
+
    - Current: Using default proximity thresholds
    - Question: What are optimal thresholds for different road types?
    - Impact: Medium (affects conflict detection accuracy)
 
 2. **Temporal Aggregation**
+
    - Current: 15-minute intervals (historical), 1-minute (real-time)
    - Question: Are these intervals optimal?
    - Observation: 15-min seems good for statistical significance
@@ -386,6 +377,7 @@ VCC API → Data Collector → Dual Write
 ## Known Issues & Workarounds
 
 ### 1. Empirical Bayes Adjustment - Skipped
+
 **Issue**: Baseline event data structure mismatch (missing 'hour_of_day' column)
 
 **Status**: Non-blocking - using raw indices
@@ -395,6 +387,7 @@ VCC API → Data Collector → Dual Write
 **Future Fix**: Restructure baseline data or redesign EB calculation
 
 ### 2. Limited PSM Data
+
 **Issue**: Only 21 PSM messages collected vs 1,678 BSM
 
 **Status**: Expected - likely no pedestrians in monitoring area
@@ -404,6 +397,7 @@ VCC API → Data Collector → Dual Write
 **Workaround**: System works with BSM-only data
 
 ### 3. Windows Path Mangling (Git Bash)
+
 **Issue**: Git Bash converts Unix paths to Windows paths
 
 **Status**: Known platform limitation
@@ -411,6 +405,7 @@ VCC API → Data Collector → Dual Write
 **Workaround**: Prefix all Docker commands with `MSYS_NO_PATHCONV=1`
 
 **Example**:
+
 ```bash
 MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector ls /app/data/parquet
 ```
@@ -436,90 +431,86 @@ If deploying to production:
 
 ## Next Actions
 
-### Immediate (Now - Phase 7 Validation) 🔥 CURRENT WORK
-1. **Update Crash Correlation Scripts for GCP Database**
-   - Modify `crash_correlation_analysis.py` to load from vdot_crashes table
-   - Add GCP database connection with IP allowlisting
-   - Implement spatial join (crashes × intersections using lat/lon)
-   - Filter crashes to monitored intersection areas
+### Immediate (This Week)
 
-2. **Run Real Crash Correlation Analysis**
-   - Query vdot_crashes for recent time periods
-   - Match crashes with computed safety indices
-   - Compute correlation metrics (precision, recall, F1, Pearson, Spearman)
-   - Analyze weather impact on crash rates
+1. **Review Data Integration Roadmap** 🔥 URGENT
 
-3. **Optimize Plugin Weights**
-   - Use real crash data for weight optimization
-   - Run grid search to find optimal VCC/Weather weights
-   - Cross-validate results
-   - Document recommended weight configuration
-
-4. **Document Validation Results**
-   - Create findings report
-   - Provide recommendations for production weights
-   - Update roadmap with Phase 7 completion
-
-### This Week
-1. **Review Data Integration Roadmap**
    - Read `memory-bank/data-integration-roadmap.md`
    - Approve architecture approach
    - Prioritize phases (1-6)
    - Identify must-have features
 
-2. **Design Admin UI Mockups** (If approved)
+2. **Prototype Plugin System** (If approved)
+
+   - 1-week spike to validate approach
+   - Build minimal plugin framework
+   - Migrate VCC to plugin architecture
+   - Test with dummy second source
+
+3. **Design Admin UI Mockups** (If approved)
    - Create detailed wireframes
    - Get user feedback
    - Finalize screen designs
 
 ### Short-term (Next 1-2 Sprints)
+
 Following the roadmap phases:
 
 **Phase 1: Core Plugin Architecture** (2-3 weeks)
+
 - Implement base data source plugin framework
 - Migrate existing VCC code to plugin
 - Create data source registry
 - Add basic admin API endpoints
 
 **Phase 2: Dynamic Feature Engine** (2-3 weeks)
+
 - Implement configurable feature definitions
 - Create dynamic feature computation engine
 - Migrate existing features to config format
 - Add weight adjustment capability
 
 **Phase 3: New Data Source Integration** (3-4 weeks)
+
 - Implement Weather API plugin
 - Implement VDOT crash data plugin (if accessible)
 - Implement Traffic volume plugin
 - Integration testing
 
 ### Medium-term (Months 2-3)
+
 **Phase 4: Admin UI - Basic Features** (3-4 weeks)
+
 - Build core admin dashboard
 - Data source management UI
 - Feature weight tuning interface
 - Real-time index preview
 
 **Phase 5: Admin UI - Analysis Tools** (2-3 weeks)
+
 - Data exploration and visualization
 - Index comparison tools
 - Feature analysis (correlation, importance)
 - Configuration history/rollback
 
 ### Long-term (Months 4-6)
+
 **Phase 6: A/B Testing Framework** (2-3 weeks)
+
 - Multiple index formula support
 - Parallel index computation
 - Performance metrics
 - Formula selection tools
 
 **Production Deployment** (After Phase 5)
+
 - Cloud infrastructure setup
 - Monitoring and alerting
 - Security hardening
 - Performance optimization
 
 **Additional Enhancements** (Ongoing)
+
 - Machine learning for predictive analytics
 - Mobile app integration
 - Alert/notification system
@@ -529,23 +520,25 @@ Following the roadmap phases:
 
 ## Success Metrics - ✅ ALL ACHIEVED
 
-| Metric | Target | Actual | Status |
-|--------|--------|--------|--------|
-| Data Collection | Continuous | 60s intervals | ✅ |
-| API Response Time | < 500ms | ~200ms | ✅ |
-| Safety Index Computation | Working | 33.44 (real value) | ✅ |
-| System Uptime | > 95% | 100% | ✅ |
-| Docker Deployment | Functional | 4 services running | ✅ |
-| Data Persistence | Yes | Parquet volumes | ✅ |
+| Metric                   | Target     | Actual             | Status |
+| ------------------------ | ---------- | ------------------ | ------ |
+| Data Collection          | Continuous | 60s intervals      | ✅     |
+| API Response Time        | < 500ms    | ~200ms             | ✅     |
+| Safety Index Computation | Working    | 33.44 (real value) | ✅     |
+| System Uptime            | > 95%      | 100%               | ✅     |
+| Docker Deployment        | Functional | 4 services running | ✅     |
+| Data Persistence         | Yes        | Parquet volumes    | ✅     |
 
 ---
 
 ## Team Knowledge
 
 ### Key Learning: Feature Engineering with Time Intervals
+
 **Challenge**: Real-time (1-min) and historical (15-min) intervals caused column name conflicts
 
 **Solution**: Standardize to 'time_15min' for downstream compatibility while supporting variable intervals:
+
 ```python
 time_col_name = f'time_{interval_minutes}min'
 features.rename(columns={'time_interval': time_col_name}, inplace=True)
@@ -556,15 +549,18 @@ if time_col_name != 'time_15min':
 ```
 
 ### Key Learning: Docker Volume Persistence
+
 **Issue**: Data lost on container restart
 
 **Solution**: Named volumes in docker-compose.yml:
+
 ```yaml
 volumes:
   - parquet_data:/app/data/parquet
 ```
 
 ### Key Learning: Windows Docker Commands
+
 **Issue**: Git Bash mangles paths
 
 **Solution**: Always use `MSYS_NO_PATHCONV=1` prefix
@@ -574,6 +570,7 @@ volumes:
 ## Documentation
 
 ### Current System
+
 - **Operational Guide**: `memory-bank/operational-guide.md` - Complete operational manual
 - **Troubleshooting**: `memory-bank/troubleshooting.md` - Common issues and solutions
 - **Sprint Plan**: `construction/sprint-plan.md` - Completed sprint retrospective
@@ -582,6 +579,7 @@ volumes:
 - **API Docs**: http://localhost:8001/docs - Interactive API documentation (when running)
 
 ### Future Planning
+
 - **Data Integration Roadmap**: `memory-bank/data-integration-roadmap.md` - Next generation architecture plan
   - Pluggable data sources
   - Configurable safety index
@@ -591,6 +589,6 @@ volumes:
 ---
 
 **Current Status**: ✅ PRODUCTION-READY → 📋 PLANNING NEXT GENERATION
-**Last Code Change**: 2025-11-20
-**Last Planning Update**: 2025-11-20 (Data Integration Roadmap)
+**Last Code Change**: 2025-11-21
+**Last Planning Update**: 2025-11-21 (Sensitivity Analysis)
 **Next Action**: Review and approve roadmap → Begin Phase 1 implementation

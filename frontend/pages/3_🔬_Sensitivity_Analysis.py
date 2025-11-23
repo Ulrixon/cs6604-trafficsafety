@@ -408,18 +408,22 @@ def render_sensitivity_analysis():
 
     # Date/time selection
     st.sidebar.subheader("Time Range")
-    
+
     default_start_date = datetime(2025, 11, 1)
     default_end_date = datetime(2025, 11, 1)
-    
+
     col_d1, col_d2 = st.sidebar.columns(2)
     start_date = col_d1.date_input("Start Date", value=default_start_date)
     end_date = col_d2.date_input("End Date", value=default_end_date)
-    
+
     col_t1, col_t2 = st.sidebar.columns(2)
-    start_hour = col_t1.time_input("Start Time", value=datetime.strptime("08:00", "%H:%M").time())
-    end_hour = col_t2.time_input("End Time", value=datetime.strptime("18:00", "%H:%M").time())
-    
+    start_hour = col_t1.time_input(
+        "Start Time", value=datetime.strptime("08:00", "%H:%M").time()
+    )
+    end_hour = col_t2.time_input(
+        "End Time", value=datetime.strptime("18:00", "%H:%M").time()
+    )
+
     start_time = datetime.combine(start_date, start_hour)
     end_time = datetime.combine(end_date, end_hour)
 

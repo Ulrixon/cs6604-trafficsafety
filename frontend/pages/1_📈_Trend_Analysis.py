@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
 from typing import Optional
 from datetime import datetime, timedelta
 import requests
@@ -63,25 +64,27 @@ def get_safety_score_trend(
     start_time: datetime,
     end_time: datetime,
     bin_minutes: int = 15,
+    include_correlations: bool = True,
 ):
-    """Fetch safety score trend over time range (returns MCDM and RT-SI separately)."""
+    """Fetch safety score trend over time range with optional correlation analysis."""
     try:
         params = {
             "intersection": intersection,
             "start_time": start_time.isoformat(),
             "end_time": end_time.isoformat(),
             "bin_minutes": bin_minutes,
+            "include_correlations": include_correlations,
         }
         response = requests.get(f"{API_BASE_URL}/time/range", params=params, timeout=60)
         response.raise_for_status()
         return response.json()
     except requests.HTTPError as e:
         if e.response.status_code == 404:
-            return []
+            return {"time_series": [], "correlation_analysis": None, "metadata": {}}
         raise
     except Exception as e:
         st.error(f"Error fetching trend data: {e}")
-        return []
+        return {"time_series": [], "correlation_analysis": None, "metadata": {}}
 
 
 def blend_safety_scores(mcdm: float, rt_si: Optional[float], alpha: float) -> float:
@@ -292,6 +295,297 @@ def create_trend_chart(df: pd.DataFrame, metric: str, title: str, color: str):
     return fig
 
 
+def render_correlation_analysis(correlation_data: dict):
+    """Render comprehensive correlation analysis visualizations."""
+    st.markdown("## 🔬 Correlation Analysis: Safety Mechanism Validation")
+    st.caption(
+        "Statistical analysis showing how each component corresponds to real safety mechanisms"
+    )
+
+    if not correlation_data or "error" in correlation_data:
+        st.warning(
+            "⚠️ Correlation analysis not available. "
+            "Minimum 3 data points required for statistical analysis."
+        )
+        if "error" in correlation_data:
+            st.error(f"Error: {correlation_data['error']}")
+        return
+
+    # Summary Section
+    summary = correlation_data.get("summary", {})
+    if summary:
+        st.markdown("### 📊 Statistical Summary")
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric(
+                "Valid Relationships",
+                summary.get("valid_relationships", 0),
+                help="Number of statistically valid correlations (p < 0.05)",
+            )
+
+        with col2:
+            validation_pct = summary.get("validation_percentage", 0)
+            st.metric(
+                "Validation Rate",
+                f"{validation_pct:.1f}%",
+                help="Percentage of safety mechanisms validated by monotonic trend analysis",
+            )
+
+        with col3:
+            st.metric(
+                "Strong Correlations",
+                summary.get("strong_correlations", 0),
+                help="Correlations with |r| > 0.7",
+            )
+
+        with col4:
+            st.metric(
+                "Moderate Correlations",
+                summary.get("moderate_correlations", 0),
+                help="Correlations with 0.3 < |r| < 0.7",
+            )
+
+    st.divider()
+
+    # Variable Correlations Section
+    var_corr = correlation_data.get("variable_correlations", {})
+    if var_corr:
+        with st.expander("🔗 **Variable Correlations: Traffic vs Safety Indices**", expanded=True):
+            st.caption(
+                "Pearson (linear) and Spearman (monotonic) correlations between traffic variables and safety indices"
+            )
+
+            # Organize correlations by group
+            groups = {}
+            for key, corr in var_corr.items():
+                var1, var2 = key.split("_vs_")
+                # Group by second variable (safety index)
+                if var2 not in groups:
+                    groups[var2] = []
+                groups[var2].append((var1, corr))
+
+            # Create heatmaps for each group
+            for safety_index, correlations in groups.items():
+                st.markdown(f"#### 📈 Correlations with `{safety_index}`")
+
+                # Prepare data for heatmap
+                variables = [c[0] for c in correlations]
+                pearson_values = [c[1]["pearson"]["correlation"] for c in correlations]
+                spearman_values = [
+                    c[1]["spearman"]["correlation"] for c in correlations
+                ]
+                pearson_pvals = [c[1]["pearson"]["p_value"] for c in correlations]
+                spearman_pvals = [c[1]["spearman"]["p_value"] for c in correlations]
+
+                # Create heatmap
+                fig = go.Figure()
+
+                # Add Pearson correlation bars
+                fig.add_trace(
+                    go.Bar(
+                        name="Pearson (Linear)",
+                        x=variables,
+                        y=pearson_values,
+                        marker_color=[
+                            "#e74c3c" if p < 0.05 else "#95a5a6" for p in pearson_pvals
+                        ],
+                        text=[f"{v:.3f}" for v in pearson_values],
+                        textposition="outside",
+                        hovertemplate="<b>%{x}</b><br>Pearson: %{y:.3f}<br>p-value: %{customdata:.4f}<extra></extra>",
+                        customdata=pearson_pvals,
+                    )
+                )
+
+                # Add Spearman correlation bars
+                fig.add_trace(
+                    go.Bar(
+                        name="Spearman (Monotonic)",
+                        x=variables,
+                        y=spearman_values,
+                        marker_color=[
+                            "#3498db" if p < 0.05 else "#bdc3c7" for p in spearman_pvals
+                        ],
+                        text=[f"{v:.3f}" for v in spearman_values],
+                        textposition="outside",
+                        hovertemplate="<b>%{x}</b><br>Spearman: %{y:.3f}<br>p-value: %{customdata:.4f}<extra></extra>",
+                        customdata=spearman_pvals,
+                    )
+                )
+
+                fig.update_layout(
+                    title=f"Correlations with {safety_index}",
+                    xaxis_title="Traffic Variables",
+                    yaxis_title="Correlation Coefficient",
+                    barmode="group",
+                    height=400,
+                    yaxis_range=[-1.1, 1.1],
+                    hovermode="x unified",
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Show detailed stats in table
+                corr_df = pd.DataFrame(
+                    {
+                        "Variable": variables,
+                        "Pearson r": pearson_values,
+                        "Pearson p": pearson_pvals,
+                        "Spearman ρ": spearman_values,
+                        "Spearman p": spearman_pvals,
+                        "Pearson Significant": [
+                            "✅" if p < 0.05 else "❌" for p in pearson_pvals
+                        ],
+                        "Spearman Significant": [
+                            "✅" if p < 0.05 else "❌" for p in spearman_pvals
+                        ],
+                    }
+                )
+
+                st.dataframe(
+                    corr_df.style.format(
+                        {
+                            "Pearson r": "{:.3f}",
+                            "Pearson p": "{:.4f}",
+                            "Spearman ρ": "{:.3f}",
+                            "Spearman p": "{:.4f}",
+                        }
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+    st.divider()
+
+    # Monotonic Trends Section
+    monotonic = correlation_data.get("monotonic_trends", {})
+    if monotonic:
+        with st.expander(
+            "📈 **Monotonic Trend Analysis: Safety Mechanism Validation**", expanded=True
+        ):
+            st.caption(
+                "Validates specific safety hypotheses (e.g., 'higher speed variance → higher incidents')"
+            )
+
+            # Count validated vs not validated
+            validated = [h for h in monotonic.values() if h.get("validated")]
+            not_validated = [h for h in monotonic.values() if not h.get("validated")]
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric(
+                    "✅ Validated Hypotheses",
+                    len(validated),
+                    help="Trends matching expected direction with p < 0.05",
+                )
+            with col2:
+                st.metric(
+                    "❌ Not Validated",
+                    len(not_validated),
+                    help="Trends not matching expected direction or not significant",
+                )
+
+            st.markdown("---")
+
+            # Display each hypothesis
+            for hypothesis_name, hypothesis_data in monotonic.items():
+                validated = hypothesis_data.get("validated", False)
+                expected_dir = hypothesis_data.get("expected_direction", "")
+                spearman_corr = hypothesis_data.get("spearman_correlation", 0)
+                p_value = hypothesis_data.get("p_value", 1.0)
+                description = hypothesis_data.get("description", "")
+
+                # Status badge
+                if validated:
+                    badge = "✅ **VALIDATED**"
+                    color = "#27ae60"
+                else:
+                    badge = "❌ **NOT VALIDATED**"
+                    color = "#e74c3c"
+
+                with st.container():
+                    st.markdown(
+                        f'<div style="border-left: 4px solid {color}; padding-left: 15px; margin: 10px 0;">'
+                        f"<p style='margin: 0;'><strong>{hypothesis_name.replace('_', ' ').title()}</strong> {badge}</p>"
+                        f"<p style='margin: 5px 0; font-size: 0.9em; color: #7f8c8d;'>{description}</p>"
+                        f"<p style='margin: 5px 0; font-size: 0.85em;'>"
+                        f"Expected: <strong>{expected_dir}</strong> | "
+                        f"Spearman ρ: <strong>{spearman_corr:.3f}</strong> | "
+                        f"p-value: <strong>{p_value:.4f}</strong>"
+                        f"</p></div>",
+                        unsafe_allow_html=True,
+                    )
+
+    st.divider()
+
+    # Partial Correlations Section
+    partial_corr = correlation_data.get("partial_correlations", {})
+    if partial_corr:
+        with st.expander(
+            "🎯 **Partial Correlations: Independent Contributions**", expanded=True
+        ):
+            st.caption(
+                "Shows the independent contribution of each factor after controlling for confounders"
+            )
+
+            # Extract data for visualization
+            analyses = []
+            for analysis_name, analysis_data in partial_corr.items():
+                analyses.append(
+                    {
+                        "Analysis": analysis_name.replace("_", " ").title(),
+                        "Target": analysis_data.get("target", ""),
+                        "Variable": analysis_data.get("variable", ""),
+                        "Controls": ", ".join(analysis_data.get("controlling_for", [])),
+                        "Partial r": analysis_data.get("partial_correlation", 0),
+                        "p-value": analysis_data.get("p_value", 1.0),
+                        "Interpretation": analysis_data.get("interpretation", ""),
+                    }
+                )
+
+            if analyses:
+                # Create bar chart
+                df_partial = pd.DataFrame(analyses)
+
+                fig = go.Figure()
+
+                fig.add_trace(
+                    go.Bar(
+                        x=df_partial["Variable"],
+                        y=df_partial["Partial r"],
+                        marker_color=[
+                            "#2ecc71" if p < 0.05 else "#95a5a6"
+                            for p in df_partial["p-value"]
+                        ],
+                        text=[f"{v:.3f}" for v in df_partial["Partial r"]],
+                        textposition="outside",
+                        hovertemplate="<b>%{x}</b><br>"
+                        + "Partial r: %{y:.3f}<br>"
+                        + "p-value: %{customdata:.4f}<extra></extra>",
+                        customdata=df_partial["p-value"],
+                    )
+                )
+
+                fig.update_layout(
+                    title="Independent Contributions of Factors (Partial Correlations)",
+                    xaxis_title="Variable",
+                    yaxis_title="Partial Correlation Coefficient",
+                    height=400,
+                    yaxis_range=[-1.1, 1.1],
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Show detailed table
+                st.dataframe(
+                    df_partial.style.format(
+                        {"Partial r": "{:.3f}", "p-value": "{:.4f}"}
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+
 def render_trend_view(
     intersection: str,
     start_time: datetime,
@@ -308,7 +602,18 @@ def render_trend_view(
         return
 
     with st.spinner("Fetching trend data..."):
-        data = get_safety_score_trend(intersection, start_time, end_time, bin_minutes)
+        response = get_safety_score_trend(intersection, start_time, end_time, bin_minutes)
+
+    # Handle new response structure with time_series and correlation_analysis
+    if isinstance(response, dict):
+        data = response.get("time_series", [])
+        correlation_analysis = response.get("correlation_analysis")
+        metadata = response.get("metadata", {})
+    else:
+        # Fallback for old format (list)
+        data = response
+        correlation_analysis = None
+        metadata = {}
 
     if not data:
         st.warning(
@@ -682,6 +987,19 @@ def render_trend_view(
     )
 
     st.plotly_chart(fig_combined, use_container_width=True)
+
+    st.divider()
+
+    # Correlation Analysis Section
+    if correlation_analysis:
+        render_correlation_analysis(correlation_analysis)
+    elif len(df) >= 3:
+        st.info(
+            "💡 Correlation analysis is available for this time range but was not included. "
+            "This may be due to a backend error or missing scipy package."
+        )
+
+    st.divider()
 
     # Data table
     with st.expander("📊 View Data Table"):

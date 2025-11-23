@@ -12,8 +12,8 @@ alembic==1.14.0
 
 # Data processing
 pandas==2.2.3
-numpy==2.2.1
-scipy==1.11.4
+numpy==1.26.4
+scipy==1.13.0
 
 # Trino connection (from notebook)
 trino==0.336.0

@@ -143,37 +143,64 @@ def list_intersections(
         }
 
         # Try to find matching BSM intersection and calculate RT-SI
-        # Use intersection_id to find crash intersection
-        crash_intersection_id = intersection.intersection_id
-
-        # Try to find corresponding BSM intersection name
+        # First, find corresponding BSM intersection name
         bsm_intersection_name = None
         for bsm_name in bsm_intersections:
-            # Simple heuristic: check if names are similar
+            # Normalize both names for comparison: remove hyphens and spaces
+            normalized_bsm = bsm_name.lower().replace("-", "").replace(" ", "")
+            normalized_intersection = (
+                intersection.intersection_name.lower().replace("-", "").replace(" ", "")
+            )
+
+            # Check if names match (exact or contains)
             if (
-                bsm_name.lower().replace("-", " ")
-                in intersection.intersection_name.lower()
+                normalized_bsm == normalized_intersection
+                or normalized_bsm in normalized_intersection
             ):
                 bsm_intersection_name = bsm_name
+                logger.info(
+                    f"Matched BSM intersection '{bsm_name}' to '{intersection.intersection_name}'"
+                )
                 break
 
         if bsm_intersection_name:
-            try:
-                rt_si_result = rt_si_service.calculate_rt_si(
-                    crash_intersection_id,
-                    current_time,
-                    bin_minutes=bin_minutes,
-                    realtime_intersection=bsm_intersection_name,
-                    lookback_hours=168,  # Look back up to 1 week for latest available data
-                )
+            # Use find_crash_intersection_for_bsm to get the proper crash intersection ID
+            crash_intersection_id = find_crash_intersection_for_bsm(
+                bsm_intersection_name, db_client
+            )
 
-                if rt_si_result is not None:
-                    result_data["rt_si_score"] = rt_si_result["RT_SI"]
-                    result_data["vru_index"] = rt_si_result["VRU_index"]
-                    result_data["vehicle_index"] = rt_si_result["VEH_index"]
-            except Exception as e:
+            if crash_intersection_id:
+                logger.info(
+                    f"Calculating RT-SI for {intersection.intersection_name} (Crash ID: {crash_intersection_id}, BSM: {bsm_intersection_name})"
+                )
+                try:
+                    rt_si_result = rt_si_service.calculate_rt_si(
+                        crash_intersection_id,
+                        current_time,
+                        bin_minutes=bin_minutes,
+                        realtime_intersection=bsm_intersection_name,
+                        lookback_hours=168,  # Look back up to 1 week for latest available data
+                    )
+
+                    if rt_si_result is not None:
+                        result_data["rt_si_score"] = rt_si_result["RT_SI"]
+                        result_data["vru_index"] = rt_si_result["VRU_index"]
+                        result_data["vehicle_index"] = rt_si_result["VEH_index"]
+                        logger.info(
+                            f"RT-SI calculated successfully: {rt_si_result['RT_SI']:.2f}"
+                        )
+                    else:
+                        logger.warning(
+                            f"RT-SI calculation returned None for {intersection.intersection_name}"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"Could not calculate RT-SI for {intersection.intersection_name}: {e}",
+                        exc_info=True,
+                    )
+            else:
                 logger.warning(
-                    f"Could not calculate RT-SI for {intersection.intersection_name}: {e}"
+                    f"Could not find crash intersection ID for BSM '{bsm_intersection_name}'"
                 )
 
         results.append(IntersectionWithRTSI(**result_data))

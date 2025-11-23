@@ -124,15 +124,21 @@ class RTSIService:
         return r_hat
 
     def get_realtime_data(
-        self, intersection_id, timestamp: datetime, bin_minutes: int = 15
+        self,
+        intersection_id,
+        timestamp: datetime,
+        bin_minutes: int = 15,
+        lookback_hours: int = 168,
     ) -> Dict:
         """
         Get real-time traffic data for the given time bin.
+        If no data available at the exact timestamp, looks back up to lookback_hours to find the latest available data.
 
         Args:
             intersection_id: Can be int (crash intersection ID) or str (BSM intersection name)
             timestamp: Time to query data for
             bin_minutes: Time bin size in minutes
+            lookback_hours: Maximum hours to look back for data if exact timestamp unavailable (default: 168 = 1 week)
 
         Returns dict with:
         - vehicle_count: number of vehicles
@@ -141,12 +147,75 @@ class RTSIService:
         - speed_variance: variance in speed
         - free_flow_speed: free-flow speed (85th percentile)
         """
-        # Query for the specific 15-minute bin
+        # First try the exact time bin
         end_time = timestamp + timedelta(minutes=bin_minutes)
-
-        # Convert datetime to microseconds (BIGINT format used in the tables)
         start_time_us = int(timestamp.timestamp() * 1000000)
         end_time_us = int(end_time.timestamp() * 1000000)
+
+        # Check if data exists for this time bin
+        check_query = """
+        SELECT COUNT(*) as count
+        FROM "vehicle-count"
+        WHERE intersection = %(intersection_id)s::text
+          AND publish_timestamp >= %(start_time)s
+          AND publish_timestamp < %(end_time)s;
+        """
+
+        check_result = self.db_client.execute_query(
+            check_query,
+            {
+                "intersection_id": intersection_id,
+                "start_time": start_time_us,
+                "end_time": end_time_us,
+            },
+        )
+
+        has_data = check_result and check_result[0]["count"] > 0
+
+        # If no data at exact time, find the latest available data within lookback window
+        if not has_data:
+            lookback_start = timestamp - timedelta(hours=lookback_hours)
+            lookback_start_us = int(lookback_start.timestamp() * 1000000)
+
+            latest_query = """
+            SELECT MAX(publish_timestamp) as latest_timestamp
+            FROM "vehicle-count"
+            WHERE intersection = %(intersection_id)s::text
+              AND publish_timestamp >= %(lookback_start)s
+              AND publish_timestamp < %(end_time)s;
+            """
+
+            latest_result = self.db_client.execute_query(
+                latest_query,
+                {
+                    "intersection_id": intersection_id,
+                    "lookback_start": lookback_start_us,
+                    "end_time": end_time_us,
+                },
+            )
+
+            if latest_result and latest_result[0]["latest_timestamp"]:
+                latest_timestamp_us = latest_result[0]["latest_timestamp"]
+                # Use a bin_minutes window ending at the latest timestamp
+                start_time_us = latest_timestamp_us - (bin_minutes * 60 * 1000000)
+                end_time_us = latest_timestamp_us
+                latest_dt = datetime.fromtimestamp(latest_timestamp_us / 1000000)
+                logger.info(
+                    f"No data at {timestamp}, using latest available data from {latest_dt} "
+                    f"({(timestamp - latest_dt).total_seconds() / 3600:.1f} hours ago)"
+                )
+            else:
+                logger.warning(
+                    f"No data found for intersection {intersection_id} within {lookback_hours} hours of {timestamp}"
+                )
+                # Return empty data
+                return {
+                    "vehicle_count": 0,
+                    "vru_count": 0,
+                    "avg_speed": 0.0,
+                    "speed_variance": 0.0,
+                    "free_flow_speed": 30.0,
+                }
 
         # Query vehicle count
         vehicle_query = """
@@ -342,9 +411,11 @@ class RTSIService:
         timestamp: datetime,
         bin_minutes: int = 15,
         realtime_intersection: Optional[str] = None,
+        lookback_hours: int = 168,
     ) -> Optional[Dict]:
         """
         Calculate Real-Time Safety Index for an intersection at a given time.
+        If no data available at the exact timestamp, looks back up to lookback_hours for latest data.
 
         Args:
             intersection_id: Crash intersection ID for historical data
@@ -352,6 +423,7 @@ class RTSIService:
             bin_minutes: Time bin size in minutes
             realtime_intersection: Optional string intersection name for real-time data
                                   (e.g., 'glebe-potomac'). If None, uses intersection_id.
+            lookback_hours: Maximum hours to look back for data if exact timestamp unavailable (default: 168 = 1 week)
 
         Returns dict with all components of RT-SI calculation.
         """
@@ -373,7 +445,9 @@ class RTSIService:
             rt_intersection = (
                 realtime_intersection if realtime_intersection else intersection_id
             )
-            rt_data = self.get_realtime_data(rt_intersection, timestamp, bin_minutes)
+            rt_data = self.get_realtime_data(
+                rt_intersection, timestamp, bin_minutes, lookback_hours
+            )
 
             # Check if we have sufficient data
             if rt_data["vehicle_count"] == 0 and rt_data["vru_count"] == 0:

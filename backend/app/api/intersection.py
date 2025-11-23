@@ -260,15 +260,11 @@ def get_safety_score_at_time(
                     f"(blending to be done in frontend)"
                 )
             else:
-                logger.warning(
-                    f"No RT-SI data for {intersection} at {time}"
-                )
+                logger.warning(f"No RT-SI data for {intersection} at {time}")
         except Exception as e:
             logger.error(f"Error calculating RT-SI: {e}", exc_info=True)
     else:
-        logger.warning(
-            f"No crash intersection found for '{intersection}'"
-        )
+        logger.warning(f"No crash intersection found for '{intersection}'")
 
     return result
 
@@ -287,7 +283,7 @@ def get_safety_score_trend(
 
     Returns time series data with both MCDM and RT-SI scores for client-side blending:
     - mcdm_index: Long-term prioritization score (0-100)
-    - rt_si_score: Real-time safety index (0-100) 
+    - rt_si_score: Real-time safety index (0-100)
     - vru_index: VRU sub-index (0-100)
     - vehicle_index: Vehicle sub-index (0-100)
 
@@ -366,8 +362,6 @@ def get_safety_score_trend(
         except Exception as e:
             logger.error(f"Error calculating RT-SI trend: {e}", exc_info=True)
     else:
-        logger.warning(
-            f"No crash intersection found for '{intersection}'"
-        )
+        logger.warning(f"No crash intersection found for '{intersection}'")
 
     return results

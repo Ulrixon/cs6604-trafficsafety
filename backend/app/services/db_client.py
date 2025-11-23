@@ -10,7 +10,7 @@ from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from typing import List, Dict, Any, Optional
 from contextlib import contextmanager
-import load_dotenv
+from dotenv import load_dotenv
 import logging
 
 logger = logging.getLogger(__name__)

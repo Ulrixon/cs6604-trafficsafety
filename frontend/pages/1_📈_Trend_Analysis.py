@@ -36,9 +36,7 @@ def get_available_intersections():
         return []
 
 
-def get_safety_score_at_time(
-    intersection: str, time: datetime, bin_minutes: int = 15
-):
+def get_safety_score_at_time(intersection: str, time: datetime, bin_minutes: int = 15):
     """Fetch safety score for specific time (returns MCDM and RT-SI separately)."""
     try:
         params = {
@@ -88,7 +86,7 @@ def get_safety_score_trend(
 
 def blend_safety_scores(mcdm: float, rt_si: Optional[float], alpha: float) -> float:
     """Blend MCDM and RT-SI scores with alpha coefficient.
-    
+
     Formula: Final = α*RT-SI + (1-α)*MCDM
     If RT-SI is None, returns MCDM only.
     """
@@ -114,8 +112,8 @@ def render_single_time_view(
         return
 
     # Blend scores in frontend
-    mcdm = data.get('mcdm_index', data.get('safety_score', 50.0))
-    rt_si = data.get('rt_si_score')
+    mcdm = data.get("mcdm_index", data.get("safety_score", 50.0))
+    rt_si = data.get("rt_si_score")
     final_index = blend_safety_scores(mcdm, rt_si, alpha)
 
     # Display metrics in cards
@@ -316,9 +314,7 @@ def render_trend_view(
         return
 
     with st.spinner("Fetching trend data..."):
-        data = get_safety_score_trend(
-            intersection, start_time, end_time, bin_minutes
-        )
+        data = get_safety_score_trend(intersection, start_time, end_time, bin_minutes)
 
     if not data:
         st.warning(
@@ -331,15 +327,15 @@ def render_trend_view(
     # Convert to DataFrame
     df = pd.DataFrame(data)
     df["time_bin"] = pd.to_datetime(df["time_bin"])
-    
+
     # Blend scores in frontend for each row
     df["final_safety_index"] = df.apply(
         lambda row: blend_safety_scores(
-            row.get('mcdm_index', row.get('safety_score', 50.0)),
-            row.get('rt_si_score'),
-            alpha
+            row.get("mcdm_index", row.get("safety_score", 50.0)),
+            row.get("rt_si_score"),
+            alpha,
         ),
-        axis=1
+        axis=1,
     )
 
     st.success(f"✅ Found **{len(df)}** data points for **{intersection}**")

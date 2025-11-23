@@ -10,7 +10,9 @@ import json
 from datetime import datetime, timedelta
 
 # Configuration
-BASE_URL = "https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safety/index"
+BASE_URL = (
+    "https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safety/index"
+)
 INTERSECTION = "glebe-potomac"
 START_TIME = "2025-11-01T08:00:00"
 END_TIME = "2025-11-01T18:00:00"
@@ -66,15 +68,21 @@ def test_sensitivity_analysis():
 
             # Basic info
             print(f"\n📍 Intersection: {data['intersection']}")
-            print(f"⏱️  Time Range: {data['time_range']['start']} to {data['time_range']['end']}")
-            print(f"🔧 Perturbation: ±{data['perturbation_settings']['perturbation_pct']*100}%")
+            print(
+                f"⏱️  Time Range: {data['time_range']['start']} to {data['time_range']['end']}"
+            )
+            print(
+                f"🔧 Perturbation: ±{data['perturbation_settings']['perturbation_pct']*100}%"
+            )
             print(f"🎲 Samples: {data['perturbation_settings']['n_samples']}")
 
             # Baseline
             baseline = data["baseline"]
             print(f"\n📊 Baseline RT-SI Scores:")
             print(f"  Time Points: {len(baseline['timestamps'])}")
-            print(f"  Mean Score: {sum(baseline['rt_si_scores'])/len(baseline['rt_si_scores']):.2f}")
+            print(
+                f"  Mean Score: {sum(baseline['rt_si_scores'])/len(baseline['rt_si_scores']):.2f}"
+            )
             print(f"  Min Score: {min(baseline['rt_si_scores']):.2f}")
             print(f"  Max Score: {max(baseline['rt_si_scores']):.2f}")
 
@@ -129,7 +137,9 @@ def test_sensitivity_analysis():
 
             # Find most impactful parameters
             high_impact = [
-                p for p, info in importance.items() if info["interpretation"] == "High Impact"
+                p
+                for p, info in importance.items()
+                if info["interpretation"] == "High Impact"
             ]
             if high_impact:
                 print(f"\n⚠️  Most Sensitive Parameters: {', '.join(high_impact)}")

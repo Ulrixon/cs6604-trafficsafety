@@ -10,7 +10,9 @@ import json
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safety/index"
+BASE_URL = (
+    "https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safety/index"
+)
 INTERSECTION = "glebe-potomac"
 
 # Test date range with likely no data (11/13-11/16)
@@ -60,43 +62,53 @@ def test_zero_data_handling():
             if isinstance(data, dict):
                 time_series = data.get("time_series", [])
                 metadata = data.get("metadata", {})
-                
+
                 print(f"📊 Response Structure: New format (with time_series)")
                 print(f"   Metadata: {metadata}")
             else:
                 time_series = data
                 print(f"📊 Response Structure: Old format (list)")
-            
+
             print()
             print(f"📈 Total Data Points: {len(time_series)}")
-            
+
             if len(time_series) == 0:
                 print("❌ NO DATA RETURNED - Issue not fixed!")
-                print("   Expected: All time bins should be present even with zero traffic")
+                print(
+                    "   Expected: All time bins should be present even with zero traffic"
+                )
                 return
-            
+
             # Calculate expected number of bins
             start = datetime.fromisoformat(START_TIME)
             end = datetime.fromisoformat(END_TIME)
             expected_bins = int((end - start).total_seconds() / (BIN_MINUTES * 60))
-            
+
             print(f"📊 Expected Time Bins: {expected_bins}")
             print(f"📊 Actual Time Bins: {len(time_series)}")
-            
+
             if len(time_series) >= expected_bins:
                 print("✅ All time bins present!")
             else:
                 print(f"⚠️  Missing {expected_bins - len(time_series)} time bins")
-            
+
             print()
-            
+
             # Analyze RT-SI data
             rt_si_points = [p for p in time_series if p.get("rt_si_score") is not None]
-            zero_traffic_points = [p for p in time_series if p.get("vehicle_count", 0) == 0 and p.get("vru_count", 0) == 0]
-            
-            print(f"🎯 RT-SI Available: {len(rt_si_points)} / {len(time_series)} points")
-            print(f"🚦 Zero Traffic Points: {len(zero_traffic_points)} / {len(time_series)} points")
-            
+            zero_traffic_points = [
+                p
+                for p in time_series
+                if p.get("vehicle_count", 0) == 0 and p.get("vru_count", 0) == 0
+            ]
+
+            print(
+                f"🎯 RT-SI Available: {len(rt_si_points)} / {len(time_series)} points"
+            )
+            print(
+                f"🚦 Zero Traffic Points: {len(zero_traffic_points)} / {len(time_series)} points"
+            )
+
             if len(zero_traffic_points) > 0:
                 print()
                 print("📋 Sample Zero Traffic Points:")
@@ -105,15 +117,15 @@ def test_zero_data_handling():
                     print(f"     Vehicle Count: {point.get('vehicle_count', 'N/A')}")
                     print(f"     VRU Count: {point.get('vru_count', 'N/A')}")
                     print(f"     RT-SI Score: {point.get('rt_si_score', 'N/A')}")
-                    
-                    if point.get('rt_si_score') is not None:
+
+                    if point.get("rt_si_score") is not None:
                         print(f"     ✅ RT-SI computed with zero traffic!")
                     else:
                         print(f"     ❌ RT-SI missing for zero traffic")
-            
+
             # Check if all points have RT-SI
             all_have_rtsi = all(p.get("rt_si_score") is not None for p in time_series)
-            
+
             print()
             print("=" * 80)
             if all_have_rtsi and len(time_series) >= expected_bins:
@@ -135,6 +147,7 @@ def test_zero_data_handling():
     except Exception as e:
         print(f"❌ Unexpected error: {e}")
         import traceback
+
         traceback.print_exc()
 
 

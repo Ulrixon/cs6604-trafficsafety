@@ -886,10 +886,12 @@ class RTSIService:
         # Generate ALL time bins in range (not just those with data)
         result_map = {}
         current_time = start_time
-        
+
         while current_time < end_time:
             # Check if we have vehicle data for this bin
-            veh_data = vehicle_map.get(current_time, {"vehicle_count": 0, "turning_count": 0})
+            veh_data = vehicle_map.get(
+                current_time, {"vehicle_count": 0, "turning_count": 0}
+            )
             speed_data = speed_map.get(
                 current_time,
                 {
@@ -899,7 +901,7 @@ class RTSIService:
                 },
             )
             vru_data = vru_map.get(current_time, {"vru_count": 0})
-            
+
             # Include ALL time bins, even with zero counts
             result_map[current_time] = {
                 "vehicle_count": veh_data["vehicle_count"],
@@ -907,7 +909,7 @@ class RTSIService:
                 "vru_count": vru_data["vru_count"],
                 **speed_data,
             }
-            
+
             # Move to next time bin
             current_time += timedelta(minutes=bin_minutes)
 

@@ -256,11 +256,16 @@ class SensitivityAnalysisService:
             },
             "stability_metrics": stability_metrics,
             "parameter_importance": parameter_importance,
-            "perturbed_samples": parameter_details[:10],  # Return first 10 for inspection
+            "perturbed_samples": parameter_details[
+                :10
+            ],  # Return first 10 for inspection
         }
 
     def _compute_stability_metrics(
-        self, baseline: List[float], perturbed_list: List[List[float]], timestamps: List[str]
+        self,
+        baseline: List[float],
+        perturbed_list: List[List[float]],
+        timestamps: List[str],
     ) -> Dict:
         """
         Compute stability metrics comparing baseline to perturbed results.
@@ -308,16 +313,36 @@ class SensitivityAnalysisService:
         return {
             "spearman_correlations": {
                 "values": spearman_correlations,
-                "mean": float(np.mean(spearman_correlations)) if spearman_correlations else 0.0,
-                "std": float(np.std(spearman_correlations)) if spearman_correlations else 0.0,
-                "min": float(np.min(spearman_correlations)) if spearman_correlations else 0.0,
-                "max": float(np.max(spearman_correlations)) if spearman_correlations else 0.0,
+                "mean": (
+                    float(np.mean(spearman_correlations))
+                    if spearman_correlations
+                    else 0.0
+                ),
+                "std": (
+                    float(np.std(spearman_correlations))
+                    if spearman_correlations
+                    else 0.0
+                ),
+                "min": (
+                    float(np.min(spearman_correlations))
+                    if spearman_correlations
+                    else 0.0
+                ),
+                "max": (
+                    float(np.max(spearman_correlations))
+                    if spearman_correlations
+                    else 0.0
+                ),
             },
             "score_changes": {
                 "mean": float(np.mean(score_differences)) if score_differences else 0.0,
                 "std": float(np.std(score_differences)) if score_differences else 0.0,
                 "max": float(np.max(score_differences)) if score_differences else 0.0,
-                "percentile_95": float(np.percentile(score_differences, 95)) if score_differences else 0.0,
+                "percentile_95": (
+                    float(np.percentile(score_differences, 95))
+                    if score_differences
+                    else 0.0
+                ),
             },
             "tier_changes": {
                 "values": tier_changes,
@@ -387,10 +412,10 @@ class SensitivityAnalysisService:
                 importance[param] = {
                     "correlation": float(corr) if not np.isnan(corr) else 0.0,
                     "interpretation": (
-                        "High Impact" if abs(corr) > 0.5 else
-                        "Moderate Impact" if abs(corr) > 0.3 else
-                        "Low Impact"
-                    )
+                        "High Impact"
+                        if abs(corr) > 0.5
+                        else "Moderate Impact" if abs(corr) > 0.3 else "Low Impact"
+                    ),
                 }
             else:
                 importance[param] = {"correlation": 0.0, "interpretation": "Unknown"}

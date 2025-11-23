@@ -123,6 +123,62 @@ class RTSIService:
         r_hat = alpha * raw_rate + (1 - alpha) * self.R0
         return r_hat
 
+    def get_intersection_capacity(
+        self, intersection_id, bin_minutes: int = 15, lookback_days: int = 30
+    ) -> float:
+        """
+        Compute intersection capacity as the 95th percentile of historical vehicle counts.
+
+        Args:
+            intersection_id: BSM intersection name (e.g., 'glebe-potomac')
+            bin_minutes: Time bin size in minutes
+            lookback_days: How many days of historical data to use
+
+        Returns:
+            Capacity value (95th percentile of vehicle counts), or DEFAULT_CAPACITY if insufficient data
+        """
+        try:
+            # Get historical vehicle counts for the last N days
+            lookback_us = (
+                lookback_days * 24 * 60 * 60 * 1000000
+            )  # Convert days to microseconds
+
+            capacity_query = """
+            SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY count) as capacity
+            FROM "vehicle-count"
+            WHERE intersection = %(intersection_id)s::text
+              AND publish_timestamp >= (EXTRACT(EPOCH FROM NOW()) * 1000000 - %(lookback_us)s)::bigint;
+            """
+
+            result = self.db_client.execute_query(
+                capacity_query,
+                {
+                    "intersection_id": intersection_id,
+                    "lookback_us": lookback_us,
+                },
+            )
+
+            if result and result[0]["capacity"]:
+                capacity = float(result[0]["capacity"])
+                logger.info(
+                    f"Computed capacity for {intersection_id}: {capacity:.0f} vehicles/{bin_minutes}min "
+                    f"(95th percentile over {lookback_days} days)"
+                )
+                return capacity
+            else:
+                logger.warning(
+                    f"No historical data for capacity calculation for {intersection_id}, "
+                    f"using default: {self.DEFAULT_CAPACITY}"
+                )
+                return self.DEFAULT_CAPACITY
+
+        except Exception as e:
+            logger.warning(
+                f"Error computing capacity for {intersection_id}: {e}, "
+                f"using default: {self.DEFAULT_CAPACITY}"
+            )
+            return self.DEFAULT_CAPACITY
+
     def get_realtime_data(
         self,
         intersection_id,
@@ -132,7 +188,7 @@ class RTSIService:
     ) -> Dict:
         """
         Get real-time traffic data for the given time bin.
-        If no data available at the exact timestamp, looks back up to lookback_hours to find the latest available data.
+        If no data available at the exact timestamp, looks back to find a previous bin with data.
 
         Args:
             intersection_id: Can be int (crash intersection ID) or str (BSM intersection name)
@@ -142,85 +198,74 @@ class RTSIService:
 
         Returns dict with:
         - vehicle_count: number of vehicles
+        - turning_count: number of turning vehicles
         - vru_count: number of VRUs
         - avg_speed: average speed
         - speed_variance: variance in speed
         - free_flow_speed: free-flow speed (85th percentile)
         """
-        # First try the exact time bin
-        end_time = timestamp + timedelta(minutes=bin_minutes)
-        start_time_us = int(timestamp.timestamp() * 1000000)
-        end_time_us = int(end_time.timestamp() * 1000000)
+        # Try to find a time bin with data, starting from the requested timestamp
+        # and looking back in bin_minutes increments
+        current_timestamp = timestamp
+        lookback_limit = timestamp - timedelta(hours=lookback_hours)
 
-        # Check if data exists for this time bin
-        check_query = """
-        SELECT COUNT(*) as count
-        FROM "vehicle-count"
-        WHERE intersection = %(intersection_id)s::text
-          AND publish_timestamp >= %(start_time)s
-          AND publish_timestamp < %(end_time)s;
-        """
+        while current_timestamp >= lookback_limit:
+            end_time = current_timestamp + timedelta(minutes=bin_minutes)
+            start_time_us = int(current_timestamp.timestamp() * 1000000)
+            end_time_us = int(end_time.timestamp() * 1000000)
 
-        check_result = self.db_client.execute_query(
-            check_query,
-            {
-                "intersection_id": intersection_id,
-                "start_time": start_time_us,
-                "end_time": end_time_us,
-            },
-        )
-
-        has_data = check_result and check_result[0]["count"] > 0
-
-        # If no data at exact time, find the latest available data within lookback window
-        if not has_data:
-            lookback_start = timestamp - timedelta(hours=lookback_hours)
-            lookback_start_us = int(lookback_start.timestamp() * 1000000)
-
-            latest_query = """
-            SELECT MAX(publish_timestamp) as latest_timestamp
+            # Check if data exists for this time bin
+            check_query = """
+            SELECT COUNT(*) as count
             FROM "vehicle-count"
             WHERE intersection = %(intersection_id)s::text
-              AND publish_timestamp >= %(lookback_start)s
+              AND publish_timestamp >= %(start_time)s
               AND publish_timestamp < %(end_time)s;
             """
 
-            latest_result = self.db_client.execute_query(
-                latest_query,
+            check_result = self.db_client.execute_query(
+                check_query,
                 {
                     "intersection_id": intersection_id,
-                    "lookback_start": lookback_start_us,
+                    "start_time": start_time_us,
                     "end_time": end_time_us,
                 },
             )
 
-            if latest_result and latest_result[0]["latest_timestamp"]:
-                latest_timestamp_us = latest_result[0]["latest_timestamp"]
-                # Use a bin_minutes window ending at the latest timestamp
-                start_time_us = latest_timestamp_us - (bin_minutes * 60 * 1000000)
-                end_time_us = latest_timestamp_us
-                latest_dt = datetime.fromtimestamp(latest_timestamp_us / 1000000)
-                logger.info(
-                    f"No data at {timestamp}, using latest available data from {latest_dt} "
-                    f"({(timestamp - latest_dt).total_seconds() / 3600:.1f} hours ago)"
-                )
-            else:
-                logger.warning(
-                    f"No data found for intersection {intersection_id} within {lookback_hours} hours of {timestamp}"
-                )
-                # Return empty data
-                return {
-                    "vehicle_count": 0,
-                    "vru_count": 0,
-                    "avg_speed": 0.0,
-                    "speed_variance": 0.0,
-                    "free_flow_speed": 30.0,
-                }
+            has_data = check_result and check_result[0]["count"] > 0
 
-        # Query vehicle count
+            if has_data:
+                # Found a bin with data
+                if current_timestamp != timestamp:
+                    hours_back = (timestamp - current_timestamp).total_seconds() / 3600
+                    logger.info(
+                        f"No data at {timestamp}, using data from time bin {current_timestamp} to {end_time} "
+                        f"({hours_back:.1f} hours earlier)"
+                    )
+                break
+
+            # Move back one bin
+            current_timestamp -= timedelta(minutes=bin_minutes)
+        else:
+            # No data found within lookback window
+            logger.warning(
+                f"No data found for intersection {intersection_id} within {lookback_hours} hours of {timestamp}. "
+                "Returning empty data."
+            )
+            return {
+                "vehicle_count": 0,
+                "turning_count": 0,
+                "vru_count": 0,
+                "avg_speed": 0.0,
+                "speed_variance": 0.0,
+                "free_flow_speed": 30.0,
+            }
+
+        # Query vehicle count and turning movements
         vehicle_query = """
         SELECT 
-            SUM(count) as vehicle_count
+            SUM(count) as vehicle_count,
+            SUM(CASE WHEN movement IN ('LT', 'RT', 'UT') THEN count ELSE 0 END) as turning_count
         FROM "vehicle-count"
         WHERE intersection = %(intersection_id)s::text
           AND publish_timestamp >= %(start_time)s
@@ -272,8 +317,14 @@ class RTSIService:
 
         # Extract results
         vehicle_count = 0
+        turning_count = 0
         if vehicle_results and vehicle_results[0]["vehicle_count"]:
             vehicle_count = int(vehicle_results[0]["vehicle_count"])
+            turning_count = (
+                int(vehicle_results[0]["turning_count"])
+                if vehicle_results[0]["turning_count"]
+                else 0
+            )
 
         avg_speed = 0.0
         free_flow_speed = 30.0  # Default
@@ -293,6 +344,7 @@ class RTSIService:
 
         return {
             "vehicle_count": vehicle_count,
+            "turning_count": turning_count,  # Actual turning movements from data
             "vru_count": 0,  # VRU count not available in current tables
             "avg_speed": avg_speed,
             "speed_variance": speed_variance,
@@ -306,9 +358,18 @@ class RTSIService:
         speed_variance: float,
         vehicle_count: int,
         vru_count: int,
+        turning_count: int = 0,
     ) -> Dict:
         """
         Compute real-time uplift factors.
+
+        Args:
+            avg_speed: Average speed in mph
+            free_flow_speed: Free-flow speed (85th percentile) in mph
+            speed_variance: Variance in speed
+            vehicle_count: Total vehicle count
+            vru_count: VRU (pedestrian/cyclist) count
+            turning_count: Number of turning vehicles (LT, RT, UT)
 
         Returns dict with F_speed, F_variance, F_conflict, and combined U.
         """
@@ -326,10 +387,9 @@ class RTSIService:
             1.0, self.K2_VAR * (np.sqrt(speed_variance) / (avg_speed + epsilon))
         )
 
-        # Conflict factor: more turning vehicles + VRUs = higher risk
-        # Simplified: assume some vehicles are turning (use 30% as proxy)
-        turning_vol = vehicle_count * 0.3
-        conflict_exposure = turning_vol * vru_count
+        # Conflict factor: turning vehicles crossing VRU paths = higher risk
+        # Use actual turning count from vehicle-count table (LT, RT, UT movements)
+        conflict_exposure = turning_count * vru_count
         F_conflict = min(1.0, self.K3_CONF * (conflict_exposure / 1000.0))
 
         # Combined uplift factor
@@ -457,32 +517,38 @@ class RTSIService:
                 )
                 return None
 
-            # Step 4: Compute uplift factors
+            # Step 4: Compute intersection capacity from historical data
+            capacity = self.get_intersection_capacity(
+                rt_intersection, bin_minutes=bin_minutes, lookback_days=30
+            )
+
+            # Step 5: Compute uplift factors
             uplift = self.compute_uplift_factors(
                 rt_data["avg_speed"],
                 rt_data["free_flow_speed"],
                 rt_data["speed_variance"],
                 rt_data["vehicle_count"],
                 rt_data["vru_count"],
+                rt_data["turning_count"],  # Use actual turning movements from data
             )
 
-            # Step 5: Compute sub-indices
+            # Step 6: Compute sub-indices
             sub_indices = self.compute_sub_indices(
                 r_hat,
                 uplift["U"],
                 rt_data["vehicle_count"],
                 rt_data["vru_count"],
-                self.DEFAULT_CAPACITY,
+                capacity,  # Use computed capacity instead of default
             )
 
-            # Step 6: Compute combined index
+            # Step 7: Compute combined index
             COMB = self.compute_combined_index(
                 sub_indices["VRU_index"], sub_indices["VEH_index"]
             )
 
-            # Step 7: Scale to 0-100
-            # TODO: Compute proper min/max from historical distribution
-            RT_SI = self.scale_to_100(COMB, min_val=0.0, max_val=0.1)
+            # Step 8: Cap the combined index at 100
+            # COMB represents risk level, we cap it at 100 for the safety index scale
+            RT_SI = min(100.0, COMB)
 
             result = {
                 "intersection_id": intersection_id,

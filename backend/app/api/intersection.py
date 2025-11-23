@@ -41,19 +41,23 @@ def find_crash_intersection_for_bsm(bsm_intersection: str, db_client) -> Optiona
 
         # Find nearest crash intersection using Haversine
         nearest_query = """
-        SELECT 
-            i.intersection_id,
-            6371 * acos(
-                cos(radians(%(bsm_lat)s)) * 
-                cos(radians(i.transport_junction_latitude)) * 
-                cos(radians(i.transport_junction_longitude) - radians(%(bsm_lon)s)) + 
-                sin(radians(%(bsm_lat)s)) * 
-                sin(radians(i.transport_junction_latitude))
-            ) as distance_km
-        FROM lrs_road_intersections i
-        WHERE i.transport_junction_latitude IS NOT NULL
-          AND i.transport_junction_longitude IS NOT NULL
-        HAVING distance_km < 0.5
+        WITH distances AS (
+            SELECT 
+                i.intersection_id,
+                6371 * acos(
+                    cos(radians(%(bsm_lat)s)) * 
+                    cos(radians(i.transport_junction_latitude)) * 
+                    cos(radians(i.transport_junction_longitude) - radians(%(bsm_lon)s)) + 
+                    sin(radians(%(bsm_lat)s)) * 
+                    sin(radians(i.transport_junction_latitude))
+                ) as distance_km
+            FROM lrs_road_intersections i
+            WHERE i.transport_junction_latitude IS NOT NULL
+              AND i.transport_junction_longitude IS NOT NULL
+        )
+        SELECT intersection_id, distance_km
+        FROM distances
+        WHERE distance_km < 0.5
         ORDER BY distance_km
         LIMIT 1;
         """

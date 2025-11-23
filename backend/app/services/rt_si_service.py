@@ -668,13 +668,8 @@ class RTSIService:
                 rt_intersection, timestamp, bin_minutes, lookback_hours
             )
 
-            # Check if we have sufficient data
-            if rt_data["vehicle_count"] == 0 and rt_data["vru_count"] == 0:
-                logger.warning(
-                    f"No traffic data for intersection {intersection_id} at {timestamp}. "
-                    "Cannot calculate meaningful RT-SI without exposure."
-                )
-                return None
+            # Note: We now allow zero traffic counts to proceed with calculation
+            # This ensures all time bins in a range have RT-SI values, even if traffic is zero
 
             # Step 4: Compute intersection capacity from historical data
             capacity = self.get_intersection_capacity(
@@ -888,25 +883,33 @@ class RTSIService:
                 "vru_count": int(row["vru_count"]) if row["vru_count"] else 0
             }
 
-        # Merge data
+        # Generate ALL time bins in range (not just those with data)
         result_map = {}
-        for time_bin, veh_data in vehicle_map.items():
-            if veh_data["vehicle_count"] > 0:  # Only include bins with vehicle data
-                speed_data = speed_map.get(
-                    time_bin,
-                    {
-                        "avg_speed": 0.0,
-                        "free_flow_speed": 30.0,
-                        "speed_variance": 0.0,
-                    },
-                )
-                vru_data = vru_map.get(time_bin, {"vru_count": 0})
-                result_map[time_bin] = {
-                    "vehicle_count": veh_data["vehicle_count"],
-                    "turning_count": veh_data["turning_count"],
-                    "vru_count": vru_data["vru_count"],
-                    **speed_data,
-                }
+        current_time = start_time
+        
+        while current_time < end_time:
+            # Check if we have vehicle data for this bin
+            veh_data = vehicle_map.get(current_time, {"vehicle_count": 0, "turning_count": 0})
+            speed_data = speed_map.get(
+                current_time,
+                {
+                    "avg_speed": 0.0,
+                    "free_flow_speed": 30.0,
+                    "speed_variance": 0.0,
+                },
+            )
+            vru_data = vru_map.get(current_time, {"vru_count": 0})
+            
+            # Include ALL time bins, even with zero counts
+            result_map[current_time] = {
+                "vehicle_count": veh_data["vehicle_count"],
+                "turning_count": veh_data["turning_count"],
+                "vru_count": vru_data["vru_count"],
+                **speed_data,
+            }
+            
+            # Move to next time bin
+            current_time += timedelta(minutes=bin_minutes)
 
         return result_map
 

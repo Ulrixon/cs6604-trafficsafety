@@ -499,3 +499,82 @@ def get_safety_score_trend(
             "data_points": len(results),
         },
     }
+
+
+@router.get("/sensitivity-analysis")
+def get_sensitivity_analysis(
+    intersection: str = Query(
+        ..., description="Intersection name (e.g., 'glebe-potomac')"
+    ),
+    start_time: datetime = Query(..., description="Start datetime (ISO 8601 format)"),
+    end_time: datetime = Query(..., description="End datetime (ISO 8601 format)"),
+    bin_minutes: int = Query(15, description="Time bin size in minutes", ge=1, le=60),
+    perturbation_pct: float = Query(
+        0.25,
+        description="Parameter perturbation percentage (0.25 = ±25%)",
+        ge=0.1,
+        le=0.5,
+    ),
+    n_samples: int = Query(
+        100, description="Number of parameter sets to test", ge=10, le=500
+    ),
+):
+    """
+    Perform sensitivity analysis on RT-SI parameters.
+
+    Randomly perturbs parameters (β₁, β₂, β₃, k₁...k₅, λ, ω) and measures:
+    - Spearman rank correlation (stability of rankings)
+    - Score changes (magnitude of differences)
+    - Tier changes (Low→High risk reclassifications)
+
+    This validates that the RT-SI methodology is robust and not overly sensitive
+    to parameter tuning choices.
+
+    **Parameters analyzed:**
+    - β₁, β₂, β₃: Uplift weights (speed, variance, conflict)
+    - k₁...k₅: Scaling constants
+    - λ: Empirical Bayes shrinkage
+    - ω: VRU vs Vehicle blend
+
+    **Returns:**
+    - baseline: Original RT-SI scores
+    - stability_metrics: Spearman correlations, score changes, tier changes
+    - parameter_importance: Which parameters have most impact
+    - perturbed_samples: Sample perturbed results for inspection
+
+    Example:
+    ```
+    GET /api/v1/safety/index/sensitivity-analysis?intersection=glebe-potomac&start_time=2025-11-01T08:00:00&end_time=2025-11-01T18:00:00&bin_minutes=15&perturbation_pct=0.25&n_samples=100
+    ```
+    """
+    # Validate time range
+    if end_time <= start_time:
+        raise HTTPException(status_code=400, detail="end_time must be after start_time")
+
+    db_client = get_db_client()
+
+    try:
+        from app.services.sensitivity_analysis_service import SensitivityAnalysisService
+
+        sensitivity_service = SensitivityAnalysisService(db_client)
+
+        results = sensitivity_service.analyze_sensitivity(
+            intersection=intersection,
+            start_time=start_time,
+            end_time=end_time,
+            bin_minutes=bin_minutes,
+            perturbation_pct=perturbation_pct,
+            n_samples=n_samples,
+        )
+
+        if "error" in results:
+            raise HTTPException(status_code=404, detail=results["error"])
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Error performing sensitivity analysis: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error performing sensitivity analysis: {str(e)}",
+        )

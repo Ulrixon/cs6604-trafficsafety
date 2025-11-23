@@ -419,8 +419,57 @@ def render_correlation_analysis(correlation_data: dict):
                 height=400,
             )
 
+            # Create full correlation matrix heatmap
+            st.markdown("#### 🌐 Full Correlation Matrix")
+            st.caption("Complete correlation matrix showing all variable relationships")
+            
+            # Get all unique variables from the original correlations
+            all_variables = list(set(
+                [corr["variable_1"] for corr in var_corr.values()] +
+                [corr["variable_2"] for corr in var_corr.values()]
+            ))
+            all_variables.sort()
+            
+            # Create full matrix
+            full_matrix = pd.DataFrame(np.nan, index=all_variables, columns=all_variables)
+            
+            # Fill matrix with all correlations
+            for key, corr in var_corr.items():
+                v1, v2 = corr["variable_1"], corr["variable_2"]
+                corr_val = corr["pearson"]["correlation"]
+                full_matrix.loc[v1, v2] = corr_val
+                full_matrix.loc[v2, v1] = corr_val
+            
+            # Diagonal = 1
+            for v in all_variables:
+                full_matrix.loc[v, v] = 1.0
+            
+            # Create full heatmap
+            fig_full = px.imshow(
+                full_matrix,
+                labels=dict(x="Variable", y="Variable", color="Pearson r"),
+                x=all_variables,
+                y=all_variables,
+                color_continuous_scale="RdBu_r",
+                aspect="auto",
+                zmin=-1,
+                zmax=1,
+                text_auto=".2f",
+            )
+            
+            fig_full.update_layout(
+                title="Complete Correlation Matrix (All Variables)",
+                height=max(600, len(all_variables) * 30),
+                xaxis=dict(tickangle=-45),
+            )
+            
+            st.plotly_chart(fig_full, use_container_width=True)
+            
+            st.divider()
+
             # Create correlation heatmap for top correlations
             st.markdown("#### 🔥 Top Correlations Heatmap")
+            st.caption("Focused view of the strongest correlations")
 
             # Get top 20 by absolute correlation
             top_corr = corr_df.head(20)
@@ -456,6 +505,7 @@ def render_correlation_analysis(correlation_data: dict):
                     aspect="auto",
                     zmin=-1,
                     zmax=1,
+                    text_auto=".2f",
                 )
 
                 fig.update_layout(

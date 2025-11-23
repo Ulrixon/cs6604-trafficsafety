@@ -52,13 +52,17 @@ def main():
             value=0.7,
             step=0.1,
             help=f"Final Index = α×RT-SI + (1-α)×MCDM\n\n"
-                 f"• α=0.0: Use only MCDM (long-term prioritization)\n"
-                 f"• α=0.7: Balanced (recommended for dashboards)\n"
-                 f"• α=1.0: Use only RT-SI (real-time safety focus)",
+            f"• α=0.0: Use only MCDM (long-term prioritization)\n"
+            f"• α=0.7: Balanced (recommended for dashboards)\n"
+            f"• α=1.0: Use only RT-SI (real-time safety focus)",
         )
-        
-        st.caption(f"📊 Current blend: {alpha*100:.0f}% RT-SI + {(1-alpha)*100:.0f}% MCDM")
-        st.caption("Note: Final Index combines real-time conditions (RT-SI) with long-term patterns (MCDM)")
+
+        st.caption(
+            f"📊 Current blend: {alpha*100:.0f}% RT-SI + {(1-alpha)*100:.0f}% MCDM"
+        )
+        st.caption(
+            "Note: Final Index combines real-time conditions (RT-SI) with long-term patterns (MCDM)"
+        )
 
         st.divider()
 
@@ -73,10 +77,10 @@ def main():
         with st.spinner("Loading intersection data..."):
             # Import the new function
             from app.services.api_client import fetch_latest_blended_scores
-            
+
             # Use blended scores to incorporate RT-SI
             raw_data, blend_error = fetch_latest_blended_scores(alpha)
-            
+
             if raw_data:
                 # Convert to Intersection objects
                 intersections = []
@@ -86,17 +90,20 @@ def main():
                     "invalid": 0,
                     "skipped_reasons": [],
                 }
-                
+
                 for item in raw_data:
                     try:
                         from app.models.intersection import Intersection
+
                         intersection = Intersection(**item)
                         intersections.append(intersection)
                         stats["valid"] += 1
                     except Exception as e:
                         stats["invalid"] += 1
-                        stats["skipped_reasons"].append(f"ID {item.get('intersection_id', '?')}: {str(e)}")
-                
+                        stats["skipped_reasons"].append(
+                            f"ID {item.get('intersection_id', '?')}: {str(e)}"
+                        )
+
                 error = blend_error
             else:
                 # Fallback to original method

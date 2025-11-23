@@ -35,7 +35,9 @@ def test_specific_time():
         }
 
         try:
-            response = requests.get(f"{API_BASE_URL}/time/specific", params=params, timeout=30)
+            response = requests.get(
+                f"{API_BASE_URL}/time/specific", params=params, timeout=30
+            )
             response.raise_for_status()
             data = response.json()
 
@@ -44,17 +46,19 @@ def test_specific_time():
             print(f"   Time: {data['time_bin']}")
             print()
             print(f"   MCDM Index:          {data['mcdm_index']:.2f}")
-            
-            if data.get('rt_si_score') is not None:
+
+            if data.get("rt_si_score") is not None:
                 print(f"   RT-SI Score:         {data['rt_si_score']:.2f}")
                 print(f"   - VRU Index:         {data.get('vru_index', 0):.6f}")
                 print(f"   - Vehicle Index:     {data.get('vehicle_index', 0):.6f}")
             else:
                 print(f"   RT-SI Score:         N/A (no data)")
-            
-            if data.get('final_safety_index') is not None:
+
+            if data.get("final_safety_index") is not None:
                 print(f"   Final Safety Index:  {data['final_safety_index']:.2f}")
-                print(f"   Formula: {alpha:.1f}×{data.get('rt_si_score', 'N/A')} + {1-alpha:.1f}×{data['mcdm_index']:.2f}")
+                print(
+                    f"   Formula: {alpha:.1f}×{data.get('rt_si_score', 'N/A')} + {1-alpha:.1f}×{data['mcdm_index']:.2f}"
+                )
             else:
                 print(f"   Final Safety Index:  N/A")
 
@@ -101,32 +105,42 @@ def test_time_range():
 
         # Show first 3 and last 3 time points
         display_count = min(3, len(data))
-        
+
         print(f"   First {display_count} time points:")
         for item in data[:display_count]:
-            rt_si = item.get('rt_si_score')
+            rt_si = item.get("rt_si_score")
             rt_si_str = f"{rt_si:.2f}" if rt_si is not None else "N/A"
-            final = item.get('final_safety_index')
+            final = item.get("final_safety_index")
             final_str = f"{final:.2f}" if final is not None else "N/A"
-            
-            print(f"   - {item['time_bin']}: Final={final_str}, RT-SI={rt_si_str}, MCDM={item['mcdm_index']:.2f}")
+
+            print(
+                f"   - {item['time_bin']}: Final={final_str}, RT-SI={rt_si_str}, MCDM={item['mcdm_index']:.2f}"
+            )
 
         if len(data) > 6:
             print(f"   ... ({len(data) - 6} more) ...")
-            
+
             print(f"   Last {display_count} time points:")
             for item in data[-display_count:]:
-                rt_si = item.get('rt_si_score')
+                rt_si = item.get("rt_si_score")
                 rt_si_str = f"{rt_si:.2f}" if rt_si is not None else "N/A"
-                final = item.get('final_safety_index')
+                final = item.get("final_safety_index")
                 final_str = f"{final:.2f}" if final is not None else "N/A"
-                
-                print(f"   - {item['time_bin']}: Final={final_str}, RT-SI={rt_si_str}, MCDM={item['mcdm_index']:.2f}")
+
+                print(
+                    f"   - {item['time_bin']}: Final={final_str}, RT-SI={rt_si_str}, MCDM={item['mcdm_index']:.2f}"
+                )
 
         # Calculate statistics
-        rt_si_values = [item['rt_si_score'] for item in data if item.get('rt_si_score') is not None]
-        final_values = [item['final_safety_index'] for item in data if item.get('final_safety_index') is not None]
-        
+        rt_si_values = [
+            item["rt_si_score"] for item in data if item.get("rt_si_score") is not None
+        ]
+        final_values = [
+            item["final_safety_index"]
+            for item in data
+            if item.get("final_safety_index") is not None
+        ]
+
         print()
         print(f"   Statistics:")
         print(f"   - Time points with RT-SI: {len(rt_si_values)}/{len(data)}")

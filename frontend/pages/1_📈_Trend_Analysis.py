@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from typing import Optional
 from datetime import datetime, timedelta
 import requests
 
@@ -35,14 +36,15 @@ def get_available_intersections():
         return []
 
 
-def get_safety_score_at_time(intersection: str, time: datetime, bin_minutes: int = 15, alpha: float = 0.7):
-    """Fetch safety score for specific time."""
+def get_safety_score_at_time(
+    intersection: str, time: datetime, bin_minutes: int = 15
+):
+    """Fetch safety score for specific time (returns MCDM and RT-SI separately)."""
     try:
         params = {
             "intersection": intersection,
             "time": time.isoformat(),
             "bin_minutes": bin_minutes,
-            "alpha": alpha,
         }
         response = requests.get(
             f"{API_BASE_URL}/time/specific", params=params, timeout=30
@@ -59,16 +61,18 @@ def get_safety_score_at_time(intersection: str, time: datetime, bin_minutes: int
 
 
 def get_safety_score_trend(
-    intersection: str, start_time: datetime, end_time: datetime, bin_minutes: int = 15, alpha: float = 0.7
+    intersection: str,
+    start_time: datetime,
+    end_time: datetime,
+    bin_minutes: int = 15,
 ):
-    """Fetch safety score trend over time range."""
+    """Fetch safety score trend over time range (returns MCDM and RT-SI separately)."""
     try:
         params = {
             "intersection": intersection,
             "start_time": start_time.isoformat(),
             "end_time": end_time.isoformat(),
             "bin_minutes": bin_minutes,
-            "alpha": alpha,
         }
         response = requests.get(f"{API_BASE_URL}/time/range", params=params, timeout=60)
         response.raise_for_status()
@@ -82,6 +86,17 @@ def get_safety_score_trend(
         return []
 
 
+def blend_safety_scores(mcdm: float, rt_si: Optional[float], alpha: float) -> float:
+    """Blend MCDM and RT-SI scores with alpha coefficient.
+    
+    Formula: Final = α*RT-SI + (1-α)*MCDM
+    If RT-SI is None, returns MCDM only.
+    """
+    if rt_si is not None:
+        return alpha * rt_si + (1 - alpha) * mcdm
+    return mcdm
+
+
 def render_single_time_view(
     intersection: str, selected_time: datetime, bin_minutes: int, alpha: float
 ):
@@ -89,7 +104,7 @@ def render_single_time_view(
     st.subheader("📍 Single Time Point Analysis")
 
     with st.spinner("Fetching safety score..."):
-        data = get_safety_score_at_time(intersection, selected_time, bin_minutes, alpha)
+        data = get_safety_score_at_time(intersection, selected_time, bin_minutes)
 
     if not data:
         st.warning(
@@ -97,6 +112,11 @@ def render_single_time_view(
         )
         st.info("💡 Try selecting a different time or intersection.")
         return
+
+    # Blend scores in frontend
+    mcdm = data.get('mcdm_index', data.get('safety_score', 50.0))
+    rt_si = data.get('rt_si_score')
+    final_index = blend_safety_scores(mcdm, rt_si, alpha)
 
     # Display metrics in cards
     st.markdown(f"### {data['intersection'].replace('-', ' ').title()}")
@@ -109,7 +129,7 @@ def render_single_time_view(
     with col1:
         st.metric(
             "Final Safety Index",
-            f"{data.get('final_safety_index', data['safety_score']):.2f}",
+            f"{final_index:.2f}",
             help=f"Blended safety index: {alpha:.1f}×RT-SI + {1-alpha:.1f}×MCDM (0-100, higher = safer)",
         )
 
@@ -162,7 +182,11 @@ def render_single_time_view(
 
         with col3:
             # Calculate blend percentage
-            rt_si_contribution = (alpha * data['rt_si_score']) / data.get('final_safety_index', 1) * 100 if data.get('final_safety_index', 0) > 0 else 0
+            rt_si_contribution = (
+                (alpha * data["rt_si_score"]) / data.get("final_safety_index", 1) * 100
+                if data.get("final_safety_index", 0) > 0
+                else 0
+            )
             st.metric(
                 "RT-SI Weight",
                 f"{alpha*100:.0f}%",
@@ -277,7 +301,11 @@ def create_trend_chart(df: pd.DataFrame, metric: str, title: str, color: str):
 
 
 def render_trend_view(
-    intersection: str, start_time: datetime, end_time: datetime, bin_minutes: int, alpha: float
+    intersection: str,
+    start_time: datetime,
+    end_time: datetime,
+    bin_minutes: int,
+    alpha: float,
 ):
     """Render view for time range trend analysis."""
     st.subheader("📈 Trend Analysis")
@@ -288,7 +316,9 @@ def render_trend_view(
         return
 
     with st.spinner("Fetching trend data..."):
-        data = get_safety_score_trend(intersection, start_time, end_time, bin_minutes, alpha)
+        data = get_safety_score_trend(
+            intersection, start_time, end_time, bin_minutes
+        )
 
     if not data:
         st.warning(
@@ -301,38 +331,50 @@ def render_trend_view(
     # Convert to DataFrame
     df = pd.DataFrame(data)
     df["time_bin"] = pd.to_datetime(df["time_bin"])
+    
+    # Blend scores in frontend for each row
+    df["final_safety_index"] = df.apply(
+        lambda row: blend_safety_scores(
+            row.get('mcdm_index', row.get('safety_score', 50.0)),
+            row.get('rt_si_score'),
+            alpha
+        ),
+        axis=1
+    )
 
     st.success(f"✅ Found **{len(df)}** data points for **{intersection}**")
 
     # Check if RT-SI data is available
-    has_rt_si = 'rt_si_score' in df.columns and df['rt_si_score'].notna().any()
-    has_final_index = 'final_safety_index' in df.columns and df['final_safety_index'].notna().any()
+    has_rt_si = "rt_si_score" in df.columns and df["rt_si_score"].notna().any()
+    has_final_index = (
+        "final_safety_index" in df.columns and df["final_safety_index"].notna().any()
+    )
 
     # Summary statistics
     st.markdown("### Summary Statistics")
-    
+
     if has_final_index:
         col1, col2, col3, col4, col5, col6 = st.columns(6)
-        
+
         with col1:
             st.metric("Avg Final Index", f"{df['final_safety_index'].mean():.2f}")
-        
+
         with col2:
             if has_rt_si:
-                avg_rt_si = df['rt_si_score'].dropna().mean()
+                avg_rt_si = df["rt_si_score"].dropna().mean()
                 st.metric("Avg RT-SI", f"{avg_rt_si:.2f}")
             else:
                 st.metric("Avg RT-SI", "N/A")
-        
+
         with col3:
             st.metric("Avg MCDM", f"{df['mcdm_index'].mean():.2f}")
-        
+
         with col4:
             st.metric("Avg Safety Score", f"{df['safety_score'].mean():.2f}")
-        
+
         with col5:
             st.metric("Total Vehicles", f"{df['vehicle_count'].sum():,}")
-        
+
         with col6:
             st.metric("Total Incidents", f"{df['incident_count'].sum()}")
     else:
@@ -362,9 +404,9 @@ def render_trend_view(
     if has_final_index:
         st.markdown("#### 🎯 Final Blended Safety Index")
         st.caption(f"α={alpha:.1f}: {alpha*100:.0f}% RT-SI + {(1-alpha)*100:.0f}% MCDM")
-        
+
         fig_final = go.Figure()
-        
+
         # Add Final Index
         fig_final.add_trace(
             go.Scatter(
@@ -377,7 +419,7 @@ def render_trend_view(
                 hovertemplate="<b>Final Index</b>: %{y:.2f}<extra></extra>",
             )
         )
-        
+
         # Add RT-SI if available
         if has_rt_si:
             fig_final.add_trace(
@@ -391,7 +433,7 @@ def render_trend_view(
                     hovertemplate="<b>RT-SI</b>: %{y:.2f}<extra></extra>",
                 )
             )
-        
+
         # Add MCDM
         fig_final.add_trace(
             go.Scatter(
@@ -404,7 +446,7 @@ def render_trend_view(
                 hovertemplate="<b>MCDM</b>: %{y:.2f}<extra></extra>",
             )
         )
-        
+
         fig_final.update_layout(
             title=f"Final Blended Safety Index (α={alpha:.1f})",
             xaxis_title="Time",
@@ -412,17 +454,19 @@ def render_trend_view(
             hovermode="x unified",
             height=400,
             margin=dict(l=0, r=0, t=40, b=0),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            legend=dict(
+                orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+            ),
         )
-        
+
         st.plotly_chart(fig_final, use_container_width=True)
-        
+
         # RT-SI Sub-indices (if available)
-        if has_rt_si and 'vru_index' in df.columns and 'vehicle_index' in df.columns:
+        if has_rt_si and "vru_index" in df.columns and "vehicle_index" in df.columns:
             st.markdown("#### 🚦 RT-SI Sub-Indices")
-            
+
             fig_sub = go.Figure()
-            
+
             fig_sub.add_trace(
                 go.Scatter(
                     x=df["time_bin"],
@@ -434,7 +478,7 @@ def render_trend_view(
                     hovertemplate="<b>VRU Index</b>: %{y:.4f}<extra></extra>",
                 )
             )
-            
+
             fig_sub.add_trace(
                 go.Scatter(
                     x=df["time_bin"],
@@ -446,7 +490,7 @@ def render_trend_view(
                     hovertemplate="<b>Vehicle Index</b>: %{y:.4f}<extra></extra>",
                 )
             )
-            
+
             fig_sub.update_layout(
                 title="RT-SI Sub-Indices (VRU vs Vehicle Risk)",
                 xaxis_title="Time",
@@ -455,11 +499,13 @@ def render_trend_view(
                 height=350,
                 margin=dict(l=0, r=0, t=40, b=0),
             )
-            
+
             st.plotly_chart(fig_sub, use_container_width=True)
 
     # Safety Score Trend
-    fig1 = create_trend_chart(df, "safety_score", "MCDM Safety Score Over Time", "#1f77b4")
+    fig1 = create_trend_chart(
+        df, "safety_score", "MCDM Safety Score Over Time", "#1f77b4"
+    )
     st.plotly_chart(fig1, use_container_width=True)
 
     # Traffic Metrics
@@ -716,12 +762,14 @@ def main():
             value=0.7,
             step=0.1,
             help=f"Final Index = α×RT-SI + (1-α)×MCDM\n\n"
-                 f"• α=0.0: Use only MCDM (long-term prioritization)\n"
-                 f"• α=0.7: Balanced (recommended for real-time dashboards)\n"
-                 f"• α=1.0: Use only RT-SI (real-time safety focus)",
+            f"• α=0.0: Use only MCDM (long-term prioritization)\n"
+            f"• α=0.7: Balanced (recommended for real-time dashboards)\n"
+            f"• α=1.0: Use only RT-SI (real-time safety focus)",
         )
-        
-        st.caption(f"📊 Current blend: {alpha*100:.0f}% RT-SI + {(1-alpha)*100:.0f}% MCDM")
+
+        st.caption(
+            f"📊 Current blend: {alpha*100:.0f}% RT-SI + {(1-alpha)*100:.0f}% MCDM"
+        )
 
         st.divider()
 
@@ -925,7 +973,9 @@ def main():
 
     # Main content area
     if analysis_mode == "Single Time Point":
-        render_single_time_view(selected_intersection, selected_datetime, bin_minutes, alpha)
+        render_single_time_view(
+            selected_intersection, selected_datetime, bin_minutes, alpha
+        )
     else:
         render_trend_view(
             selected_intersection, start_datetime, end_datetime, bin_minutes, alpha

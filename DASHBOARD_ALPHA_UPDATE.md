@@ -1,6 +1,7 @@
 # Dashboard Alpha Integration Summary
 
 ## Overview
+
 Added alpha blending functionality to the Dashboard (Page 0) to display real-time blended safety indices combining RT-SI and MCDM methodologies.
 
 ## Changes Made
@@ -8,6 +9,7 @@ Added alpha blending functionality to the Dashboard (Page 0) to display real-tim
 ### 1. Dashboard Page (`frontend/pages/0_🏠_Dashboard.py`)
 
 #### Added Alpha Slider (Sidebar):
+
 ```python
 alpha = st.slider(
     "RT-SI Weight (α)",
@@ -21,6 +23,7 @@ alpha = st.slider(
 
 **Position:** Top of sidebar, before Refresh button
 **Features:**
+
 - Range: 0.0 to 1.0
 - Default: 0.7 (balanced, recommended)
 - Step: 0.1
@@ -28,24 +31,28 @@ alpha = st.slider(
 - Explanatory help text
 
 #### Updated Data Loading:
+
 - Integrated `fetch_latest_blended_scores(alpha)` function
 - Fetches latest safety scores with RT-SI blending for each intersection
 - Falls back to standard MCDM if blending fails
 - Passes alpha parameter to API
 
 #### Updated About Section:
+
 - Explains blended safety index formula
 - Shows current alpha value
 - Describes RT-SI and MCDM components
 - Provides guidance on adjusting alpha
 
 #### Updated Footer:
+
 - Displays current alpha value
 - Shows "RT-SI + MCDM" methodology
 
 ### 2. API Client (`frontend/app/services/api_client.py`)
 
 #### New Function: `fetch_latest_blended_scores(alpha)`
+
 ```python
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_latest_blended_scores(alpha: float = 0.7):
@@ -55,6 +62,7 @@ def fetch_latest_blended_scores(alpha: float = 0.7):
 ```
 
 **Functionality:**
+
 1. Queries `/intersections/list` for available intersections
 2. For each intersection (up to 10 for performance):
    - Calls `/time/specific` with current time and alpha
@@ -64,6 +72,7 @@ def fetch_latest_blended_scores(alpha: float = 0.7):
 5. Caches results for 5 minutes
 
 **Performance Optimization:**
+
 - Limits to first 10 intersections to avoid slow loading
 - Uses retry logic for failed requests
 - Falls back to sample data if API unavailable
@@ -71,11 +80,14 @@ def fetch_latest_blended_scores(alpha: float = 0.7):
 ### 3. Components (`frontend/app/views/components.py`)
 
 #### Updated `render_kpi_cards()`:
+
 - Changed "Avg Safety Index" → "Avg Final Index"
 - Added help text explaining blended index
 
 #### Updated `render_details_card()`:
+
 **New Metrics Display:**
+
 - **Safety Index (Blended)**: Main final index
 - **RT-SI Score**: Real-time safety (if available)
 - **MCDM Index**: Long-term prioritization (if available)
@@ -83,6 +95,7 @@ def fetch_latest_blended_scores(alpha: float = 0.7):
 - **Vehicle Index**: RT-SI sub-index (if available)
 
 **Layout:**
+
 ```
 ┌─────────────────────────────────────┐
 │ Safety Index (Blended): 70.55       │
@@ -100,6 +113,7 @@ def fetch_latest_blended_scores(alpha: float = 0.7):
 ## User Experience Flow
 
 ### 1. Dashboard Load
+
 ```
 User opens Dashboard
     ↓
@@ -113,6 +127,7 @@ Map displays intersections with blended scores
 ```
 
 ### 2. Adjusting Alpha
+
 ```
 User moves alpha slider to 0.5
     ↓
@@ -126,6 +141,7 @@ User can compare different emphasis levels
 ```
 
 ### 3. Viewing Details
+
 ```
 User clicks intersection marker
     ↓
@@ -154,11 +170,13 @@ Where:
 ## Alpha Guidance
 
 **Displayed in UI:**
+
 - **α = 0.0**: Pure MCDM (long-term prioritization)
 - **α = 0.7**: Balanced (recommended for dashboards)
 - **α = 1.0**: Pure RT-SI (real-time safety focus)
 
 **Use Cases:**
+
 - **Emergency Response** (α=0.9-1.0): Emphasize current conditions
 - **General Monitoring** (α=0.6-0.8): Balanced view
 - **Planning/Prioritization** (α=0.0-0.4): Emphasize long-term patterns
@@ -183,6 +201,7 @@ GET /api/v1/safety/index/time/specific
 ```
 
 **Response:**
+
 ```json
 {
   "intersection": "glebe-potomac",
@@ -199,17 +218,20 @@ GET /api/v1/safety/index/time/specific
 ## Visual Updates
 
 ### Map Markers
+
 - **Color**: Based on final_safety_index (blended)
 - **Size**: Based on traffic_volume
 - **Popup**: Shows all components (Final, RT-SI, MCDM)
 
 ### KPI Cards
+
 - Total Intersections
 - **Avg Final Index** (updated label)
 - High Risk Count (based on blended index)
 - Total Traffic Volume
 
 ### Details Panel
+
 - Main blended safety index
 - RT-SI and MCDM breakdown
 - VRU and Vehicle sub-indices

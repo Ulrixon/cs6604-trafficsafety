@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional
 import logging
 
-from ..schemas.intersection import IntersectionRead
+from ..schemas.intersection import IntersectionRead, IntersectionWithRTSI
 from ..schemas.safety_score import SafetyScoreTimePoint, IntersectionList
 from ..services.intersection_service import get_all, get_by_id
 from ..services.db_client import get_db_client
@@ -78,12 +78,101 @@ def find_crash_intersection_for_bsm(bsm_intersection: str, db_client) -> Optiona
         return None
 
 
-@router.get("/", response_model=list[IntersectionRead])
-def list_intersections():
+@router.get("/")
+def list_intersections(
+    include_rtsi: bool = Query(
+        False,
+        description="Include RT-SI scores for real-time blending (slower)",
+    ),
+    bin_minutes: int = Query(
+        15, description="Time bin size in minutes for RT-SI", ge=1, le=60
+    ),
+):
     """
     Retrieve a list of all intersections with their latest safety index data.
+
+    Parameters:
+    - include_rtsi: If True, includes RT-SI scores (requires real-time data query)
+    - bin_minutes: Time window for RT-SI calculation (default: 15 minutes)
+
+    Returns:
+    - If include_rtsi=false: List[IntersectionRead] with MCDM only
+    - If include_rtsi=true: List[IntersectionWithRTSI] with both MCDM and RT-SI
+
+    Examples:
+    - GET /api/v1/safety/index/ - Fast MCDM-only response
+    - GET /api/v1/safety/index/?include_rtsi=true - Includes RT-SI for blending in frontend
     """
-    return get_all()
+    if not include_rtsi:
+        # Fast path: just return MCDM indices
+        return get_all()
+
+    # Slow path: calculate RT-SI for each intersection
+    db_client = get_db_client()
+    rt_si_service = RTSIService(db_client)
+    mcdm_service = MCDMSafetyIndexService(db_client)
+
+    # Get base MCDM data
+    base_intersections = get_all()
+
+    # Get available BSM intersections
+    bsm_intersections = mcdm_service.get_available_intersections()
+
+    # Calculate RT-SI for each intersection
+    current_time = datetime.now()
+    results = []
+
+    for intersection in base_intersections:
+        result_data = {
+            "intersection_id": intersection.intersection_id,
+            "intersection_name": intersection.intersection_name,
+            "safety_index": intersection.safety_index,
+            "mcdm_index": intersection.safety_index,  # MCDM is the base safety_index
+            "traffic_volume": intersection.traffic_volume,
+            "longitude": intersection.longitude,
+            "latitude": intersection.latitude,
+            "rt_si_score": None,
+            "vru_index": None,
+            "vehicle_index": None,
+            "timestamp": current_time,
+        }
+
+        # Try to find matching BSM intersection and calculate RT-SI
+        # Use intersection_id to find crash intersection
+        crash_intersection_id = intersection.intersection_id
+
+        # Try to find corresponding BSM intersection name
+        bsm_intersection_name = None
+        for bsm_name in bsm_intersections:
+            # Simple heuristic: check if names are similar
+            if (
+                bsm_name.lower().replace("-", " ")
+                in intersection.intersection_name.lower()
+            ):
+                bsm_intersection_name = bsm_name
+                break
+
+        if bsm_intersection_name:
+            try:
+                rt_si_result = rt_si_service.calculate_rt_si(
+                    crash_intersection_id,
+                    current_time,
+                    bin_minutes=bin_minutes,
+                    realtime_intersection=bsm_intersection_name,
+                )
+
+                if rt_si_result is not None:
+                    result_data["rt_si_score"] = rt_si_result["RT_SI"]
+                    result_data["vru_index"] = rt_si_result["VRU_index"]
+                    result_data["vehicle_index"] = rt_si_result["VEH_index"]
+            except Exception as e:
+                logger.debug(
+                    f"Could not calculate RT-SI for {intersection.intersection_name}: {e}"
+                )
+
+        results.append(IntersectionWithRTSI(**result_data))
+
+    return results
 
 
 @router.get("/{intersection_id}", response_model=IntersectionRead)
@@ -115,24 +204,21 @@ def get_safety_score_at_time(
     ),
     time: datetime = Query(..., description="Target datetime (ISO 8601 format)"),
     bin_minutes: int = Query(15, description="Time bin size in minutes", ge=1, le=60),
-    alpha: float = Query(
-        0.7,
-        description="Blending coefficient: α*RT-SI + (1-α)*MCDM (0=only MCDM, 1=only RT-SI)",
-        ge=0.0,
-        le=1.0,
-    ),
 ):
     """
     Get safety score for a specific intersection at a specific time.
 
-    Returns:
-    - MCDM index (long-term prioritization)
-    - RT-SI score (real-time safety with VRU and Vehicle sub-indices)
-    - Final blended safety index: α*RT-SI + (1-α)*MCDM
+    Returns both MCDM and RT-SI scores separately for client-side blending:
+    - mcdm_index: Long-term prioritization score (0-100)
+    - rt_si_score: Real-time safety index (0-100)
+    - vru_index: VRU sub-index (0-100)
+    - vehicle_index: Vehicle sub-index (0-100)
+
+    Frontend should blend: Final = α*RT-SI + (1-α)*MCDM
 
     Example:
     ```
-    GET /api/v1/safety/index/time/specific?intersection=glebe-potomac&time=2025-11-09T10:00:00&bin_minutes=15&alpha=0.7
+    GET /api/v1/safety/index/time/specific?intersection=glebe-potomac&time=2025-11-09T10:00:00&bin_minutes=15
     ```
     """
     db_client = get_db_client()
@@ -163,35 +249,26 @@ def get_safety_score_at_time(
                 realtime_intersection=intersection,
             )
 
-            if rt_si_result:
+            if rt_si_result is not None:
                 result["rt_si_score"] = rt_si_result["RT_SI"]
                 result["vru_index"] = rt_si_result["VRU_index"]
                 result["vehicle_index"] = rt_si_result["VEH_index"]
 
-                # Calculate blended final safety index
-                # Formula: SI_Final = α * RT-SI + (1-α) * MCDM
-                result["final_safety_index"] = (
-                    alpha * rt_si_result["RT_SI"] + (1 - alpha) * result["mcdm_index"]
-                )
-
                 logger.info(
-                    f"Blended safety index for {intersection} at {time}: "
-                    f"RT-SI={rt_si_result['RT_SI']:.2f}, MCDM={result['mcdm_index']:.2f}, "
-                    f"Final={result['final_safety_index']:.2f} (α={alpha})"
+                    f"Safety scores for {intersection} at {time}: "
+                    f"RT-SI={rt_si_result['RT_SI']:.2f}, MCDM={result['mcdm_index']:.2f} "
+                    f"(blending to be done in frontend)"
                 )
             else:
                 logger.warning(
-                    f"No RT-SI data for {intersection} at {time}, using MCDM only"
+                    f"No RT-SI data for {intersection} at {time}"
                 )
-                result["final_safety_index"] = result["mcdm_index"]
         except Exception as e:
             logger.error(f"Error calculating RT-SI: {e}", exc_info=True)
-            result["final_safety_index"] = result["mcdm_index"]
     else:
         logger.warning(
-            f"No crash intersection found for '{intersection}', using MCDM only"
+            f"No crash intersection found for '{intersection}'"
         )
-        result["final_safety_index"] = result["mcdm_index"]
 
     return result
 
@@ -204,24 +281,21 @@ def get_safety_score_trend(
     start_time: datetime = Query(..., description="Start datetime (ISO 8601 format)"),
     end_time: datetime = Query(..., description="End datetime (ISO 8601 format)"),
     bin_minutes: int = Query(15, description="Time bin size in minutes", ge=1, le=60),
-    alpha: float = Query(
-        0.7,
-        description="Blending coefficient: α*RT-SI + (1-α)*MCDM (0=only MCDM, 1=only RT-SI)",
-        ge=0.0,
-        le=1.0,
-    ),
 ):
     """
     Get safety score trend for a specific intersection over a time range.
 
-    Returns time series data for creating trend charts, including:
-    - MCDM index (long-term prioritization)
-    - RT-SI score (real-time safety with VRU and Vehicle sub-indices)
-    - Final blended safety index: α*RT-SI + (1-α)*MCDM
+    Returns time series data with both MCDM and RT-SI scores for client-side blending:
+    - mcdm_index: Long-term prioritization score (0-100)
+    - rt_si_score: Real-time safety index (0-100) 
+    - vru_index: VRU sub-index (0-100)
+    - vehicle_index: Vehicle sub-index (0-100)
+
+    Frontend should blend: Final = α*RT-SI + (1-α)*MCDM for each time point
 
     Example:
     ```
-    GET /api/v1/safety/index/time/range?intersection=glebe-potomac&start_time=2025-11-09T08:00:00&end_time=2025-11-09T18:00:00&bin_minutes=15&alpha=0.7
+    GET /api/v1/safety/index/time/range?intersection=glebe-potomac&start_time=2025-11-09T08:00:00&end_time=2025-11-09T18:00:00&bin_minutes=15
     ```
     """
     # Validate time range
@@ -274,40 +348,26 @@ def get_safety_score_trend(
                         realtime_intersection=intersection,
                     )
 
-                    if rt_si_result:
+                    if rt_si_result is not None:
                         result["rt_si_score"] = rt_si_result["RT_SI"]
                         result["vru_index"] = rt_si_result["VRU_index"]
                         result["vehicle_index"] = rt_si_result["VEH_index"]
-
-                        # Calculate blended final safety index
-                        result["final_safety_index"] = (
-                            alpha * rt_si_result["RT_SI"]
-                            + (1 - alpha) * result["mcdm_index"]
-                        )
-                    else:
-                        # No RT-SI data, use MCDM only
-                        result["final_safety_index"] = result["mcdm_index"]
 
                 except Exception as e:
                     logger.debug(
                         f"Error calculating RT-SI for time {result['time_bin']}: {e}"
                     )
-                    result["final_safety_index"] = result["mcdm_index"]
 
             logger.info(
-                f"Successfully calculated blended safety scores for {len(results)} time points"
+                f"Successfully calculated safety scores for {len(results)} time points "
+                f"(blending to be done in frontend)"
             )
 
         except Exception as e:
             logger.error(f"Error calculating RT-SI trend: {e}", exc_info=True)
-            # Fall back to MCDM only
-            for result in results:
-                result["final_safety_index"] = result["mcdm_index"]
     else:
         logger.warning(
-            f"No crash intersection found for '{intersection}', using MCDM only"
+            f"No crash intersection found for '{intersection}'"
         )
-        for result in results:
-            result["final_safety_index"] = result["mcdm_index"]
 
     return results

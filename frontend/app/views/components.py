@@ -27,9 +27,9 @@ def render_kpi_cards(df: pd.DataFrame):
         if not df.empty:
             avg_safety = df["safety_index"].mean()
             st.metric(
-                label="📊 Avg Final Index", 
+                label="📊 Avg Final Index",
                 value=f"{avg_safety:.1f}",
-                help="Average blended safety index (RT-SI + MCDM)"
+                help="Average blended safety index (RT-SI + MCDM)",
             )
         else:
             st.metric(label="📊 Avg Final Index", value="N/A")
@@ -110,57 +110,79 @@ def render_details_card(row: Optional[pd.Series]):
         st.metric(
             label="Safety Index (Blended)",
             value=f"{si:.1f}",
-            help="Final blended safety index combining RT-SI and MCDM"
+            help="Final blended safety index combining RT-SI and MCDM",
         )
-        
+
         # Show RT-SI if available
-        if 'rt_si_score' in row and row['rt_si_score'] is not None and not pd.isna(row['rt_si_score']):
+        if (
+            "rt_si_score" in row
+            and row["rt_si_score"] is not None
+            and not pd.isna(row["rt_si_score"])
+        ):
             st.metric(
                 label="RT-SI Score",
                 value=f"{float(row['rt_si_score']):.1f}",
-                help="Real-Time Safety Index based on current conditions"
+                help="Real-Time Safety Index based on current conditions",
             )
-        
+
         st.metric(label="Latitude", value=f"{row['latitude']:.4f}")
 
     with col2:
         st.metric(
-            label="Traffic Volume", 
-            value=format_number(float(row["traffic_volume"]), 0)
+            label="Traffic Volume", value=format_number(float(row["traffic_volume"]), 0)
         )
-        
+
         # Show MCDM if available
-        if 'mcdm_index' in row and row['mcdm_index'] is not None and not pd.isna(row['mcdm_index']):
+        if (
+            "mcdm_index" in row
+            and row["mcdm_index"] is not None
+            and not pd.isna(row["mcdm_index"])
+        ):
             st.metric(
                 label="MCDM Index",
                 value=f"{float(row['mcdm_index']):.1f}",
-                help="Long-term Multi-Criteria Decision Making index"
+                help="Long-term Multi-Criteria Decision Making index",
             )
-        
+
         st.metric(label="Longitude", value=f"{row['longitude']:.4f}")
-    
+
     # Show RT-SI sub-indices if available
-    if ('vru_index' in row and row['vru_index'] is not None and not pd.isna(row['vru_index'])) or \
-       ('vehicle_index' in row and row['vehicle_index'] is not None and not pd.isna(row['vehicle_index'])):
+    if (
+        "vru_index" in row
+        and row["vru_index"] is not None
+        and not pd.isna(row["vru_index"])
+    ) or (
+        "vehicle_index" in row
+        and row["vehicle_index"] is not None
+        and not pd.isna(row["vehicle_index"])
+    ):
         st.divider()
         st.caption("**RT-SI Sub-Indices:**")
-        
+
         col1, col2 = st.columns(2)
-        
+
         with col1:
-            if 'vru_index' in row and row['vru_index'] is not None and not pd.isna(row['vru_index']):
+            if (
+                "vru_index" in row
+                and row["vru_index"] is not None
+                and not pd.isna(row["vru_index"])
+            ):
                 st.metric(
                     label="VRU Index",
                     value=f"{float(row['vru_index']):.4f}",
-                    help="Vulnerable Road User risk component"
+                    help="Vulnerable Road User risk component",
                 )
-        
+
         with col2:
-            if 'vehicle_index' in row and row['vehicle_index'] is not None and not pd.isna(row['vehicle_index']):
+            if (
+                "vehicle_index" in row
+                and row["vehicle_index"] is not None
+                and not pd.isna(row["vehicle_index"])
+            ):
                 st.metric(
                     label="Vehicle Index",
                     value=f"{float(row['vehicle_index']):.4f}",
-                    help="Vehicle traffic risk component"
+                    help="Vehicle traffic risk component",
                 )
 
     # Additional info
@@ -176,15 +198,19 @@ def render_details_card(row: Optional[pd.Series]):
 
     # Toggle button
     if st.button(
-        "📊 View Historical Data" if not st.session_state.show_history else "📊 Hide Historical Data",
+        (
+            "📊 View Historical Data"
+            if not st.session_state.show_history
+            else "📊 Hide Historical Data"
+        ),
         key=f"history_toggle_{row['intersection_id']}",
-        use_container_width=True
+        use_container_width=True,
     ):
         st.session_state.show_history = not st.session_state.show_history
 
     # Render historical section if toggled on
     if st.session_state.show_history:
-        render_historical_section(str(row['intersection_id']))
+        render_historical_section(str(row["intersection_id"]))
 
 
 def render_legend():

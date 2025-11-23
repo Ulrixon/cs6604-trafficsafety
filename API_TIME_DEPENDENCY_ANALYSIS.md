@@ -11,6 +11,7 @@
 #### Flow Verification:
 
 1. **Frontend (Dashboard Page 0):**
+
    ```python
    # pages/0_🏠_Dashboard.py
    alpha = st.slider("RT-SI Weight (α)", 0.0, 1.0, 0.7)
@@ -18,6 +19,7 @@
    ```
 
 2. **API Client:**
+
    ```python
    # app/services/api_client.py
    def fetch_latest_blended_scores(alpha: float = 0.7):
@@ -27,7 +29,7 @@
            "bin_minutes": 15,
            "alpha": alpha,  # ✅ Alpha is passed
        }
-       
+
        score_response = session.get(
            f"{api_base}/time/specific",  # ✅ Calls correct endpoint
            params=params,
@@ -69,28 +71,30 @@
 #### How RT-SI Uses Time:
 
 1. **Historical Crash Rate (Time-based):**
+
    ```python
    # rt_si_service.py - calculate_rt_si()
    hour = timestamp.hour  # ✅ Uses selected time's hour
    dow = timestamp.weekday()  # ✅ Uses selected time's day of week
-   
+
    hist_data = self.get_historical_crash_rate(intersection_id, hour, dow)
    ```
-   
+
    - Queries crashes for the **specific hour and day of week**
    - Example: 2:00 PM on Wednesday uses crashes from 2:00 PM hour on all Wednesdays (2017-2024)
 
 2. **Real-time Traffic Data (Time-bin specific):**
+
    ```python
    # rt_si_service.py - get_realtime_data()
    def get_realtime_data(self, intersection_id, timestamp: datetime, bin_minutes: int = 15):
        # Query for the specific 15-minute bin
        end_time = timestamp + timedelta(minutes=bin_minutes)
-       
+
        # Convert datetime to microseconds
        start_time_us = int(timestamp.timestamp() * 1000000)  # ✅ Uses selected timestamp
        end_time_us = int(end_time.timestamp() * 1000000)
-       
+
        # Query vehicle count for this specific time window
        vehicle_query = """
        SELECT SUM(count) as vehicle_count
@@ -99,10 +103,10 @@
          AND publish_timestamp >= %(start_time)s  # ✅ Time-filtered
          AND publish_timestamp < %(end_time)s     # ✅ Time-filtered
        """
-       
+
        # Query speed distribution for this specific time window
        speed_query = """
-       SELECT 
+       SELECT
            SUM(bin_count) as total_count,
            AVG(speed) as avg_speed,
            PERCENTILE_CONT(0.85) as free_flow_speed
@@ -122,20 +126,21 @@
        # F_speed: Based on congestion at selected time
        speed_reduction = max(0, free_flow_speed - avg_speed)
        F_speed = min(1.0, self.K1_SPEED * (speed_reduction / (free_flow_speed + epsilon)))
-       
+
        # F_variance: Based on speed variance at selected time
        F_variance = min(1.0, self.K2_VAR * (sqrt(speed_variance) / (avg_speed + epsilon)))
-       
+
        # F_conflict: Based on traffic at selected time
        turning_vol = vehicle_count * 0.3
        conflict_exposure = turning_vol * vru_count
        F_conflict = min(1.0, self.K3_CONF * (conflict_exposure / 1000.0))
-       
+
        # Combined uplift
        U = 1.0 + BETA1 * F_speed + BETA2 * F_variance + BETA3 * F_conflict
    ```
 
 **Conclusion:** ✅ **Uplift factors ARE time-dependent because they are calculated from:**
+
 - Real-time vehicle counts at the selected timestamp
 - Speed patterns at the selected timestamp
 - Speed variance at the selected timestamp
@@ -191,10 +196,11 @@ Final RT-SI = scale(Combined_Index)
 ### Scenario: Same intersection, different times
 
 **Morning Rush (8:00 AM):**
+
 ```
 timestamp = 2025-11-20 08:00:00
 ├─ Historical: hour=8, dow=2 → r_hat = 3.5 (higher crash history)
-├─ Real-time: 
+├─ Real-time:
 │  ├─ vehicle_count = 250 (heavy traffic)
 │  ├─ avg_speed = 12 mph (severe congestion)
 │  ├─ free_flow_speed = 45 mph
@@ -207,6 +213,7 @@ timestamp = 2025-11-20 08:00:00
 ```
 
 **Late Night (2:00 AM):**
+
 ```
 timestamp = 2025-11-20 02:00:00
 ├─ Historical: hour=2, dow=2 → r_hat = 1.2 (lower crash history)
@@ -248,5 +255,6 @@ Both systems are **correctly implemented**:
    - Dynamically calculated uplift factors based on current conditions
 
 The RT-SI system accurately reflects "real-time" safety by incorporating actual traffic conditions at the selected timestamp, making it suitable for both:
+
 - **Current monitoring** (using `datetime.now()`)
 - **Historical analysis** (using past timestamps to understand what safety conditions were like at that time)

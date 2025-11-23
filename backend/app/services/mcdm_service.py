@@ -450,7 +450,6 @@ class MCDMSafetyIndexService:
             return {
                 "intersection": row["intersection"],
                 "time_bin": row["time_bin"],
-                "safety_score": float(row["Safety_Score"]),
                 "mcdm_index": float(row["MCDM_Safety_Index"]),
                 "vehicle_count": int(row["vehicle_count"]),
                 "vru_count": int(row["vru_count"]),
@@ -547,7 +546,6 @@ class MCDMSafetyIndexService:
                         {
                             "intersection": row["intersection"],
                             "time_bin": row["time_bin"],
-                            "safety_score": float(row["Safety_Score"]),
                             "mcdm_index": float(row["MCDM_Safety_Index"]),
                             "vehicle_count": int(row["vehicle_count"]),
                             "vru_count": int(row["vru_count"]),

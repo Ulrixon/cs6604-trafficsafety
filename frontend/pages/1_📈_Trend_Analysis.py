@@ -154,9 +154,9 @@ def render_single_time_view(
 
     with col4:
         st.metric(
-            "Safety Score",
-            f"{data['safety_score']:.2f}",
-            help="Overall MCDM safety score (0-100, higher = safer)",
+            "MCDM Index",
+            f"{data['mcdm_index']:.2f}",
+            help="MCDM prioritization index (0-100, higher = safer)",
         )
 
     # RT-SI Sub-indices (if available)
@@ -367,7 +367,7 @@ def render_trend_view(
             st.metric("Avg MCDM", f"{df['mcdm_index'].mean():.2f}")
 
         with col4:
-            st.metric("Avg Safety Score", f"{df['safety_score'].mean():.2f}")
+            st.metric("Avg MCDM", f"{df['mcdm_index'].mean():.2f}")
 
         with col5:
             st.metric("Total Vehicles", f"{df['vehicle_count'].sum():,}")
@@ -378,13 +378,13 @@ def render_trend_view(
         col1, col2, col3, col4, col5 = st.columns(5)
 
         with col1:
-            st.metric("Avg Safety Score", f"{df['safety_score'].mean():.2f}")
+            st.metric("Avg MCDM", f"{df['mcdm_index'].mean():.2f}")
 
         with col2:
-            st.metric("Min Safety Score", f"{df['safety_score'].min():.2f}")
+            st.metric("Min MCDM", f"{df['mcdm_index'].min():.2f}")
 
         with col3:
-            st.metric("Max Safety Score", f"{df['safety_score'].max():.2f}")
+            st.metric("Max MCDM", f"{df['mcdm_index'].max():.2f}")
 
         with col4:
             st.metric("Total Vehicles", f"{df['vehicle_count'].sum():,}")
@@ -499,9 +499,9 @@ def render_trend_view(
 
             st.plotly_chart(fig_sub, use_container_width=True)
 
-    # Safety Score Trend
+    # MCDM Index Trend
     fig1 = create_trend_chart(
-        df, "safety_score", "MCDM Safety Score Over Time", "#1f77b4"
+        df, "mcdm_index", "MCDM Index Over Time", "#1f77b4"
     )
     st.plotly_chart(fig1, use_container_width=True)
 
@@ -601,7 +601,6 @@ def render_trend_view(
     # List of variables to normalize
     variables_to_normalize = [
         ("mcdm_index", "MCDM Index"),
-        ("safety_score", "Safety Score"),
         ("vehicle_count", "Vehicle Count"),
         ("incident_count", "Incident Count"),
         ("vru_count", "VRU Count"),
@@ -631,7 +630,6 @@ def render_trend_view(
     # Define colors for each variable
     colors = {
         "mcdm_index": "#1f77b4",
-        "safety_score": "#ff7f0e",
         "vehicle_count": "#2ca02c",
         "incident_count": "#d62728",
         "vru_count": "#17becf",
@@ -684,7 +682,6 @@ def render_trend_view(
         st.dataframe(
             df.style.format(
                 {
-                    "safety_score": "{:.2f}",
                     "mcdm_index": "{:.2f}",
                     "avg_speed": "{:.2f}",
                     "speed_variance": "{:.2f}",

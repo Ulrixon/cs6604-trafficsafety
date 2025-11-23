@@ -705,6 +705,124 @@ class RTSIService:
             )
             return None
 
+    def get_bulk_traffic_data(
+        self,
+        intersection_id,
+        start_time: datetime,
+        end_time: datetime,
+        bin_minutes: int = 15,
+    ) -> Dict[datetime, Dict]:
+        """
+        Get traffic data for all time bins in a range using batched queries.
+        Much faster than querying each time bin individually.
+
+        Returns dict mapping timestamp -> traffic data
+        """
+        start_time_us = int(start_time.timestamp() * 1000000)
+        end_time_us = int(end_time.timestamp() * 1000000)
+        bin_microseconds = bin_minutes * 60 * 1000000
+
+        # Single query for all vehicle data, grouped by time bin
+        vehicle_query = """
+        SELECT 
+            ((publish_timestamp - %(start_time)s) / %(bin_us)s) * %(bin_us)s + %(start_time)s as time_bin,
+            SUM(count) as vehicle_count,
+            SUM(CASE WHEN movement IN ('LT', 'RT', 'UT') THEN count ELSE 0 END) as turning_count
+        FROM "vehicle-count"
+        WHERE intersection = %(intersection_id)s::text
+          AND publish_timestamp >= %(start_time)s
+          AND publish_timestamp < %(end_time)s
+        GROUP BY time_bin
+        ORDER BY time_bin;
+        """
+
+        # Single query for all speed data, grouped by time bin
+        speed_query = """
+        WITH binned_speed AS (
+            SELECT 
+                ((publish_timestamp - %(start_time)s) / %(bin_us)s) * %(bin_us)s + %(start_time)s as time_bin,
+                speed_interval,
+                SUM(count) as bin_count
+            FROM "speed-distribution"
+            WHERE intersection = %(intersection_id)s::text
+              AND publish_timestamp >= %(start_time)s
+              AND publish_timestamp < %(end_time)s
+            GROUP BY time_bin, speed_interval
+        )
+        SELECT 
+            time_bin,
+            SUM(bin_count) as total_count,
+            SUM(
+                (CAST(SPLIT_PART(SPLIT_PART(speed_interval, '-', 1), ' ', 1) AS FLOAT) + 
+                 CAST(SPLIT_PART(SPLIT_PART(speed_interval, '-', 2), ' ', 1) AS FLOAT)) / 2.0 * bin_count
+            ) / NULLIF(SUM(bin_count), 0) as avg_speed,
+            PERCENTILE_CONT(0.85) WITHIN GROUP (
+                ORDER BY (CAST(SPLIT_PART(SPLIT_PART(speed_interval, '-', 1), ' ', 1) AS FLOAT) + 
+                         CAST(SPLIT_PART(SPLIT_PART(speed_interval, '-', 2), ' ', 1) AS FLOAT)) / 2.0
+            ) as free_flow_speed
+        FROM binned_speed
+        GROUP BY time_bin
+        ORDER BY time_bin;
+        """
+
+        vehicle_results = self.db_client.execute_query(
+            vehicle_query,
+            {
+                "intersection_id": intersection_id,
+                "start_time": start_time_us,
+                "end_time": end_time_us,
+                "bin_us": bin_microseconds,
+            },
+        )
+
+        speed_results = self.db_client.execute_query(
+            speed_query,
+            {
+                "intersection_id": intersection_id,
+                "start_time": start_time_us,
+                "end_time": end_time_us,
+                "bin_us": bin_microseconds,
+            },
+        )
+
+        # Build lookup maps
+        vehicle_map = {}
+        for row in vehicle_results:
+            time_bin_us = int(row["time_bin"])
+            time_bin_dt = datetime.fromtimestamp(time_bin_us / 1000000)
+            vehicle_map[time_bin_dt] = {
+                "vehicle_count": int(row["vehicle_count"]) if row["vehicle_count"] else 0,
+                "turning_count": int(row["turning_count"]) if row["turning_count"] else 0,
+            }
+
+        speed_map = {}
+        for row in speed_results:
+            time_bin_us = int(row["time_bin"])
+            time_bin_dt = datetime.fromtimestamp(time_bin_us / 1000000)
+            speed_map[time_bin_dt] = {
+                "avg_speed": float(row["avg_speed"]) if row["avg_speed"] else 0.0,
+                "free_flow_speed": float(row["free_flow_speed"]) if row["free_flow_speed"] else 30.0,
+                "speed_variance": (float(row["avg_speed"]) * 0.1) ** 2 if row["avg_speed"] else 0.0,
+            }
+
+        # Merge data
+        result_map = {}
+        for time_bin, veh_data in vehicle_map.items():
+            if veh_data["vehicle_count"] > 0:  # Only include bins with vehicle data
+                speed_data = speed_map.get(time_bin, {
+                    "avg_speed": 0.0,
+                    "free_flow_speed": 30.0,
+                    "speed_variance": 0.0,
+                })
+                result_map[time_bin] = {
+                    "vehicle_count": veh_data["vehicle_count"],
+                    "turning_count": veh_data["turning_count"],
+                    "vru_count": 0,
+                    **speed_data,
+                }
+
+        return result_map
+
     def calculate_rt_si_trend(
         self,
         intersection_id: int,
@@ -715,8 +833,7 @@ class RTSIService:
     ) -> List[Dict]:
         """
         Calculate RT-SI trend over a time range.
-        Uses get_data_at_specific_time (no lookback) for each time bin.
-        Skips time bins where no data is available.
+        OPTIMIZED: Uses bulk query to fetch all data at once instead of per-bin queries.
 
         Args:
             intersection_id: Crash intersection ID for historical data
@@ -728,7 +845,6 @@ class RTSIService:
         Returns list of RT-SI calculations for each time bin with data.
         """
         results = []
-        current_time = start_time
 
         # Calculate capacity once for all time bins (doesn't change per bin)
         rt_intersection = (
@@ -738,41 +854,41 @@ class RTSIService:
             rt_intersection, bin_minutes=bin_minutes, lookback_days=30
         )
 
-        # Extract time bin features once
-        hour = current_time.hour
-        dow = current_time.weekday()
+        # OPTIMIZATION: Get ALL traffic data at once with bulk query
+        logger.info(f"Fetching bulk traffic data from {start_time} to {end_time}")
+        traffic_data_map = self.get_bulk_traffic_data(
+            rt_intersection, start_time, end_time, bin_minutes
+        )
+        logger.info(f"Retrieved data for {len(traffic_data_map)} time bins")
 
-        # Get historical crash rate once (same for all time bins in same hour/dow)
-        hist_data = self.get_historical_crash_rate(intersection_id, hour, dow)
-        raw_rate = hist_data["raw_rate"]
-        exposure = hist_data["exposure"]
-        r_hat = self.compute_eb_rate(raw_rate, exposure)
+        # Cache for historical crash rates (hour, dow) -> data
+        hist_cache = {}
 
-        while current_time < end_time:
+        # Process each time bin that has data
+        for current_time, rt_data in sorted(traffic_data_map.items()):
             try:
-                # Get data for this specific time bin only (no lookback)
-                rt_data = self.get_data_at_specific_time(
-                    rt_intersection, current_time, bin_minutes
-                )
-
-                # Skip this time bin if no data available
-                if rt_data is None:
-                    logger.debug(f"No data for time bin {current_time}, skipping")
-                    current_time += timedelta(minutes=bin_minutes)
-                    continue
-
-                # Update historical rate if hour/dow changed
-                current_hour = current_time.hour
-                current_dow = current_time.weekday()
-                if current_hour != hour or current_dow != dow:
-                    hour = current_hour
-                    dow = current_dow
-                    hist_data = self.get_historical_crash_rate(
-                        intersection_id, hour, dow
-                    )
+                # Get or compute historical crash rate for this hour/dow
+                hour = current_time.hour
+                dow = current_time.weekday()
+                cache_key = (hour, dow)
+                
+                if cache_key not in hist_cache:
+                    hist_data = self.get_historical_crash_rate(intersection_id, hour, dow)
                     raw_rate = hist_data["raw_rate"]
                     exposure = hist_data["exposure"]
                     r_hat = self.compute_eb_rate(raw_rate, exposure)
+                    hist_cache[cache_key] = {
+                        "hist_data": hist_data,
+                        "raw_rate": raw_rate,
+                        "exposure": exposure,
+                        "r_hat": r_hat,
+                    }
+                
+                cached = hist_cache[cache_key]
+                hist_data = cached["hist_data"]
+                raw_rate = cached["raw_rate"]
+                exposure = cached["exposure"]
+                r_hat = cached["r_hat"]
 
                 # Compute uplift factors
                 uplift = self.compute_uplift_factors(
@@ -833,8 +949,6 @@ class RTSIService:
                 logger.warning(
                     f"Error calculating RT-SI for time bin {current_time}: {e}"
                 )
-
-            current_time += timedelta(minutes=bin_minutes)
 
         logger.info(
             f"Calculated RT-SI trend for intersection {intersection_id}: "

@@ -12,8 +12,13 @@ class SafetyScoreTimePoint(BaseModel):
 
     intersection: str = Field(..., example="glebe-potomac")
     time_bin: datetime = Field(..., example="2025-11-09T10:00:00")
-    safety_score: float = Field(..., ge=0, le=100, example=67.66)
-    mcdm_index: float = Field(..., ge=0, le=100, example=67.66)
+    mcdm_index: float = Field(
+        ...,
+        ge=0,
+        le=100,
+        example=67.66,
+        description="MCDM prioritization index (0-100)",
+    )
     vehicle_count: int = Field(..., ge=0, example=184)
     vru_count: int = Field(..., ge=0, example=11)
     avg_speed: float = Field(..., ge=0, example=25.5)

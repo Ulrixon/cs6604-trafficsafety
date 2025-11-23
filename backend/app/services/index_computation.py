@@ -1,11 +1,17 @@
 """
 Index computation service - Phases 5-7: Normalization, Index Computation, Empirical Bayes
 Computes VRU, Vehicle, and Combined Safety Indices from master feature table
+
+Updated for Phase 5: Multi-Source Safety Index Integration
+- Incorporates weather features from NOAA Weather Plugin
+- Weighted combination of VCC (0.70) + Weather (0.15) + Other (0.15)
 """
 
 from typing import Dict, Optional
+from datetime import datetime
 import pandas as pd
 import numpy as np
+from app.core.config import settings
 
 
 def compute_normalization_constants(master_features: pd.DataFrame) -> Dict[str, float]:
@@ -92,14 +98,71 @@ def compute_normalization_constants(master_features: pd.DataFrame) -> Dict[str, 
     return constants
 
 
+def compute_weather_index(features: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute Weather Safety Index from NOAA Weather Plugin features.
+
+    Weather features (already normalized 0-1 by plugin):
+    - weather_precipitation: 0=no rain, 1=heavy rain (≥20mm/hr)
+    - weather_visibility: 0=clear (10km+), 1=zero visibility
+    - weather_wind_speed: 0=calm, 1=high wind (≥25 m/s)
+    - weather_temperature: 0=optimal (20°C), 1=extreme hot/cold
+
+    Weather Index Formula:
+    Weather_Index = 100 × [0.35×precip + 0.30×visibility + 0.20×wind + 0.15×temp]
+
+    Args:
+        features: DataFrame with weather columns
+
+    Returns:
+        DataFrame with 'Weather_Index' column added (0-100 scale)
+    """
+    df = features.copy()
+
+    # Check if weather features exist
+    weather_cols = ['weather_precipitation', 'weather_visibility',
+                   'weather_wind_speed', 'weather_temperature']
+
+    has_weather = all(col in df.columns for col in weather_cols)
+
+    if not has_weather:
+        # No weather data available - set Weather Index to baseline (20.0)
+        df['Weather_Index'] = 20.0
+        print("⚠ No weather data available - using baseline Weather Index (20.0)")
+        return df
+
+    # Fill missing weather values with safe defaults (0.0 = optimal conditions)
+    for col in weather_cols:
+        df[col] = df[col].fillna(0.0)
+
+    # Compute Weather Safety Index
+    # Higher values = worse weather conditions = higher risk
+    df['Weather_Index'] = 100 * (
+        0.35 * df['weather_precipitation'] +    # Precipitation has highest impact
+        0.30 * df['weather_visibility'] +       # Visibility is critical
+        0.20 * df['weather_wind_speed'] +       # Wind affects vehicle control
+        0.15 * df['weather_temperature']        # Temperature extremes
+    )
+
+    df['Weather_Index'] = df['Weather_Index'].clip(0, 100)
+
+    print(f"✓ Weather Index computed (mean={df['Weather_Index'].mean():.1f}, max={df['Weather_Index'].max():.1f})")
+
+    return df
+
+
 def compute_safety_indices(master_features: pd.DataFrame, norm_constants: Dict[str, float]) -> pd.DataFrame:
     """
-    Phase 6: Compute VRU, Vehicle, and Combined Safety Indices.
+    Phase 6: Compute VRU, Vehicle, Weather, and Combined Safety Indices.
 
-    Formulas from checkpoint document:
+    Formulas from checkpoint document (updated for multi-source integration):
     - VRU Index = 100 × [0.4×(I_VRU/I_max) + 0.2×(V/V_max) + 0.2×(S/S_ref) + 0.2×(σ_S/σ_max)]
     - Vehicle Index = 100 × [0.3×(I_vehicle/I_max) + 0.3×(V/V_max) + 0.2×(σ_S/σ_max) + 0.2×(hard_braking)]
-    - Combined Index = 0.6×VRU_Index + 0.4×Vehicle_Index
+    - Weather Index = 100 × [0.35×precip + 0.30×visibility + 0.20×wind + 0.15×temp]
+    - Combined Index = w_traffic×Traffic_Index + w_weather×Weather_Index
+
+    Where Traffic_Index = 0.6×VRU_Index + 0.4×Vehicle_Index (from original formula)
+    Default weights: w_traffic=0.85, w_weather=0.15 (configurable via plugin settings)
 
     Returns:
         DataFrame with computed indices added
@@ -168,11 +231,43 @@ def compute_safety_indices(master_features: pd.DataFrame, norm_constants: Dict[s
     )
     df['Vehicle_Index'] = df['Vehicle_Index'].clip(0, 100)
 
-    # ========== Combined Safety Index ==========
-    df['Combined_Index'] = (0.6 * df['VRU_Index'] + 0.4 * df['Vehicle_Index'])
+    # ========== Weather Safety Index ==========
+    df = compute_weather_index(df)
+
+    # ========== Combined Safety Index (Multi-Source) ==========
+    # Traffic Index = weighted combination of VRU and Vehicle indices
+    df['Traffic_Index'] = (0.6 * df['VRU_Index'] + 0.4 * df['Vehicle_Index'])
+    df['Traffic_Index'] = df['Traffic_Index'].clip(0, 100)
+
+    # Get plugin weights from settings (default: VCC=0.70, Weather=0.15, Other=0.15)
+    # For safety index: combine Traffic (VCC-based) and Weather
+    # Traffic gets combined weight of VCC + Other = 0.85
+    # Weather gets its weight = 0.15
+    vcc_weight = getattr(settings, 'VCC_PLUGIN_WEIGHT', 0.70)
+    weather_weight = getattr(settings, 'WEATHER_PLUGIN_WEIGHT', 0.15)
+
+    # Normalize weights for Traffic + Weather combination
+    traffic_weight = 1.0 - weather_weight  # Everything except weather
+    total_weight = traffic_weight + weather_weight
+
+    if total_weight > 0:
+        traffic_weight_norm = traffic_weight / total_weight
+        weather_weight_norm = weather_weight / total_weight
+    else:
+        traffic_weight_norm = 0.85
+        weather_weight_norm = 0.15
+
+    # Combined Index incorporating multi-source data
+    df['Combined_Index'] = (
+        traffic_weight_norm * df['Traffic_Index'] +
+        weather_weight_norm * df['Weather_Index']
+    )
     df['Combined_Index'] = df['Combined_Index'].clip(0, 100)
 
     print(f"✓ Safety indices computed for {len(df)} intervals")
+    print(f"  Weights: Traffic={traffic_weight_norm:.2f}, Weather={weather_weight_norm:.2f}")
+    print(f"  Mean indices: VRU={df['VRU_Index'].mean():.1f}, Vehicle={df['Vehicle_Index'].mean():.1f}, "
+          f"Weather={df['Weather_Index'].mean():.1f}, Combined={df['Combined_Index'].mean():.1f}")
 
     return df
 
@@ -241,3 +336,95 @@ def apply_empirical_bayes(
     print(f"✓ Empirical Bayes adjustment applied (k={k}, mean λ={df['lambda'].mean():.3f})")
 
     return df
+
+
+def compute_multi_source_safety_indices(
+    start_time: datetime,
+    end_time: datetime,
+    baseline_events: Optional[pd.DataFrame] = None,
+    apply_eb: bool = True
+) -> pd.DataFrame:
+    """
+    Compute safety indices using multi-source data collection (VCC + Weather + Other).
+
+    This is a convenience function that:
+    1. Collects data from all enabled plugins (VCC, Weather, etc.)
+    2. Computes normalization constants
+    3. Calculates VRU, Vehicle, Weather, and Combined indices
+    4. Optionally applies Empirical Bayes adjustment
+
+    Args:
+        start_time: Start of collection window
+        end_time: End of collection window
+        baseline_events: Optional historical baseline events for EB adjustment
+        apply_eb: Whether to apply Empirical Bayes adjustment (default: True)
+
+    Returns:
+        DataFrame with all computed safety indices
+
+    Example:
+        ```python
+        from datetime import datetime, timedelta
+        from app.services.index_computation import compute_multi_source_safety_indices
+
+        end = datetime.now()
+        start = end - timedelta(hours=1)
+
+        indices_df = compute_multi_source_safety_indices(start, end)
+        print(indices_df[['timestamp', 'VRU_Index', 'Vehicle_Index',
+                         'Weather_Index', 'Combined_Index']].head())
+        ```
+    """
+    from app.services.multi_source_collector import multi_source_collector
+
+    print(f"\n{'='*80}")
+    print("MULTI-SOURCE SAFETY INDEX COMPUTATION")
+    print(f"{'='*80}")
+    print(f"Time range: {start_time} to {end_time}")
+
+    # Step 1: Collect multi-source data
+    print("\n[1/4] Collecting data from all enabled plugins...")
+    data = multi_source_collector.collect_all(start_time, end_time, fail_fast=False)
+
+    if data.empty:
+        print("⚠ ERROR: No data collected from any plugin")
+        return pd.DataFrame()
+
+    print(f"✓ Collected {len(data)} rows with {len(data.columns)} features")
+
+    # Step 2: Compute normalization constants
+    print("\n[2/4] Computing normalization constants...")
+    norm_constants = compute_normalization_constants(data)
+
+    if not norm_constants:
+        print("⚠ ERROR: Failed to compute normalization constants")
+        return pd.DataFrame()
+
+    # Step 3: Compute safety indices
+    print("\n[3/4] Computing safety indices...")
+    indices_df = compute_safety_indices(data, norm_constants)
+
+    if indices_df.empty:
+        print("⚠ ERROR: Failed to compute safety indices")
+        return pd.DataFrame()
+
+    # Step 4: Apply Empirical Bayes (optional)
+    if apply_eb and baseline_events is not None and len(baseline_events) > 0:
+        print("\n[4/4] Applying Empirical Bayes adjustment...")
+        indices_df = apply_empirical_bayes(indices_df, baseline_events)
+    else:
+        print("\n[4/4] Skipping Empirical Bayes adjustment (no baseline data)")
+
+    print(f"\n{'='*80}")
+    print("COMPUTATION COMPLETE")
+    print(f"{'='*80}")
+    print(f"Total intervals: {len(indices_df)}")
+    print(f"Time range: {indices_df['timestamp'].min()} to {indices_df['timestamp'].max()}")
+    print(f"\nSafety Index Summary:")
+    print(f"  VRU Index: mean={indices_df['VRU_Index'].mean():.1f}, max={indices_df['VRU_Index'].max():.1f}")
+    print(f"  Vehicle Index: mean={indices_df['Vehicle_Index'].mean():.1f}, max={indices_df['Vehicle_Index'].max():.1f}")
+    print(f"  Weather Index: mean={indices_df['Weather_Index'].mean():.1f}, max={indices_df['Weather_Index'].max():.1f}")
+    print(f"  Combined Index: mean={indices_df['Combined_Index'].mean():.1f}, max={indices_df['Combined_Index'].max():.1f}")
+    print(f"{'='*80}\n")
+
+    return indices_df

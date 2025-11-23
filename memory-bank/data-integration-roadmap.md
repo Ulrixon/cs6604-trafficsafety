@@ -1,8 +1,91 @@
 # Data Integration & Extensibility Roadmap
 
 **Created**: 2025-11-20
-**Status**: PLANNING
+**Status**: IN PROGRESS (Phases 1-6 Complete)
 **Priority**: HIGH - Next Major Feature Set
+**Last Updated**: 2025-11-21
+
+---
+
+## Progress Summary
+
+### ✅ Completed Phases (Days 1-28 of Sprint)
+
+**Phase 1: Plugin Architecture Foundation** ✓ DONE
+- Created base plugin classes (`DataSourcePlugin`, `PluginMetadata`, `PluginHealthStatus`)
+- Implemented `PluginRegistry` with parallel collection and failure isolation
+- Added Pydantic-based configuration management
+- Database schema for weather and plugin tracking
+- **Commit**: `86c1f14` + `669a7b4` (tests/docs)
+
+**Phase 2: VCC Plugin Wrapper** ✓ DONE
+- Migrated VCC traffic data collection to plugin architecture
+- 5 normalized features (conflict_count, ttc_min, proximity_score, speed_variance, acceleration_events)
+- Factory function for settings-based initialization
+- 30+ unit tests with mocked VCC client
+- **Commit**: `cb7eb7b`
+
+**Phase 3: NOAA Weather Plugin** ✓ DONE
+- Integrated NOAA/NWS API for weather observations
+- 4 normalized features (precipitation, visibility, wind_speed, temperature)
+- Exponential backoff retry logic for API resilience
+- U-shaped temperature risk curve
+- 32 unit tests with mocked NOAA API
+- **Commit**: `3a9f34d`
+
+**Phase 4: Storage Integration** ✓ DONE
+- Extended `db_service.py` with weather observation functions
+- Added weather support to Parquet storage (date-partitioned)
+- GCS archiving for weather data (cloud backup)
+- Triple-write architecture: PostgreSQL + Parquet + GCS
+- **Commit**: `b72ae83`
+
+**Phase 5: Multi-Source Safety Index Integration** ✓ DONE
+- Created `MultiSourceDataCollector` service for orchestrating plugin data collection
+- Implemented `compute_weather_index()` function (4 features: precip, vis, wind, temp)
+- Updated `compute_safety_indices()` to include Weather Index in Combined Index
+- Weighted formula: `Combined = 0.85×Traffic + 0.15×Weather` (configurable)
+- Added `compute_multi_source_safety_indices()` convenience function
+- Infrastructure updates: `IntersectionSafetyIndex` schema, optional GCS imports
+- Comprehensive test suite (`test_multi_source_indices.py`) with 6 test cases
+- **Commit**: `4296974` + `35de486`
+
+**Phase 6: UI Transparency** ✓ DONE
+- Created transparency API schemas (`SafetyIndexBreakdown`, `PluginBreakdown`, `FeatureBreakdown`, `RiskLevel`)
+- Implemented `/safety/transparency/{id}/breakdown` endpoint for formula visualization
+- Implemented `/safety/transparency/formula/documentation` endpoint
+- Risk level classification with color codes (Low/Medium/High/Critical)
+- Shows raw values, normalized values, plugin weights, and final formula
+- Comprehensive test suite (`test_transparency_api.py`) - all 4 tests passing
+- Created detailed formula documentation (`docs/safety-index-formula.md`)
+- **Commit**: `8e3b269`
+
+### 🚧 Current Phase
+
+**Phase 7: Validation & Optimization** (IN PROGRESS - Day 28-29)
+- Goal: Validate weather impact and optimize feature weights using crash data
+- **Deliverables**:
+  - ✅ Crash correlation analysis script (`backend/scripts/crash_correlation_analysis.py`)
+  - ✅ Feature weight optimization script (`backend/scripts/optimize_feature_weights.py`)
+  - ✅ GCP PostgreSQL database connection established
+  - ✅ VDOT crashes database discovered (1,047,094 records)
+  - ✅ Database query utilities created
+  - 🔄 Update scripts to use real VDOT crash data (in progress)
+  - 🔄 Run correlation analysis with real data (pending)
+  - 🔄 Document validation results (pending)
+- **Key Features**:
+  - Comprehensive metrics: precision, recall, F1 score, accuracy, Pearson/Spearman correlation
+  - Grid search optimization for plugin weights (VCC vs Weather)
+  - Cross-validation to prevent overfitting
+  - Weather impact analysis (crash rates in bad vs clear weather)
+  - Synthetic data generation for testing
+  - Actionable recommendations for weight tuning
+- **Database Connection**:
+  - GCP Cloud SQL: `vtsi-postgres` (PostgreSQL 17.6)
+  - Location: europe-west1-d
+  - Database: `vtsi` with 8 tables including `vdot_crashes`
+  - Authentication: gcloud CLI with IP allowlisting
+- **Commits**: `be83944`, `9f7ab27`, `08fd4c6`
 
 ---
 

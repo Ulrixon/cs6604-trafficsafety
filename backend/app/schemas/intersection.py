@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, RootModel
 from datetime import datetime
 from typing import List, Optional
+from dataclasses import dataclass
 
 
 class IntersectionBase(BaseModel):
@@ -195,3 +196,27 @@ class IntersectionAggregateStats(BaseModel):
             ]
         }
     }
+
+
+# ============================================================================
+# Database Record Schemas (Dataclasses)
+# ============================================================================
+
+@dataclass
+class IntersectionSafetyIndex:
+    """
+    Safety index database record for an intersection at a specific time.
+
+    Used for inserting/querying safety indices in PostgreSQL.
+    """
+    intersection_id: str
+    timestamp: datetime
+    safety_index: float
+    vru_index: Optional[float] = None
+    vehicle_index: Optional[float] = None
+    weather_index: Optional[float] = None
+    traffic_index: Optional[float] = None
+    combined_index: Optional[float] = None
+    vehicle_count: Optional[int] = None
+    vru_count: Optional[int] = None
+    incident_count: Optional[int] = None

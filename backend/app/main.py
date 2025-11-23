@@ -11,6 +11,9 @@ Make sure the required dependencies are installed:
     pip install -r backend/requirements.txt
 """
 
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -21,6 +24,7 @@ logger = logging.getLogger(__name__)
 from .schemas.intersection import IntersectionRead
 from .core.config import settings  # type: ignore
 from .api.intersection import router as intersection_router
+from .db.connection import init_db, close_db, check_db_health
 from .services.db_client import get_db_client, close_db_client
 
 # Optional routers - import conditionally to avoid startup failures
@@ -40,26 +44,81 @@ except Exception as e:
     logger.warning(f"History router not available: {e}")
     HISTORY_AVAILABLE = False
 
+try:
+    from .api.transparency import router as transparency_router
+
+    TRANSPARENCY_AVAILABLE = True
+except Exception as e:
+    logger.warning(f"Transparency router not available: {e}")
+    TRANSPARENCY_AVAILABLE = False
+
+try:
+    from .api.analytics import router as analytics_router
+
+    ANALYTICS_AVAILABLE = True
+except Exception as e:
+    logger.warning(f"Analytics router not available: {e}")
+    ANALYTICS_AVAILABLE = False
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Lifespan context manager for FastAPI app.
-    Handles startup and shutdown events.
+    Lifespan context manager for application startup and shutdown.
+
+    Handles:
+    - PostgreSQL database connection initialization (if enabled)
+    - MCDM database connection (lazy initialization)
+    - Database connection cleanup
     """
-    # Startup: Initialize database connection (non-blocking)
+    # Startup
     logger.info("Starting Traffic Safety API...")
-    # Database connection will be established lazily on first request
 
-    yield
+    # Initialize PostgreSQL connection if enabled (for safety index storage)
+    if settings.USE_POSTGRESQL:
+        try:
+            logger.info("Initializing PostgreSQL connection...")
+            init_db(
+                database_url=settings.DATABASE_URL,
+                pool_size=settings.DB_POOL_SIZE,
+                max_overflow=settings.DB_MAX_OVERFLOW
+            )
 
-    # Shutdown: Close database connection
+            # Check database health
+            health = check_db_health()
+            if health["status"] == "healthy":
+                logger.info(f"PostgreSQL connection successful: {health['database']} ({health['postgis_version']})")
+            else:
+                logger.error(f"PostgreSQL health check failed: {health['error']}")
+        except Exception as e:
+            logger.error(f"Failed to initialize PostgreSQL: {e}")
+            if not settings.FALLBACK_TO_PARQUET:
+                raise
+            logger.warning("Continuing with Parquet fallback...")
+    else:
+        logger.info("PostgreSQL disabled - using Parquet storage only")
+
+    # MCDM database connection will be established lazily on first request
+
+    yield  # Application is running
+
+    # Shutdown
     logger.info("Shutting down Traffic Safety API...")
+
+    # Close PostgreSQL connection
+    if settings.USE_POSTGRESQL:
+        try:
+            close_db()
+            logger.info("✓ PostgreSQL connections closed")
+        except Exception as e:
+            logger.warning(f"Error closing PostgreSQL: {e}")
+
+    # Close MCDM database connection
     try:
         close_db_client()
-        logger.info("✓ Database connection closed")
+        logger.info("✓ MCDM database connection closed")
     except Exception as e:
-        logger.warning(f"Error closing database: {e}")
+        logger.warning(f"Error closing MCDM database: {e}")
 
 
 def create_app() -> FastAPI:
@@ -94,14 +153,47 @@ def create_app() -> FastAPI:
         app.include_router(history_router, prefix="/api/v1")
         logger.info("✓ History router registered")
 
-    # Simple health‑check endpoint
+    if TRANSPARENCY_AVAILABLE:
+        app.include_router(transparency_router, prefix="/api/v1")
+        logger.info("✓ Transparency router registered")
+
+    if ANALYTICS_AVAILABLE:
+        app.include_router(analytics_router, prefix="/api/v1")
+        logger.info("✓ Analytics router registered")
+
+    # Health‑check endpoint
     @app.get("/health", tags=["Health"])
     async def health_check() -> dict:
         """
         Health‑check endpoint used by monitoring tools.
-        Returns a simple JSON payload confirming the service is alive.
+        Returns status of the service and database connection.
         """
-        return {"status": "ok"}
+        response = {
+            "status": "ok",
+            "version": settings.VERSION,
+            "database": {
+                "enabled": settings.USE_POSTGRESQL,
+                "status": "not_configured"
+            }
+        }
+
+        if settings.USE_POSTGRESQL:
+            try:
+                db_health = check_db_health()
+                response["database"]["status"] = db_health["status"]
+                if db_health["status"] == "healthy":
+                    response["database"]["name"] = db_health["database"]
+                    response["database"]["postgis_version"] = db_health["postgis_version"]
+                    response["database"]["connection_pool"] = db_health["connection_pool"]
+                else:
+                    response["database"]["error"] = db_health.get("error")
+                    response["status"] = "degraded"
+            except Exception as e:
+                response["database"]["status"] = "error"
+                response["database"]["error"] = str(e)
+                response["status"] = "degraded"
+
+        return response
 
     return app
 

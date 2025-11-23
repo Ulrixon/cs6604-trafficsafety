@@ -4,7 +4,12 @@ from typing import Optional
 import logging
 
 from ..schemas.intersection import IntersectionRead, IntersectionWithRTSI
-from ..schemas.safety_score import SafetyScoreTimePoint, IntersectionList
+from ..schemas.safety_score import (
+    SafetyScoreTimePoint,
+    IntersectionList,
+    SafetyScoreTrendWithCorrelations,
+    TrendMetadata,
+)
 from ..services.intersection_service import get_all, get_by_id
 from ..services.db_client import get_db_client
 from ..services.mcdm_service import MCDMSafetyIndexService
@@ -341,7 +346,7 @@ def get_safety_score_at_time(
     return result
 
 
-@router.get("/time/range", response_model=list[SafetyScoreTimePoint])
+@router.get("/time/range", response_model=SafetyScoreTrendWithCorrelations)
 def get_safety_score_trend(
     intersection: str = Query(
         ..., description="Intersection name (e.g., 'glebe-potomac')"
@@ -349,21 +354,34 @@ def get_safety_score_trend(
     start_time: datetime = Query(..., description="Start datetime (ISO 8601 format)"),
     end_time: datetime = Query(..., description="End datetime (ISO 8601 format)"),
     bin_minutes: int = Query(15, description="Time bin size in minutes", ge=1, le=60),
+    include_correlations: bool = Query(
+        True, description="Include correlation analysis in response"
+    ),
 ):
     """
-    Get safety score trend for a specific intersection over a time range.
+    Get safety score trend with correlation analysis for a specific intersection over a time range.
 
-    Returns time series data with both MCDM and RT-SI scores for client-side blending:
-    - mcdm_index: Long-term prioritization score (0-100)
-    - rt_si_score: Real-time safety index (0-100)
-    - vru_index: VRU sub-index (0-100)
-    - vehicle_index: Vehicle sub-index (0-100)
+    Returns:
+    - time_series: Time series data with both MCDM and RT-SI scores
+      - mcdm_index: Long-term prioritization score (0-100)
+      - rt_si_score: Real-time safety index (0-100)
+      - vru_index: VRU sub-index (0-100)
+      - vehicle_index: Vehicle sub-index (0-100)
+      - RT-SI uplift factors: F_speed, F_variance, F_conflict
+      - Historical crash rates: raw_crash_rate, eb_crash_rate
 
-    Frontend should blend: Final = α*RT-SI + (1-α)*MCDM for each time point
+    - correlation_analysis: Statistical validation of safety mechanisms
+      - Pearson/Spearman correlations between variables and safety indices
+      - Monotonic trend analysis (e.g., "higher speed variance → higher incidents")
+      - Partial correlations showing independent contributions of each factor
+      
+    - metadata: Query information and statistics
+
+    This response validates that each component corresponds to a real safety mechanism.
 
     Example:
     ```
-    GET /api/v1/safety/index/time/range?intersection=glebe-potomac&start_time=2025-11-09T08:00:00&end_time=2025-11-09T18:00:00&bin_minutes=15
+    GET /api/v1/safety/index/time/range?intersection=glebe-potomac&start_time=2025-11-09T08:00:00&end_time=2025-11-09T18:00:00&bin_minutes=15&include_correlations=true
     ```
     """
     # Validate time range
@@ -434,6 +452,17 @@ def get_safety_score_trend(
                     # No RT-SI data for this time bin - leave as None
                     logger.debug(f"No RT-SI data for time bin {time_bin}")
 
+            # Add RT-SI component data for correlation analysis
+            for result in results:
+                time_bin = result["time_bin"]
+                if time_bin in rt_si_map:
+                    rt_si_data = rt_si_map[time_bin]
+                    # Add uplift factors for correlation analysis
+                    result["F_speed"] = rt_si_data.get("F_speed")
+                    result["F_variance"] = rt_si_data.get("F_variance")
+                    result["F_conflict"] = rt_si_data.get("F_conflict")
+                    result["uplift_factor"] = rt_si_data.get("uplift_factor")
+
             logger.info(
                 f"Successfully calculated safety scores: {len(results)} MCDM points, "
                 f"{len(rt_si_results)} RT-SI points (blending to be done in frontend)"
@@ -444,4 +473,29 @@ def get_safety_score_trend(
     else:
         logger.warning(f"No crash intersection found for '{intersection}'")
 
-    return results
+    # Compute correlation analysis if requested and we have enough data
+    correlation_analysis = None
+    if include_correlations and len(results) >= 3:
+        try:
+            from app.services.correlation_service import CorrelationAnalysisService
+
+            correlation_service = CorrelationAnalysisService()
+            correlation_analysis = correlation_service.compute_correlations(results)
+            logger.info("Correlation analysis completed successfully")
+        except Exception as e:
+            logger.error(f"Error computing correlations: {e}", exc_info=True)
+            # Don't fail the request if correlation analysis fails
+            correlation_analysis = {"error": str(e)}
+
+    # Return results with correlation analysis
+    return {
+        "time_series": results,
+        "correlation_analysis": correlation_analysis,
+        "metadata": {
+            "intersection": intersection,
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "bin_minutes": bin_minutes,
+            "data_points": len(results),
+        },
+    }

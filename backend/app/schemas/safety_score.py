@@ -56,6 +56,20 @@ class SafetyScoreTimePoint(BaseModel):
         description="Empirical Bayes adjusted crash rate",
     )
 
+    # RT-SI uplift factors for correlation analysis
+    F_speed: Optional[float] = Field(
+        None, example=0.45, description="Speed reduction uplift factor"
+    )
+    F_variance: Optional[float] = Field(
+        None, example=0.23, description="Speed variance uplift factor"
+    )
+    F_conflict: Optional[float] = Field(
+        None, example=0.12, description="VRU-vehicle conflict uplift factor"
+    )
+    uplift_factor: Optional[float] = Field(
+        None, example=1.35, description="Combined uplift factor (U)"
+    )
+
     # Final blended safety index
     final_safety_index: Optional[float] = Field(
         None,
@@ -82,3 +96,31 @@ class IntersectionList(BaseModel):
     """List of available intersections."""
 
     intersections: list[str] = Field(..., example=["glebe-potomac", "duke-jordan"])
+
+
+class TrendMetadata(BaseModel):
+    """Metadata for trend analysis response."""
+
+    intersection: str = Field(..., example="glebe-potomac")
+    start_time: str = Field(..., example="2025-11-01T08:00:00")
+    end_time: str = Field(..., example="2025-11-23T18:00:00")
+    bin_minutes: int = Field(..., example=15)
+    data_points: int = Field(..., example=2112)
+
+
+class SafetyScoreTrendWithCorrelations(BaseModel):
+    """
+    Safety score trend with correlation analysis.
+    
+    This response includes time series data plus statistical analysis showing
+    how each component of RT-SI and MCDM indices relates to real safety outcomes.
+    """
+
+    time_series: list[SafetyScoreTimePoint] = Field(
+        ..., description="Time series safety data"
+    )
+    correlation_analysis: Optional[dict] = Field(
+        None,
+        description="Correlation analysis showing relationships between variables and safety indices",
+    )
+    metadata: TrendMetadata = Field(..., description="Query metadata")

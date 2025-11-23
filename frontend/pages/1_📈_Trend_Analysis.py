@@ -152,13 +152,6 @@ def render_single_time_view(
             help="Multi-Criteria Decision Making index (0-100, higher = safer)",
         )
 
-    with col4:
-        st.metric(
-            "MCDM Index",
-            f"{data['mcdm_index']:.2f}",
-            help="MCDM prioritization index (0-100, higher = safer)",
-        )
-
     # RT-SI Sub-indices (if available)
     if data.get("rt_si_score") is not None:
         st.markdown("#### 🚦 RT-SI Sub-Indices")
@@ -464,6 +457,19 @@ def render_trend_view(
 
             fig_sub = go.Figure()
 
+            # Add RT-SI Score
+            fig_sub.add_trace(
+                go.Scatter(
+                    x=df["time_bin"],
+                    y=df["rt_si_score"],
+                    mode="lines+markers",
+                    name="RT-SI Score",
+                    line=dict(color="#e74c3c", width=3, dash="solid"),
+                    marker=dict(size=7),
+                    hovertemplate="<b>RT-SI Score</b>: %{y:.2f}<extra></extra>",
+                )
+            )
+
             fig_sub.add_trace(
                 go.Scatter(
                     x=df["time_bin"],
@@ -489,9 +495,9 @@ def render_trend_view(
             )
 
             fig_sub.update_layout(
-                title="RT-SI Sub-Indices (VRU vs Vehicle Risk)",
+                title="RT-SI Score & Sub-Indices (VRU vs Vehicle Risk)",
                 xaxis_title="Time",
-                yaxis_title="Risk Index",
+                yaxis_title="Risk Index / Score",
                 hovermode="x unified",
                 height=350,
                 margin=dict(l=0, r=0, t=40, b=0),
@@ -500,9 +506,7 @@ def render_trend_view(
             st.plotly_chart(fig_sub, use_container_width=True)
 
     # MCDM Index Trend
-    fig1 = create_trend_chart(
-        df, "mcdm_index", "MCDM Index Over Time", "#1f77b4"
-    )
+    fig1 = create_trend_chart(df, "mcdm_index", "MCDM Index Over Time", "#1f77b4")
     st.plotly_chart(fig1, use_container_width=True)
 
     # Traffic Metrics
@@ -601,6 +605,7 @@ def render_trend_view(
     # List of variables to normalize
     variables_to_normalize = [
         ("mcdm_index", "MCDM Index"),
+        ("rt_si_score", "RT-SI Score"),
         ("vehicle_count", "Vehicle Count"),
         ("incident_count", "Incident Count"),
         ("vru_count", "VRU Count"),
@@ -630,6 +635,7 @@ def render_trend_view(
     # Define colors for each variable
     colors = {
         "mcdm_index": "#1f77b4",
+        "rt_si_score": "#e74c3c",
         "vehicle_count": "#2ca02c",
         "incident_count": "#d62728",
         "vru_count": "#17becf",

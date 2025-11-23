@@ -45,6 +45,16 @@ class SafetyScoreTimePoint(BaseModel):
         example=0.071,
         description="Vehicle sub-index from RT-SI calculation",
     )
+    raw_crash_rate: Optional[float] = Field(
+        None,
+        example=0.00045,
+        description="Raw historical crash rate (crashes per vehicle-hour)",
+    )
+    eb_crash_rate: Optional[float] = Field(
+        None,
+        example=0.00038,
+        description="Empirical Bayes adjusted crash rate",
+    )
 
     # Final blended safety index
     final_safety_index: Optional[float] = Field(

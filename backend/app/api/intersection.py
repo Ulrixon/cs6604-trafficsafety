@@ -428,6 +428,8 @@ def get_safety_score_trend(
                     result["rt_si_score"] = rt_si_data["RT_SI"]
                     result["vru_index"] = rt_si_data["VRU_index"]
                     result["vehicle_index"] = rt_si_data["VEH_index"]
+                    result["raw_crash_rate"] = rt_si_data["raw_crash_rate"]
+                    result["eb_crash_rate"] = rt_si_data["eb_crash_rate"]
                 else:
                     # No RT-SI data for this time bin - leave as None
                     logger.debug(f"No RT-SI data for time bin {time_bin}")

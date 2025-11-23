@@ -236,6 +236,16 @@ class RTSIService:
         FROM speed_data;
         """
 
+        # Query VRU count
+        vru_query = """
+        SELECT 
+            SUM(count) as vru_count
+        FROM "vru-count"
+        WHERE intersection = %(intersection_id)s::text
+          AND publish_timestamp >= %(start_time)s
+          AND publish_timestamp < %(end_time)s;
+        """
+
         vehicle_results = self.db_client.execute_query(
             vehicle_query,
             {
@@ -247,6 +257,15 @@ class RTSIService:
 
         speed_results = self.db_client.execute_query(
             speed_query,
+            {
+                "intersection_id": intersection_id,
+                "start_time": start_time_us,
+                "end_time": end_time_us,
+            },
+        )
+
+        vru_results = self.db_client.execute_query(
+            vru_query,
             {
                 "intersection_id": intersection_id,
                 "start_time": start_time_us,
@@ -285,10 +304,15 @@ class RTSIService:
             # (simplified: using 10% of avg_speed as std dev)
             speed_variance = (avg_speed * 0.1) ** 2
 
+        # Extract VRU count
+        vru_count = 0
+        if vru_results and vru_results[0]["vru_count"]:
+            vru_count = int(vru_results[0]["vru_count"])
+
         return {
             "vehicle_count": vehicle_count,
             "turning_count": turning_count,
-            "vru_count": 0,  # VRU count not available in current tables
+            "vru_count": vru_count,
             "avg_speed": avg_speed,
             "speed_variance": speed_variance,
             "free_flow_speed": free_flow_speed,
@@ -412,6 +436,16 @@ class RTSIService:
         FROM speed_data;
         """
 
+        # Query VRU count
+        vru_query = """
+        SELECT 
+            SUM(count) as vru_count
+        FROM "vru-count"
+        WHERE intersection = %(intersection_id)s::text
+          AND publish_timestamp >= %(start_time)s
+          AND publish_timestamp < %(end_time)s;
+        """
+
         vehicle_results = self.db_client.execute_query(
             vehicle_query,
             {
@@ -423,6 +457,15 @@ class RTSIService:
 
         speed_results = self.db_client.execute_query(
             speed_query,
+            {
+                "intersection_id": intersection_id,
+                "start_time": start_time_us,
+                "end_time": end_time_us,
+            },
+        )
+
+        vru_results = self.db_client.execute_query(
+            vru_query,
             {
                 "intersection_id": intersection_id,
                 "start_time": start_time_us,
@@ -457,10 +500,15 @@ class RTSIService:
             # (simplified: using 10% of avg_speed as std dev)
             speed_variance = (avg_speed * 0.1) ** 2
 
+        # Extract VRU count
+        vru_count = 0
+        if vru_results and vru_results[0]["vru_count"]:
+            vru_count = int(vru_results[0]["vru_count"])
+
         return {
             "vehicle_count": vehicle_count,
             "turning_count": turning_count,  # Actual turning movements from data
-            "vru_count": 0,  # VRU count not available in current tables
+            "vru_count": vru_count,
             "avg_speed": avg_speed,
             "speed_variance": speed_variance,
             "free_flow_speed": free_flow_speed,
@@ -765,6 +813,19 @@ class RTSIService:
         ORDER BY time_bin;
         """
 
+        # Single query for all VRU data, grouped by time bin
+        vru_query = """
+        SELECT 
+            ((publish_timestamp - %(start_time)s) / %(bin_us)s) * %(bin_us)s + %(start_time)s as time_bin,
+            SUM(count) as vru_count
+        FROM "vru-count"
+        WHERE intersection = %(intersection_id)s::text
+          AND publish_timestamp >= %(start_time)s
+          AND publish_timestamp < %(end_time)s
+        GROUP BY time_bin
+        ORDER BY time_bin;
+        """
+
         vehicle_results = self.db_client.execute_query(
             vehicle_query,
             {
@@ -785,14 +846,28 @@ class RTSIService:
             },
         )
 
+        vru_results = self.db_client.execute_query(
+            vru_query,
+            {
+                "intersection_id": intersection_id,
+                "start_time": start_time_us,
+                "end_time": end_time_us,
+                "bin_us": bin_microseconds,
+            },
+        )
+
         # Build lookup maps
         vehicle_map = {}
         for row in vehicle_results:
             time_bin_us = int(row["time_bin"])
             time_bin_dt = datetime.fromtimestamp(time_bin_us / 1000000)
             vehicle_map[time_bin_dt] = {
-                "vehicle_count": int(row["vehicle_count"]) if row["vehicle_count"] else 0,
-                "turning_count": int(row["turning_count"]) if row["turning_count"] else 0,
+                "vehicle_count": (
+                    int(row["vehicle_count"]) if row["vehicle_count"] else 0
+                ),
+                "turning_count": (
+                    int(row["turning_count"]) if row["turning_count"] else 0
+                ),
             }
 
         speed_map = {}
@@ -801,23 +876,39 @@ class RTSIService:
             time_bin_dt = datetime.fromtimestamp(time_bin_us / 1000000)
             speed_map[time_bin_dt] = {
                 "avg_speed": float(row["avg_speed"]) if row["avg_speed"] else 0.0,
-                "free_flow_speed": float(row["free_flow_speed"]) if row["free_flow_speed"] else 30.0,
-                "speed_variance": (float(row["avg_speed"]) * 0.1) ** 2 if row["avg_speed"] else 0.0,
+                "free_flow_speed": (
+                    float(row["free_flow_speed"]) if row["free_flow_speed"] else 30.0
+                ),
+                "speed_variance": (
+                    (float(row["avg_speed"]) * 0.1) ** 2 if row["avg_speed"] else 0.0
+                ),
+            }
+
+        vru_map = {}
+        for row in vru_results:
+            time_bin_us = int(row["time_bin"])
+            time_bin_dt = datetime.fromtimestamp(time_bin_us / 1000000)
+            vru_map[time_bin_dt] = {
+                "vru_count": int(row["vru_count"]) if row["vru_count"] else 0
             }
 
         # Merge data
         result_map = {}
         for time_bin, veh_data in vehicle_map.items():
             if veh_data["vehicle_count"] > 0:  # Only include bins with vehicle data
-                speed_data = speed_map.get(time_bin, {
-                    "avg_speed": 0.0,
-                    "free_flow_speed": 30.0,
-                    "speed_variance": 0.0,
-                })
+                speed_data = speed_map.get(
+                    time_bin,
+                    {
+                        "avg_speed": 0.0,
+                        "free_flow_speed": 30.0,
+                        "speed_variance": 0.0,
+                    },
+                )
+                vru_data = vru_map.get(time_bin, {"vru_count": 0})
                 result_map[time_bin] = {
                     "vehicle_count": veh_data["vehicle_count"],
                     "turning_count": veh_data["turning_count"],
-                    "vru_count": 0,
+                    "vru_count": vru_data["vru_count"],
                     **speed_data,
                 }
 
@@ -871,9 +962,11 @@ class RTSIService:
                 hour = current_time.hour
                 dow = current_time.weekday()
                 cache_key = (hour, dow)
-                
+
                 if cache_key not in hist_cache:
-                    hist_data = self.get_historical_crash_rate(intersection_id, hour, dow)
+                    hist_data = self.get_historical_crash_rate(
+                        intersection_id, hour, dow
+                    )
                     raw_rate = hist_data["raw_rate"]
                     exposure = hist_data["exposure"]
                     r_hat = self.compute_eb_rate(raw_rate, exposure)
@@ -883,7 +976,7 @@ class RTSIService:
                         "exposure": exposure,
                         "r_hat": r_hat,
                     }
-                
+
                 cached = hist_cache[cache_key]
                 hist_data = cached["hist_data"]
                 raw_rate = cached["raw_rate"]

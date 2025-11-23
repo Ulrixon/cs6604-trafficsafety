@@ -7,6 +7,7 @@
 ### 1. **Startup Timeout (Most Common)**
 
 Cloud Run default timeout is 60 seconds. The app might be taking too long to start due to:
+
 - Database connection delays
 - Heavy imports
 - Lambda optimization calculations
@@ -85,6 +86,7 @@ cat requirements.txt | grep -E "(fastapi|uvicorn|psycopg2)"
 ```
 
 **Required packages**:
+
 - fastapi
 - uvicorn[standard]
 - psycopg2-binary
@@ -96,6 +98,7 @@ cat requirements.txt | grep -E "(fastapi|uvicorn|psycopg2)"
 **Verify**: The app listens on $PORT (Cloud Run sets this to 8080)
 
 **Check docker-entrypoint.sh**:
+
 ```bash
 PORT=${PORT:-8080}
 exec uvicorn app.main:app --host 0.0.0.0 --port $PORT
@@ -187,18 +190,22 @@ curl "$SERVICE_URL/api/v1/safety/index/intersections/list"
 ## Common Error Patterns
 
 ### "Container failed to start"
+
 - **Cause**: Startup timeout or crash during initialization
 - **Fix**: Increase timeout, check logs for Python errors
 
 ### "Error: Could not connect to Cloud SQL"
+
 - **Cause**: Database credentials or connection issues
 - **Fix**: Verify secrets, check database is accessible
 
 ### "ModuleNotFoundError"
+
 - **Cause**: Missing dependency in requirements.txt
 - **Fix**: Add missing package and rebuild
 
 ### "Port already in use"
+
 - **Cause**: Multiple processes trying to bind to same port
 - **Fix**: Ensure only one uvicorn process in entrypoint script
 

@@ -50,7 +50,7 @@ class VTTIPostgresClient:
             min_connections: Minimum connections in pool
             max_connections: Maximum connections in pool
         """
-        load_dotenv.load_dotenv()  # Load environment variables from .env file
+        load_dotenv()  # Load environment variables from .env file
         self.database = database or os.getenv("VTTI_DB_NAME", "vtsi")
         self.user = user or os.getenv("VTTI_DB_USER", "postgres")
         self.password = password or os.getenv("VTTI_DB_PASSWORD")

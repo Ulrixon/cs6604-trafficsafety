@@ -295,9 +295,8 @@ def fetch_intersection_history(
         }
     """
     try:
-        # Construct URL - replace /safety/index/ with /safety/history/
-        base_url = API_URL.replace("/safety/index/", "/safety/history/")
-        url = f"{base_url}{intersection_id}"
+        # Construct URL for history endpoint
+        url = f"{API_URL}/safety/history/{intersection_id}"
 
         # Build query parameters
         params = {"days": days}
@@ -366,9 +365,8 @@ def fetch_intersection_stats(
         }
     """
     try:
-        # Construct URL - replace /safety/index/ with /safety/history/
-        base_url = API_URL.replace("/safety/index/", "/safety/history/")
-        url = f"{base_url}{intersection_id}/stats"
+        # Construct URL for history stats endpoint
+        url = f"{API_URL}/safety/history/{intersection_id}/stats"
 
         # Build query parameters
         params = {"days": days}

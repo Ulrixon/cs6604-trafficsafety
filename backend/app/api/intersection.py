@@ -105,7 +105,12 @@ def list_intersections(
     """
     if not include_rtsi:
         # Fast path: just return MCDM indices
-        return get_all()
+        intersections = get_all()
+        if not intersections:
+            logger.warning("No intersections returned from get_all()")
+        else:
+            logger.info(f"Returning {len(intersections)} intersections (MCDM only)")
+        return intersections
 
     # Slow path: calculate RT-SI for each intersection
     db_client = get_db_client()
@@ -173,6 +178,41 @@ def list_intersections(
         results.append(IntersectionWithRTSI(**result_data))
 
     return results
+
+
+@router.get("/debug/status")
+def debug_status():
+    """
+    Debug endpoint to check database connectivity and data availability.
+    """
+    try:
+        db_client = get_db_client()
+        mcdm_service = MCDMSafetyIndexService(db_client)
+        
+        # Check available intersections
+        available_intersections = mcdm_service.get_available_intersections()
+        
+        # Try to calculate latest scores
+        safety_scores = mcdm_service.calculate_latest_safety_scores(
+            bin_minutes=15,
+            lookback_hours=24,
+        )
+        
+        return {
+            "status": "ok",
+            "database_connected": True,
+            "available_intersections_count": len(available_intersections),
+            "available_intersections": available_intersections[:5],  # First 5
+            "safety_scores_count": len(safety_scores) if safety_scores else 0,
+            "sample_score": safety_scores[0] if safety_scores else None,
+        }
+    except Exception as e:
+        logger.error(f"Debug status check failed: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "error": str(e),
+            "database_connected": False,
+        }
 
 
 @router.get("/{intersection_id}", response_model=IntersectionRead)

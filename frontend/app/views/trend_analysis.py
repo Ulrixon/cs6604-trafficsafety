@@ -28,7 +28,9 @@ st.set_page_config(
 )
 
 # API configuration
-API_BASE_URL = "http://localhost:8000/api/v1/safety/index"
+from app.utils.config import API_URL
+
+API_BASE_URL = f"{API_URL}/safety/index"
 
 
 def get_available_intersections():

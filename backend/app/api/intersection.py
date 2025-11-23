@@ -247,17 +247,6 @@ def debug_status():
         }
 
 
-@router.get("/{intersection_id}", response_model=IntersectionRead)
-def get_intersection(intersection_id: int):
-    """
-    Retrieve details for a single intersection by its ID.
-    """
-    intersection = get_by_id(intersection_id)
-    if not intersection:
-        raise HTTPException(status_code=404, detail="Intersection not found")
-    return intersection
-
-
 @router.get("/intersections/list", response_model=IntersectionList)
 def list_available_intersections():
     """
@@ -267,6 +256,17 @@ def list_available_intersections():
     mcdm_service = MCDMSafetyIndexService(db_client)
     intersections = mcdm_service.get_available_intersections()
     return {"intersections": intersections}
+
+
+@router.get("/{intersection_id}", response_model=IntersectionRead)
+def get_intersection(intersection_id: int):
+    """
+    Retrieve details for a single intersection by its ID.
+    """
+    intersection = get_by_id(intersection_id)
+    if not intersection:
+        raise HTTPException(status_code=404, detail="Intersection not found")
+    return intersection
 
 
 @router.get("/time/specific", response_model=SafetyScoreTimePoint)

@@ -176,15 +176,89 @@ def clear_cache():
     st.cache_data.clear()
 
 
+@st.cache_data(ttl=300, show_spinner=False)  # Cache for 5 minutes
+def fetch_latest_blended_scores(alpha: float = 0.7) -> tuple[List[dict], Optional[str]]:
+    """
+    Fetch latest safety scores with RT-SI blending for all intersections.
+
+    Strategy:
+    1. Call /safety/index/?include_rtsi=true to get both MCDM and RT-SI in one call
+    2. Blend the scores in the frontend based on alpha parameter
+    3. Much faster than calling /time/specific for each intersection
+
+    Args:
+        alpha: Blending coefficient (0.0 = MCDM only, 1.0 = RT-SI only)
+
+    Returns:
+        Tuple of (list of intersection dicts with blended scores, error message or None)
+    """
+    try:
+        api_base = API_URL.rstrip("/")
+        session = _get_session_with_retries()
+
+        # Determine whether we need RT-SI data
+        include_rtsi = alpha > 0.0
+
+        # Call the optimized endpoint
+        params = {}
+        if include_rtsi:
+            params["include_rtsi"] = "true"
+            params["bin_minutes"] = 15
+
+        response = session.get(
+            f"{api_base}/safety/index/", params=params, timeout=API_TIMEOUT
+        )
+        response.raise_for_status()
+
+        intersections = response.json()
+
+        if not intersections:
+            return _load_fallback_data(), "No intersections available"
+
+        # Transform to expected format and blend scores in frontend
+        results = []
+        for item in intersections:
+            mcdm = item.get("mcdm_index") or item.get("safety_index", 50.0)
+            rt_si = item.get("rt_si_score")
+
+            # Calculate blended final safety index
+            # Formula: SI_Final = α * RT-SI + (1-α) * MCDM
+            if rt_si is not None and alpha > 0.0:
+                final_index = alpha * rt_si + (1 - alpha) * mcdm
+            else:
+                # No RT-SI data or alpha=0, use MCDM only
+                final_index = mcdm
+
+            intersection_data = {
+                "intersection_id": item.get("intersection_id"),
+                "intersection_name": item.get("intersection_name"),
+                "safety_index": final_index,  # Blended score
+                "mcdm_index": mcdm,
+                "rt_si_score": rt_si,
+                "final_safety_index": final_index,
+                "traffic_volume": float(item.get("traffic_volume", 0)),
+                "vru_index": item.get("vru_index"),
+                "vehicle_index": item.get("vehicle_index"),
+                "latitude": item.get("latitude"),
+                "longitude": item.get("longitude"),
+            }
+            results.append(intersection_data)
+
+        return results, None
+
+    except Exception as e:
+        error_msg = f"Error fetching blended scores: {str(e)}"
+        return _load_fallback_data(), error_msg
+
+
 # ============================================================================
 # HISTORICAL DATA API METHODS
 # ============================================================================
 
+
 @st.cache_data(ttl=API_CACHE_TTL, show_spinner=False)
 def fetch_intersection_history(
-    intersection_id: str,
-    days: int = 7,
-    aggregation: Optional[str] = None
+    intersection_id: str, days: int = 7, aggregation: Optional[str] = None
 ) -> tuple[Optional[dict], Optional[str]]:
     """
     Fetch historical time series data for an intersection.
@@ -263,8 +337,7 @@ def fetch_intersection_history(
 
 @st.cache_data(ttl=API_CACHE_TTL, show_spinner=False)
 def fetch_intersection_stats(
-    intersection_id: str,
-    days: int = 7
+    intersection_id: str, days: int = 7
 ) -> tuple[Optional[dict], Optional[str]]:
     """
     Fetch aggregated statistics for an intersection over a time period.

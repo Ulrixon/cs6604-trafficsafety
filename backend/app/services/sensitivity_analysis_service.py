@@ -204,7 +204,9 @@ class SensitivityAnalysisService:
         logger.info(f"Running {n_samples} sensitivity iterations")
 
         # Compute RT-SI for each parameter set (OPTIMIZED: bulk calculation per set)
-        for idx, perturb in enumerate(perturbations[1:], 1):  # Skip baseline (already computed)
+        for idx, perturb in enumerate(
+            perturbations[1:], 1
+        ):  # Skip baseline (already computed)
             params = perturb["params"]
             label = perturb["label"]
 

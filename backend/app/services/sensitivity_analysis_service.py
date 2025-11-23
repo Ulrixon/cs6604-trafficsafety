@@ -89,26 +89,28 @@ class SensitivityAnalysisService:
 
         return perturbations
 
-    def compute_rt_si_with_params(
+    def compute_rt_si_trend_with_params(
         self,
         intersection_id: int,
-        timestamp: datetime,
+        start_time: datetime,
+        end_time: datetime,
         params: Dict,
         bin_minutes: int = 15,
         realtime_intersection: Optional[str] = None,
-    ) -> Optional[Dict]:
+    ) -> List[Dict]:
         """
-        Compute RT-SI with custom parameters.
+        Compute RT-SI trend with custom parameters (OPTIMIZED for bulk calculation).
 
         Args:
             intersection_id: Crash intersection ID
-            timestamp: Time to calculate RT-SI for
+            start_time: Start of time range
+            end_time: End of time range
             params: Parameter dictionary
             bin_minutes: Time bin size
             realtime_intersection: BSM intersection name
 
         Returns:
-            RT-SI result dict or None
+            List of RT-SI result dicts
         """
         # Create temporary service with perturbed parameters
         temp_service = RTSIService(self.db_client)
@@ -126,10 +128,11 @@ class SensitivityAnalysisService:
         temp_service.OMEGA_VRU = params["OMEGA_VRU"]
         temp_service.OMEGA_VEH = params["OMEGA_VEH"]
 
-        # Calculate RT-SI
-        return temp_service.calculate_rt_si(
+        # Calculate RT-SI trend (bulk operation - much faster!)
+        return temp_service.calculate_rt_si_trend(
             intersection_id,
-            timestamp,
+            start_time,
+            end_time,
             bin_minutes=bin_minutes,
             realtime_intersection=realtime_intersection,
         )
@@ -200,27 +203,28 @@ class SensitivityAnalysisService:
 
         logger.info(f"Running {n_samples} sensitivity iterations")
 
-        # Compute RT-SI for each parameter set
-        for perturb in perturbations[1:]:  # Skip baseline (already computed)
+        # Compute RT-SI for each parameter set (OPTIMIZED: bulk calculation per set)
+        for idx, perturb in enumerate(perturbations[1:], 1):  # Skip baseline (already computed)
             params = perturb["params"]
             label = perturb["label"]
 
-            perturbed_scores = []
+            logger.info(f"Computing iteration {idx}/{n_samples}: {label}")
 
-            for i, ts_str in enumerate(timestamps):
-                ts = datetime.fromisoformat(ts_str)
-                result = self.compute_rt_si_with_params(
-                    crash_intersection_id,
-                    ts,
-                    params,
-                    bin_minutes=bin_minutes,
-                    realtime_intersection=intersection,
-                )
+            # Use bulk calculation (much faster than individual calls!)
+            perturbed_results = self.compute_rt_si_trend_with_params(
+                crash_intersection_id,
+                start_time,
+                end_time,
+                params,
+                bin_minutes=bin_minutes,
+                realtime_intersection=intersection,
+            )
 
-                if result:
-                    perturbed_scores.append(result["RT_SI"])
-                else:
-                    perturbed_scores.append(baseline_scores[i])  # Fallback to baseline
+            if perturbed_results:
+                perturbed_scores = [r["RT_SI"] for r in perturbed_results]
+            else:
+                # Fallback to baseline if computation fails
+                perturbed_scores = baseline_scores[:]
 
             all_perturbed_scores.append(perturbed_scores)
 

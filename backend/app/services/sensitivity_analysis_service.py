@@ -89,54 +89,6 @@ class SensitivityAnalysisService:
 
         return perturbations
 
-    def compute_rt_si_trend_with_params(
-        self,
-        intersection_id: int,
-        start_time: datetime,
-        end_time: datetime,
-        params: Dict,
-        bin_minutes: int = 15,
-        realtime_intersection: Optional[str] = None,
-    ) -> List[Dict]:
-        """
-        Compute RT-SI trend with custom parameters (OPTIMIZED for bulk calculation).
-
-        Args:
-            intersection_id: Crash intersection ID
-            start_time: Start of time range
-            end_time: End of time range
-            params: Parameter dictionary
-            bin_minutes: Time bin size
-            realtime_intersection: BSM intersection name
-
-        Returns:
-            List of RT-SI result dicts
-        """
-        # Create temporary service with perturbed parameters
-        temp_service = RTSIService(self.db_client)
-
-        # Override parameters
-        temp_service.LAMBDA = params["LAMBDA"]
-        temp_service.BETA1 = params["BETA1"]
-        temp_service.BETA2 = params["BETA2"]
-        temp_service.BETA3 = params["BETA3"]
-        temp_service.K1_SPEED = params["K1_SPEED"]
-        temp_service.K2_VAR = params["K2_VAR"]
-        temp_service.K3_CONF = params["K3_CONF"]
-        temp_service.K4_VRU_RATIO = params["K4_VRU_RATIO"]
-        temp_service.K5_VOL_CAPACITY = params["K5_VOL_CAPACITY"]
-        temp_service.OMEGA_VRU = params["OMEGA_VRU"]
-        temp_service.OMEGA_VEH = params["OMEGA_VEH"]
-
-        # Calculate RT-SI trend (bulk operation - much faster!)
-        return temp_service.calculate_rt_si_trend(
-            intersection_id,
-            start_time,
-            end_time,
-            bin_minutes=bin_minutes,
-            realtime_intersection=realtime_intersection,
-        )
-
     def analyze_sensitivity(
         self,
         intersection: str,
@@ -148,6 +100,7 @@ class SensitivityAnalysisService:
     ) -> Dict:
         """
         Perform sensitivity analysis across a time range.
+        OPTIMIZED: Fetches data once, then re-calculates scores in memory.
 
         Args:
             intersection: BSM intersection name
@@ -178,21 +131,32 @@ class SensitivityAnalysisService:
             perturbation_pct, n_samples
         )
 
-        # Calculate baseline RT-SI trend
-        logger.info(f"Computing baseline RT-SI trend for {intersection}")
-        baseline_results = self.base_rt_si_service.calculate_rt_si_trend(
-            crash_intersection_id,
-            start_time,
-            end_time,
-            bin_minutes=bin_minutes,
-            realtime_intersection=intersection,
+        # 1. Fetch Capacity (ONCE)
+        logger.info(f"Fetching capacity for {intersection}")
+        capacity = self.base_rt_si_service.get_intersection_capacity(
+            intersection, bin_minutes=bin_minutes, lookback_days=30
         )
 
-        if not baseline_results:
-            return {
-                "error": "No baseline data available",
+        # 2. Fetch Bulk Traffic Data (ONCE)
+        logger.info(f"Fetching bulk traffic data for {intersection} ({start_time} to {end_time})")
+        traffic_data_map = self.base_rt_si_service.get_bulk_traffic_data(
+            intersection, start_time, end_time, bin_minutes
+        )
+        
+        if not traffic_data_map:
+             return {
+                "error": "No traffic data available for this range",
                 "intersection": intersection,
             }
+
+        # 3. Calculate Baseline Scores (In Memory)
+        logger.info(f"Computing baseline RT-SI trend")
+        baseline_results = self.base_rt_si_service.calculate_rt_si_from_data(
+            crash_intersection_id,
+            traffic_data_map,
+            capacity,
+            bin_minutes
+        )
 
         baseline_scores = [r["RT_SI"] for r in baseline_results]
         timestamps = [r["timestamp"] for r in baseline_results]
@@ -201,31 +165,40 @@ class SensitivityAnalysisService:
         all_perturbed_scores = []
         parameter_details = []
 
-        logger.info(f"Running {n_samples} sensitivity iterations")
+        logger.info(f"Running {n_samples} sensitivity iterations (in-memory)")
 
-        # Compute RT-SI for each parameter set (OPTIMIZED: bulk calculation per set)
-        for idx, perturb in enumerate(
-            perturbations[1:], 1
-        ):  # Skip baseline (already computed)
+        # 4. Compute RT-SI for each parameter set (In Memory)
+        for idx, perturb in enumerate(perturbations[1:], 1):  # Skip baseline
             params = perturb["params"]
             label = perturb["label"]
 
-            logger.info(f"Computing iteration {idx}/{n_samples}: {label}")
+            # Create temporary service with perturbed parameters
+            temp_service = RTSIService(self.db_client)
+            
+            # Override parameters
+            temp_service.LAMBDA = params["LAMBDA"]
+            temp_service.BETA1 = params["BETA1"]
+            temp_service.BETA2 = params["BETA2"]
+            temp_service.BETA3 = params["BETA3"]
+            temp_service.K1_SPEED = params["K1_SPEED"]
+            temp_service.K2_VAR = params["K2_VAR"]
+            temp_service.K3_CONF = params["K3_CONF"]
+            temp_service.K4_VRU_RATIO = params["K4_VRU_RATIO"]
+            temp_service.K5_VOL_CAPACITY = params["K5_VOL_CAPACITY"]
+            temp_service.OMEGA_VRU = params["OMEGA_VRU"]
+            temp_service.OMEGA_VEH = params["OMEGA_VEH"]
 
-            # Use bulk calculation (much faster than individual calls!)
-            perturbed_results = self.compute_rt_si_trend_with_params(
+            # Calculate scores using pre-fetched data
+            perturbed_results = temp_service.calculate_rt_si_from_data(
                 crash_intersection_id,
-                start_time,
-                end_time,
-                params,
-                bin_minutes=bin_minutes,
-                realtime_intersection=intersection,
+                traffic_data_map,
+                capacity,
+                bin_minutes
             )
 
             if perturbed_results:
                 perturbed_scores = [r["RT_SI"] for r in perturbed_results]
             else:
-                # Fallback to baseline if computation fails
                 perturbed_scores = baseline_scores[:]
 
             all_perturbed_scores.append(perturbed_scores)

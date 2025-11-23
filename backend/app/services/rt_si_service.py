@@ -503,7 +503,7 @@ class RTSIService:
 
         return {
             "vehicle_count": vehicle_count,
-            "turning_count": turning_count,  # Actual turning movements from data
+            "turning_count": turning_count,
             "vru_count": vru_count,
             "avg_speed": avg_speed,
             "speed_variance": speed_variance,
@@ -1048,6 +1048,118 @@ class RTSIService:
             f"Calculated RT-SI trend for intersection {intersection_id}: "
             f"{len(results)} time bins with data from {start_time} to {end_time}"
         )
+
+        return results
+
+    def calculate_rt_si_from_data(
+        self,
+        intersection_id: int,
+        traffic_data_map: Dict[datetime, Dict],
+        capacity: float,
+        bin_minutes: int = 15,
+    ) -> List[Dict]:
+        """
+        Calculate RT-SI scores from pre-fetched traffic data.
+        Used for sensitivity analysis to avoid repeated DB queries.
+
+        Args:
+            intersection_id: Crash intersection ID
+            traffic_data_map: Dict mapping timestamp -> traffic data
+            capacity: Intersection capacity
+            bin_minutes: Time bin size
+
+        Returns:
+            List of RT-SI result dicts
+        """
+        results = []
+        hist_cache = {}
+
+        for current_time, rt_data in sorted(traffic_data_map.items()):
+            try:
+                # Get or compute historical crash rate for this hour/dow
+                hour = current_time.hour
+                dow = current_time.weekday()
+                cache_key = (hour, dow)
+
+                if cache_key not in hist_cache:
+                    hist_data = self.get_historical_crash_rate(
+                        intersection_id, hour, dow
+                    )
+                    raw_rate = hist_data["raw_rate"]
+                    exposure = hist_data["exposure"]
+                    r_hat = self.compute_eb_rate(raw_rate, exposure)
+                    hist_cache[cache_key] = {
+                        "hist_data": hist_data,
+                        "raw_rate": raw_rate,
+                        "exposure": exposure,
+                        "r_hat": r_hat,
+                    }
+
+                cached = hist_cache[cache_key]
+                hist_data = cached["hist_data"]
+                exposure = cached["exposure"]
+                raw_rate = cached["raw_rate"]
+                r_hat = cached["r_hat"]
+
+                # Compute uplift factors
+                uplift = self.compute_uplift_factors(
+                    rt_data["avg_speed"],
+                    rt_data["free_flow_speed"],
+                    rt_data["speed_variance"],
+                    rt_data["vehicle_count"],
+                    rt_data["vru_count"],
+                    rt_data["turning_count"],
+                )
+
+                # Compute sub-indices
+                sub_indices = self.compute_sub_indices(
+                    r_hat,
+                    uplift["U"],
+                    rt_data["vehicle_count"],
+                    rt_data["vru_count"],
+                    capacity,
+                )
+
+                # Compute combined index
+                COMB = self.compute_combined_index(
+                    sub_indices["VRU_index"], sub_indices["VEH_index"]
+                )
+
+                # Cap at 100
+                RT_SI = min(100.0, COMB)
+
+                result = {
+                    "intersection_id": intersection_id,
+                    "timestamp": current_time.isoformat(),
+                    "time_bin_minutes": bin_minutes,
+                    "historical_crashes": hist_data["weighted_crashes"],
+                    "historical_exposure": exposure,
+                    "raw_crash_rate": raw_rate,
+                    "eb_crash_rate": r_hat,
+                    "vehicle_count": rt_data["vehicle_count"],
+                    "vru_count": rt_data["vru_count"],
+                    "avg_speed": rt_data["avg_speed"],
+                    "speed_variance": rt_data["speed_variance"],
+                    "free_flow_speed": rt_data["free_flow_speed"],
+                    "F_speed": uplift["F_speed"],
+                    "F_variance": uplift["F_variance"],
+                    "F_conflict": uplift["F_conflict"],
+                    "uplift_factor": uplift["U"],
+                    "VRU_exposure_ratio": sub_indices["G"],
+                    "VRU_index": sub_indices["VRU_index"],
+                    "vehicle_congestion_ratio": sub_indices["H"],
+                    "VEH_index": sub_indices["VEH_index"],
+                    "combined_index": COMB,
+                    "RT_SI": RT_SI,
+                    "safety_score": RT_SI,
+                }
+
+                results.append(result)
+
+            except Exception as e:
+                logger.warning(
+                    f"Error calculating RT-SI for time bin {current_time}: {e}"
+                )
 
         return results
 

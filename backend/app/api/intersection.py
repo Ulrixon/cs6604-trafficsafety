@@ -164,6 +164,7 @@ def list_intersections(
                     current_time,
                     bin_minutes=bin_minutes,
                     realtime_intersection=bsm_intersection_name,
+                    lookback_hours=168,  # Look back up to 1 week for latest available data
                 )
 
                 if rt_si_result is not None:
@@ -171,7 +172,7 @@ def list_intersections(
                     result_data["vru_index"] = rt_si_result["VRU_index"]
                     result_data["vehicle_index"] = rt_si_result["VEH_index"]
             except Exception as e:
-                logger.debug(
+                logger.warning(
                     f"Could not calculate RT-SI for {intersection.intersection_name}: {e}"
                 )
 

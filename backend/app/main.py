@@ -42,6 +42,7 @@ except Exception as e:
 
 try:
     from .api.database_explorer import router as db_explorer_router
+
     DB_EXPLORER_AVAILABLE = True
 except Exception as e:
     logger.warning(f"Database Explorer router not available: {e}")
@@ -102,7 +103,9 @@ def create_app() -> FastAPI:
         logger.info("✓ History router registered")
 
     if DB_EXPLORER_AVAILABLE:
-        app.include_router(db_explorer_router, prefix="/api/v1/database", tags=["Database Explorer"])
+        app.include_router(
+            db_explorer_router, prefix="/api/v1/database", tags=["Database Explorer"]
+        )
         logger.info("✓ Database Explorer router registered")
 
     # Simple health‑check endpoint

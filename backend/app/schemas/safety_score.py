@@ -24,6 +24,9 @@ class SafetyScoreTimePoint(BaseModel):
     avg_speed: float = Field(..., ge=0, example=25.5)
     speed_variance: float = Field(..., ge=0, example=12.3)
     incident_count: int = Field(..., ge=0, example=2)
+    near_miss_count: int = Field(
+        ..., ge=0, example=1, description="Count of near-miss events (NM-VRU, NM-VV)"
+    )
     saw_score: float = Field(..., ge=0, le=100, example=45.2)
     edas_score: float = Field(..., ge=0, le=100, example=67.8)
     codas_score: float = Field(..., ge=0, le=100, example=72.1)

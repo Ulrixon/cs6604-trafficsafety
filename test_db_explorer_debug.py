@@ -1,6 +1,6 @@
-
 import requests
 import sys
+
 
 def test_bsm_data():
     url = "http://localhost:8000/api/v1/database/data/bsm?limit=5"
@@ -17,6 +17,7 @@ def test_bsm_data():
             print("Error:", resp.text)
     except Exception as e:
         print(f"Exception: {e}")
+
 
 if __name__ == "__main__":
     test_bsm_data()

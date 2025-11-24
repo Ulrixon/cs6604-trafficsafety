@@ -114,6 +114,7 @@ class MCDMSafetyIndexService:
                         "vehicle_count": int(row["vehicle_count"]),
                         "vru_count": int(row["vru_count"]),
                         "incident_count": int(row["incident_count"]),
+                        "near_miss_count": int(row.get("near_miss_count", 0)),
                         "time_bin": row["time_bin"],
                     }
                 )
@@ -187,6 +188,19 @@ class MCDMSafetyIndexService:
         """
         incident_data = pd.DataFrame(self.client.execute_query(incident_query))
 
+        # Collect near miss data (NM-VRU or NM-VV)
+        near_miss_query = f"""
+        SELECT 
+            intersection,
+            FLOOR(publish_timestamp / {bin_microseconds}) * {bin_microseconds} as time_bin,
+            COUNT(*) as near_miss_count
+        FROM "safety-event"
+        WHERE publish_timestamp >= {start_ts} AND publish_timestamp < {end_ts}
+          AND event_type IN ('NM-VRU', 'NM-VV')
+        GROUP BY intersection, time_bin
+        """
+        near_miss_data = pd.DataFrame(self.client.execute_query(near_miss_query))
+
         # Process speed data
         speed_stats = self._process_speed_distribution(speed_data)
 
@@ -201,6 +215,10 @@ class MCDMSafetyIndexService:
         if len(incident_data) > 0:
             matrix = matrix.merge(
                 incident_data, on=["intersection", "time_bin"], how="outer"
+            )
+        if len(near_miss_data) > 0:
+            matrix = matrix.merge(
+                near_miss_data, on=["intersection", "time_bin"], how="outer"
             )
 
         # Fill missing values
@@ -456,6 +474,7 @@ class MCDMSafetyIndexService:
                 "avg_speed": float(row["avg_speed"]),
                 "speed_variance": float(row["speed_variance"]),
                 "incident_count": int(row["incident_count"]),
+                "near_miss_count": int(row.get("near_miss_count", 0)),
                 "saw_score": float(row["SAW"]),
                 "edas_score": float(row["EDAS"]),
                 "codas_score": float(row["CODAS"]),
@@ -552,6 +571,7 @@ class MCDMSafetyIndexService:
                             "avg_speed": float(row["avg_speed"]),
                             "speed_variance": float(row["speed_variance"]),
                             "incident_count": int(row["incident_count"]),
+                            "near_miss_count": int(row.get("near_miss_count", 0)),
                             "saw_score": float(row["SAW"]),
                             "edas_score": float(row["EDAS"]),
                             "codas_score": float(row["CODAS"]),
@@ -638,6 +658,7 @@ class MCDMSafetyIndexService:
                         "avg_speed": float(row["avg_speed"]),
                         "speed_variance": float(row["speed_variance"]),
                         "incident_count": int(row["incident_count"]),
+                        "near_miss_count": int(row.get("near_miss_count", 0)),
                         "saw_score": float(row["SAW"]),
                         "edas_score": float(row["EDAS"]),
                         "codas_score": float(row["CODAS"]),

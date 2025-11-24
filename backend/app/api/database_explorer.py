@@ -104,7 +104,7 @@ async def get_table_data(
         if results:
             logger.info(f"First row type: {type(results[0])}")
             # logger.info(f"First row content: {results[0]}") # Commented out to avoid log spam
-            
+
             # Process results to handle non-serializable types (like bytea/memoryview)
             processed_results = []
             for row in results:
@@ -114,7 +114,7 @@ async def get_table_data(
                     if isinstance(value, (bytes, memoryview)):
                         processed_row[key] = "<binary data>"
                 processed_results.append(processed_row)
-            
+
             results = processed_results
 
         # Handle datetime serialization if necessary (FastAPI usually handles this, but just in case)

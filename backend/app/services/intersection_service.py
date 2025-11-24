@@ -136,7 +136,60 @@ def compute_current_indices() -> List[Intersection]:
 
 
 def get_all() -> List[Intersection]:
-    """Return a list of all intersections with current safety indices."""
+    """
+    Return a list of all intersections with current safety indices.
+
+    Behavior:
+    - If USE_POSTGRESQL=true, reads stored indices from PostgreSQL
+    - Otherwise (or if PostgreSQL fails), computes indices from MCDM database
+    """
+    # Try reading from PostgreSQL first if enabled
+    if settings.USE_POSTGRESQL:
+        try:
+            logger.info("Reading safety indices from PostgreSQL...")
+            from ..db.connection import execute_raw_sql
+
+            # Query the latest safety indices view
+            sql = """
+                SELECT
+                    intersection_id,
+                    intersection_name,
+                    latitude,
+                    longitude,
+                    safety_index,
+                    traffic_volume
+                FROM v_latest_safety_indices
+                ORDER BY intersection_id
+            """
+
+            rows = execute_raw_sql(sql)
+
+            if rows:
+                # Convert to Intersection model
+                intersections = []
+                for row in rows:
+                    intersections.append(
+                        Intersection(
+                            intersection_id=int(row["intersection_id"]),
+                            intersection_name=row["intersection_name"] or f"Intersection {row['intersection_id']}",
+                            safety_index=float(row["safety_index"] or 0.0),
+                            traffic_volume=int(row["traffic_volume"] or 0),
+                            longitude=float(row["longitude"] or 0.0),
+                            latitude=float(row["latitude"] or 0.0),
+                        )
+                    )
+
+                logger.info(f"✓ Retrieved {len(intersections)} intersections from PostgreSQL")
+                return intersections
+            else:
+                logger.warning("No data in PostgreSQL view, falling back to compute")
+        except Exception as e:
+            logger.error(f"Failed to read from PostgreSQL: {e}", exc_info=True)
+            if not settings.FALLBACK_TO_PARQUET:
+                raise
+            logger.warning("Falling back to compute indices from MCDM database")
+
+    # Fallback to computing indices from MCDM database
     return compute_current_indices()
 
 

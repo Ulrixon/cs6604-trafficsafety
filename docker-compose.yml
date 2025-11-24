@@ -1,20 +1,22 @@
 version: '3.8'
 
 services:
-  # PostgreSQL database for storing safety indices
+  # PostgreSQL + PostGIS database for storing safety indices
   db:
-    image: postgres:15-alpine
+    image: postgis/postgis:15-3.3
     container_name: trafficsafety-db
     environment:
       POSTGRES_DB: trafficsafety
       POSTGRES_USER: trafficsafety
       POSTGRES_PASSWORD: trafficsafety_dev
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/init:/docker-entrypoint-initdb.d  # Schema initialization scripts
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U trafficsafety"]
+      test: ["CMD-SHELL", "pg_isready -U trafficsafety -d trafficsafety"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,6 +42,12 @@ services:
 
       # Database
       - DATABASE_URL=postgresql://trafficsafety:trafficsafety_dev@db:5432/trafficsafety
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-5}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-10}
+
+      # Enable PostgreSQL for safety indices
+      - USE_POSTGRESQL=${USE_POSTGRESQL:-true}
+      - FALLBACK_TO_PARQUET=${FALLBACK_TO_PARQUET:-false}
 
       # Trino connection
       - TRINO_HOST=${TRINO_HOST:-smart-cities-trino.pre-prod.cloud.vtti.vt.edu}
@@ -98,6 +106,22 @@ services:
       # Safety Index settings
       - EMPIRICAL_BAYES_K=${EMPIRICAL_BAYES_K:-50}
       - DEFAULT_LOOKBACK_DAYS=${DEFAULT_LOOKBACK_DAYS:-7}
+
+      # PostgreSQL + PostGIS database configuration (for dual-write)
+      - DATABASE_URL=${DATABASE_URL:-postgresql://trafficsafety:trafficsafety_dev@db:5432/trafficsafety}
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-5}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-10}
+
+      # Feature flags for PostgreSQL migration (ENABLED for local development)
+      - USE_POSTGRESQL=${USE_POSTGRESQL:-true}
+      - FALLBACK_TO_PARQUET=${FALLBACK_TO_PARQUET:-true}
+      - ENABLE_DUAL_WRITE=${ENABLE_DUAL_WRITE:-true}
+
+      # GCP Cloud Storage configuration (disabled by default)
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-}
+      - GCS_PROJECT_ID=${GCS_PROJECT_ID:-}
+      - ENABLE_GCS_UPLOAD=${ENABLE_GCS_UPLOAD:-false}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
     env_file:
       - ./backend/.env
     volumes:
@@ -105,6 +129,8 @@ services:
       - ./backend/app:/app/app
       # Share Parquet storage with API
       - parquet_data:/app/data/parquet
+      # Mount GCP credentials if they exist
+      - ./backend/secrets:/app/secrets:ro
     restart: unless-stopped
     command: ["python", "data_collector.py", "--interval", "${COLLECTION_INTERVAL:-60}", "--storage-path", "/app/data/parquet"]
 
@@ -136,6 +162,19 @@ services:
       - "8501:8501"
     environment:
       - PORT=8501
+      # Override API URL to point to local backend
+      - API_URL=http://api:8000/api/v1/safety/index/
+      - API_TIMEOUT=30
+      - API_MAX_RETRIES=3
+      - API_CACHE_TTL=300
+      - DEFAULT_LATITUDE=38.86
+      - DEFAULT_LONGITUDE=-77.055
+      - DEFAULT_ZOOM=13
+      - MAP_HEIGHT=650
+      - MIN_RADIUS_PX=6
+      - MAX_RADIUS_PX=30
+      - COLOR_LOW_THRESHOLD=60
+      - COLOR_HIGH_THRESHOLD=75
     volumes:
       # Mount app directory for development (optional)
       - ./frontend/app:/app/app
@@ -147,12 +186,33 @@ services:
       retries: 3
       start_period: 40s
 
+  # PgAdmin for database management (development only)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: trafficsafety-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@trafficsafety.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - db
+    restart: unless-stopped
+    profiles:
+      - dev  # Only start when using 'docker-compose --profile dev up'
+
 volumes:
   postgres_data:
     driver: local
   parquet_data:
     driver: local
   redis_data:
+    driver: local
+  pgadmin_data:
     driver: local
 
 networks:

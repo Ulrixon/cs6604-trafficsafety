@@ -23,7 +23,7 @@ class ParquetStorage:
     def __init__(self, storage_path: Optional[str] = None):
         """
         Initialize Parquet storage service.
-        
+
         Args:
             storage_path: Base path for Parquet storage (defaults to settings.PARQUET_STORAGE_PATH)
         """
@@ -34,6 +34,7 @@ class ParquetStorage:
         self.raw_bsm_path = self.base_path / "raw" / "bsm"
         self.raw_psm_path = self.base_path / "raw" / "psm"
         self.raw_mapdata_path = self.base_path / "raw" / "mapdata"
+        self.weather_path = self.base_path / "weather"
 
         # Create directories if they don't exist
         self.features_path.mkdir(parents=True, exist_ok=True)
@@ -42,6 +43,7 @@ class ParquetStorage:
         self.raw_bsm_path.mkdir(parents=True, exist_ok=True)
         self.raw_psm_path.mkdir(parents=True, exist_ok=True)
         self.raw_mapdata_path.mkdir(parents=True, exist_ok=True)
+        self.weather_path.mkdir(parents=True, exist_ok=True)
     
     def save_features(self, dataframe: pd.DataFrame, target_date: Optional[date] = None) -> str:
         """
@@ -219,6 +221,53 @@ class ParquetStorage:
 
         return str(filepath)
 
+    def save_weather_observations(self, dataframe: pd.DataFrame, target_date: Optional[date] = None) -> str:
+        """
+        Save weather observations to Parquet file.
+
+        Args:
+            dataframe: DataFrame with weather observations (must have observation_time column)
+            target_date: Target date for file naming (defaults to first date in dataframe)
+
+        Returns:
+            Path to saved file
+
+        Example:
+            ```python
+            weather_df = pd.DataFrame([
+                {
+                    'station_id': 'KRIC',
+                    'observation_time': datetime(2024, 11, 21, 14, 0),
+                    'temperature_c': 18.3,
+                    'precipitation_mm': 2.5,
+                    'temperature_normalized': 0.1
+                }
+            ])
+            path = storage.save_weather_observations(weather_df)
+            ```
+        """
+        if len(dataframe) == 0:
+            raise ValueError("Cannot save empty weather dataframe")
+
+        # Determine date from dataframe if not provided
+        if target_date is None:
+            if 'observation_time' not in dataframe.columns:
+                target_date = date.today()
+            else:
+                target_date = pd.to_datetime(dataframe['observation_time'].iloc[0]).date()
+
+        filename = f"weather_{target_date.strftime('%Y-%m-%d')}.parquet"
+        filepath = self.weather_path / filename
+
+        # Ensure observation_time is datetime
+        df = dataframe.copy()
+        if 'observation_time' in df.columns:
+            df['observation_time'] = pd.to_datetime(df['observation_time'])
+
+        df.to_parquet(filepath, engine='pyarrow', index=False, compression='snappy')
+
+        return str(filepath)
+
     def save_safety_indices(self, dataframe: pd.DataFrame, target_date: Optional[date] = None) -> str:
         """
         Alias for save_indices for backwards compatibility.
@@ -319,18 +368,78 @@ class ParquetStorage:
         
         return pd.concat(dataframes, ignore_index=True)
     
+    def load_weather_observations(
+        self,
+        start_date: date,
+        end_date: date,
+        station_id: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        Load weather observations from Parquet files for date range.
+
+        Args:
+            start_date: Start date (inclusive)
+            end_date: End date (inclusive)
+            station_id: Optional station filter (e.g., 'KRIC')
+
+        Returns:
+            Combined DataFrame with weather observations from date range
+
+        Example:
+            ```python
+            weather_data = storage.load_weather_observations(
+                date(2024, 11, 21),
+                date(2024, 11, 23),
+                station_id='KRIC'
+            )
+            ```
+        """
+        dataframes = []
+        current_date = start_date
+
+        while current_date <= end_date:
+            filename = f"weather_{current_date.strftime('%Y-%m-%d')}.parquet"
+            filepath = self.weather_path / filename
+
+            if filepath.exists():
+                try:
+                    df = pd.read_parquet(filepath, engine='pyarrow')
+
+                    # Filter by station if specified
+                    if station_id and 'station_id' in df.columns:
+                        df = df[df['station_id'] == station_id]
+
+                    # Filter by date range (handle partial days)
+                    if 'observation_time' in df.columns:
+                        df['observation_time'] = pd.to_datetime(df['observation_time'])
+                        start_dt = pd.Timestamp(start_date)
+                        end_dt = pd.Timestamp(end_date) + pd.Timedelta(days=1)
+                        df = df[(df['observation_time'] >= start_dt) & (df['observation_time'] < end_dt)]
+
+                    if len(df) > 0:
+                        dataframes.append(df)
+                except Exception as e:
+                    print(f"⚠ Error loading {filename}: {e}")
+
+            current_date += timedelta(days=1)
+
+        if not dataframes:
+            return pd.DataFrame()
+
+        return pd.concat(dataframes, ignore_index=True)
+
     def load_normalization_constants(self) -> dict:
         """
         Load normalization constants from Parquet file.
-        
+
         Returns:
             Dictionary of normalization constants
         """
         filepath = self.constants_path / "normalization_constants.parquet"
-        
+
         if not filepath.exists():
             return {}
-        
+
         try:
             df = pd.read_parquet(filepath, engine='pyarrow')
             if len(df) > 0:

@@ -25,9 +25,12 @@ RUN touch .env
 # Expose port (Cloud Run uses PORT env var, defaults to 8080)
 EXPOSE 8080
 
-# Create startup script that fetches secrets and starts the app
-COPY docker-entrypoint.sh /app/
-RUN chmod +x /app/docker-entrypoint.sh
+# Set default environment variables
+ENV PORT=8000 \
+    VTTI_DB_NAME=vtsi \
+    VTTI_DB_USER=postgres \
+    VTTI_DB_HOST=34.140.49.230 \
+    VTTI_DB_PORT=5432
 
-# Run the application with entrypoint script
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+# Run the application directly with uvicorn
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}

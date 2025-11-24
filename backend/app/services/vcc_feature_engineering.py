@@ -61,6 +61,7 @@ def parse_vcc_bsm_message(bsm_message: Dict) -> Optional[Dict]:
             'accel_lon': accel_lon,
             'accel_lat': accel_lat,
             'rsu_name': bsm_message.get('rsuName'),
+            'location_name': bsm_message.get('locationName'),  # Use VCC's location name as intersection ID
         }
     except Exception as e:
         print(f"⚠ Error parsing BSM message: {e}")
@@ -108,6 +109,7 @@ def parse_vcc_psm_message(psm_message: Dict) -> Optional[Dict]:
             'is_cyclist': 1 if basic_type == 2 else 0,
             'is_public_safety': 1 if basic_type == 3 else 0,
             'rsu_name': psm_message.get('rsuName'),
+            'location_name': psm_message.get('locationName'),  # Use VCC's location name as intersection ID
         }
     except Exception as e:
         print(f"⚠ Error parsing PSM message: {e}")
@@ -206,11 +208,16 @@ def extract_bsm_features(bsm_messages: List[Dict], mapdata_list: Optional[List[D
     for bsm in bsm_messages:
         parsed = parse_vcc_bsm_message(bsm)
         if parsed:
-            # Map to intersection
-            if mapdata_list:
+            # Use locationName as intersection identifier if available, otherwise try lat/lon mapping
+            if parsed.get('location_name'):
+                parsed['intersection'] = parsed['location_name']
+            elif mapdata_list:
                 parsed['intersection'] = map_to_intersection(
                     parsed['lat'], parsed['lon'], mapdata_list
                 )
+            else:
+                # No location name and no mapdata - skip this BSM
+                continue
             parsed_data.append(parsed)
     
     if not parsed_data:
@@ -296,11 +303,16 @@ def extract_psm_features(psm_messages: List[Dict], mapdata_list: Optional[List[D
     for psm in psm_messages:
         parsed = parse_vcc_psm_message(psm)
         if parsed:
-            # Map to intersection
-            if mapdata_list:
+            # Use locationName as intersection identifier if available, otherwise try lat/lon mapping
+            if parsed.get('location_name'):
+                parsed['intersection'] = parsed['location_name']
+            elif mapdata_list:
                 parsed['intersection'] = map_to_intersection(
                     parsed['lat'], parsed['lon'], mapdata_list
                 )
+            else:
+                # No location name and no mapdata - skip this PSM
+                continue
             parsed_data.append(parsed)
     
     if not parsed_data:

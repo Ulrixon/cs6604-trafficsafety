@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional, List
 import numpy as np
 
-from app.services.db_client import VTTIPostgresClient
+from .db_client import VTTIPostgresClient
 
 logger = logging.getLogger(__name__)
 

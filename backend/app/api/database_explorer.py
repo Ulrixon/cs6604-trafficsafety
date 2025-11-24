@@ -100,6 +100,23 @@ async def get_table_data(
             query = f"SELECT * FROM {quoted_table_name} LIMIT %s OFFSET %s"
             results = client.execute_query(query, (limit, offset))
 
+        # Debug logging
+        if results:
+            logger.info(f"First row type: {type(results[0])}")
+            # logger.info(f"First row content: {results[0]}") # Commented out to avoid log spam
+            
+            # Process results to handle non-serializable types (like bytea/memoryview)
+            processed_results = []
+            for row in results:
+                processed_row = dict(row)
+                for key, value in processed_row.items():
+                    # Handle bytes/memoryview (Postgres bytea)
+                    if isinstance(value, (bytes, memoryview)):
+                        processed_row[key] = "<binary data>"
+                processed_results.append(processed_row)
+            
+            results = processed_results
+
         # Handle datetime serialization if necessary (FastAPI usually handles this, but just in case)
         return results
     except HTTPException:

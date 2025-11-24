@@ -882,15 +882,13 @@ def render_trend_view(
     for col, label in variables_to_normalize:
         if col in df_normalized.columns:
             col_max = df_normalized[col].max()
-            if col_max > 0:
-                # If max is greater than 100, normalize to 0-100
-                if col_max > 100:
-                    df_normalized[f"{col}_normalized"] = (
-                        df_normalized[col] / col_max
-                    ) * 100
-                else:
-                    # If max is already <= 100, keep as is
-                    df_normalized[f"{col}_normalized"] = df_normalized[col]
+
+            # Normalize relative to max value in the series to scale to 0-100
+            # This ensures all variables use the full height of the chart for trend comparison
+            if pd.notna(col_max) and col_max > 0:
+                df_normalized[f"{col}_normalized"] = (
+                    df_normalized[col] / col_max
+                ) * 100
             else:
                 df_normalized[f"{col}_normalized"] = 0
 

@@ -138,31 +138,68 @@ def compute_current_indices(
             logger.warning("No safety scores computed - no data available")
             return []
 
-        # Default fallback coordinates (center of Arlington, VA)
-        DEFAULT_COORDS = {"latitude": 38.8816, "longitude": -77.1945}
-
         intersections = []
         db_client = get_db_client()
         from ..api.intersection import find_crash_intersection_for_bsm
 
         for idx, score_data in enumerate(safety_scores):
             intersection_name = score_data["intersection"]
-            coords = DEFAULT_COORDS
-            # Use mapping_results if provided
-            if mapping_results and intersection_name in mapping_results:
-                mapping = mapping_results[intersection_name]
-                coords = {
-                    "latitude": mapping.get("lat", DEFAULT_COORDS["latitude"]),
-                    "longitude": mapping.get("lon", DEFAULT_COORDS["longitude"]),
-                }
+            # Always use mapping_results if provided and has lat/lon
+            mapping = None
+            normalized = None
+            if mapping_results:
+                # Try direct key
+                mapping = mapping_results.get(intersection_name)
+                # If not found, try normalized key (case-insensitive)
+                if mapping is None:
+                    from ..core.intersection_mapping import normalize_intersection_name
+                    normalized = normalize_intersection_name(intersection_name)
+                    mapping = mapping_results.get(normalized)
+                # If still not found, try lower-case match
+                if mapping is None:
+                    lower_keys = {k.lower(): v for k, v in mapping_results.items()}
+                    mapping = lower_keys.get(intersection_name.lower())
+                    if mapping is None and normalized is not None:
+                        mapping = lower_keys.get(normalized.lower())
+                # If still not found, try matching against short_name in mapping_results
+                if mapping is None:
+                    for v in mapping_results.values():
+                        if v.get("short_name") == intersection_name:
+                            mapping = v
+                            break
+                # Try lower-case short_name match
+                if mapping is None:
+                    for v in mapping_results.values():
+                        if v.get("short_name", "").lower() == intersection_name.lower():
+                            mapping = v
+                            break
+            if mapping:
+                lat = mapping.get("lat")
+                lon = mapping.get("lon")
+                if lat is not None and lon is not None:
+                    longitude = lon
+                    latitude = lat
+                else:
+                    logger.warning(
+                        f"Mapping results for {intersection_name} missing lat/lon"
+                    )
+                    longitude = 0.0
+                    latitude = 0.0
+            else:
+                logger.warning(
+                    f"No mapping results for {intersection_name}, from {mapping_results}"
+                )
+                continue
+                longitude = 0.0
+                latitude = 0.0
             intersections.append(
                 Intersection(
                     intersection_id=100 + idx + 1,  # Generate sequential IDs
                     intersection_name=intersection_name,
                     safety_index=score_data["safety_score"],
                     traffic_volume=score_data["vehicle_count"],
-                    longitude=coords["longitude"],
-                    latitude=coords["latitude"],
+                    longitude=longitude,
+                    latitude=latitude,
                 )
             )
         logger.info(f"✓ Computed MCDM indices for {len(intersections)} intersections")
@@ -174,61 +211,6 @@ def compute_current_indices(
 
 
 def get_all(mapping_results: Optional[dict] = None) -> List[Intersection]:
-    """
-    Return a list of all intersections with current safety indices.
-
-    Behavior:
-    - If USE_POSTGRESQL=true, reads stored indices from PostgreSQL
-    - Otherwise (or if PostgreSQL fails), computes indices from MCDM database
-    """
-    # Try reading from PostgreSQL first if enabled
-    if settings.USE_POSTGRESQL:
-        try:
-            logger.info("Reading safety indices from PostgreSQL...")
-            from ..db.connection import execute_raw_sql
-
-            # Query the latest safety indices view
-            sql = """
-                SELECT
-                    intersection_id,
-                    intersection_name,
-                    latitude,
-                    longitude,
-                    safety_index,
-                    traffic_volume
-                FROM v_latest_safety_indices
-                ORDER BY intersection_id
-            """
-
-            rows = execute_raw_sql(sql)
-
-            if rows:
-                # Convert to Intersection model
-                intersections = []
-                for row in rows:
-                    intersections.append(
-                        Intersection(
-                            intersection_id=int(row["intersection_id"]),
-                            intersection_name=row["intersection_name"]
-                            or f"Intersection {row['intersection_id']}",
-                            safety_index=float(row["safety_index"] or 0.0),
-                            traffic_volume=int(row["traffic_volume"] or 0),
-                            longitude=float(row["longitude"] or 0.0),
-                            latitude=float(row["latitude"] or 0.0),
-                        )
-                    )
-
-                logger.info(
-                    f"✓ Retrieved {len(intersections)} intersections from PostgreSQL"
-                )
-                return intersections
-            else:
-                logger.warning("No data in PostgreSQL view, falling back to compute")
-        except Exception as e:
-            logger.error(f"Failed to read from PostgreSQL: {e}", exc_info=True)
-            if not settings.FALLBACK_TO_PARQUET:
-                raise
-            logger.warning("Falling back to compute indices from MCDM database")
 
     # Fallback to computing indices from MCDM database
     return compute_current_indices(mapping_results)

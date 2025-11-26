@@ -28,7 +28,7 @@ def get_intersection_coordinates() -> Dict[str, Dict[str, float]]:
         db_client = get_db_client()
 
         # Fetch average lat/lon from PSM table for each intersection
-        query = """
+        query_psm = """
         SELECT 
             intersection,
             AVG(lat) as avg_latitude,
@@ -41,11 +41,10 @@ def get_intersection_coordinates() -> Dict[str, Dict[str, float]]:
           AND lon BETWEEN -180 AND 180
         GROUP BY intersection
         """
-
-        results = db_client.execute_query(query)
+        results_psm = db_client.execute_query(query_psm)
 
         coords_map = {}
-        for row in results:
+        for row in results_psm:
             coords_map[row["intersection"]] = {
                 "latitude": float(row["avg_latitude"]),
                 "longitude": float(row["avg_longitude"]),
@@ -56,16 +55,59 @@ def get_intersection_coordinates() -> Dict[str, Dict[str, float]]:
                 f"from {row['sample_count']} PSM records"
             )
 
+        # Now fetch from hiresdata for any intersection not already in coords_map
+        query_hires = """
+        SELECT 
+            intersection,
+            AVG(intersection_lat) as avg_latitude,
+            AVG(intersection_long) as avg_longitude,
+            COUNT(*) as sample_count
+        FROM hiresdata
+        WHERE intersection_lat IS NOT NULL 
+          AND intersection_long IS NOT NULL
+          AND intersection_lat BETWEEN -90 AND 90
+          AND intersection_long BETWEEN -180 AND 180
+        GROUP BY intersection
+        """
+        results_hires = db_client.execute_query(query_hires)
+        for row in results_hires:
+            if row["intersection"] not in coords_map:
+                coords_map[row["intersection"]] = {
+                    "latitude": float(row["avg_latitude"]),
+                    "longitude": float(row["avg_longitude"]),
+                }
+                logger.info(
+                    f"Loaded coordinates for {row['intersection']} from hiresdata: "
+                    f"({row['avg_latitude']:.6f}, {row['avg_longitude']:.6f}) "
+                    f"from {row['sample_count']} hiresdata records"
+                )
+
+        # Add a reverse map for short_name if not present
+        # This will be filled in compute_current_indices
+        if hasattr(get_intersection_coordinates, "short_name_map"):
+            for (
+                short_name,
+                coords,
+            ) in get_intersection_coordinates.short_name_map.items():
+                if short_name not in coords_map:
+                    coords_map[short_name] = coords
+
         return coords_map
 
     except Exception as e:
         logger.error(
-            f"Error fetching intersection coordinates from PSM: {e}", exc_info=True
+            f"Error fetching intersection coordinates from PSM/hiresdata: {e}",
+            exc_info=True,
         )
         return {}
 
 
-def compute_current_indices() -> List[Intersection]:
+from typing import Optional
+
+
+def compute_current_indices(
+    mapping_results: Optional[dict] = None,
+) -> List[Intersection]:
     """
     Compute current safety indices for all intersections using MCDM methodology.
 
@@ -96,26 +138,23 @@ def compute_current_indices() -> List[Intersection]:
             logger.warning("No safety scores computed - no data available")
             return []
 
-        # Fetch intersection coordinates from BSM table
-        intersection_coords = get_intersection_coordinates()
-
         # Default fallback coordinates (center of Arlington, VA)
         DEFAULT_COORDS = {"latitude": 38.8816, "longitude": -77.1945}
 
-        # Convert to Intersection objects
         intersections = []
+        db_client = get_db_client()
+        from ..api.intersection import find_crash_intersection_for_bsm
+
         for idx, score_data in enumerate(safety_scores):
             intersection_name = score_data["intersection"]
-
-            # Use coordinates from BSM data, or fallback to default
-            coords = intersection_coords.get(intersection_name, DEFAULT_COORDS)
-
-            if intersection_name not in intersection_coords:
-                logger.warning(
-                    f"No coordinates found in BSM for '{intersection_name}', "
-                    f"using default: ({DEFAULT_COORDS['latitude']}, {DEFAULT_COORDS['longitude']})"
-                )
-
+            coords = DEFAULT_COORDS
+            # Use mapping_results if provided
+            if mapping_results and intersection_name in mapping_results:
+                mapping = mapping_results[intersection_name]
+                coords = {
+                    "latitude": mapping.get("lat", DEFAULT_COORDS["latitude"]),
+                    "longitude": mapping.get("lon", DEFAULT_COORDS["longitude"]),
+                }
             intersections.append(
                 Intersection(
                     intersection_id=100 + idx + 1,  # Generate sequential IDs
@@ -126,7 +165,6 @@ def compute_current_indices() -> List[Intersection]:
                     latitude=coords["latitude"],
                 )
             )
-
         logger.info(f"✓ Computed MCDM indices for {len(intersections)} intersections")
         return intersections
 
@@ -135,7 +173,7 @@ def compute_current_indices() -> List[Intersection]:
         return []
 
 
-def get_all() -> List[Intersection]:
+def get_all(mapping_results: Optional[dict] = None) -> List[Intersection]:
     """
     Return a list of all intersections with current safety indices.
 
@@ -171,7 +209,8 @@ def get_all() -> List[Intersection]:
                     intersections.append(
                         Intersection(
                             intersection_id=int(row["intersection_id"]),
-                            intersection_name=row["intersection_name"] or f"Intersection {row['intersection_id']}",
+                            intersection_name=row["intersection_name"]
+                            or f"Intersection {row['intersection_id']}",
                             safety_index=float(row["safety_index"] or 0.0),
                             traffic_volume=int(row["traffic_volume"] or 0),
                             longitude=float(row["longitude"] or 0.0),
@@ -179,7 +218,9 @@ def get_all() -> List[Intersection]:
                         )
                     )
 
-                logger.info(f"✓ Retrieved {len(intersections)} intersections from PostgreSQL")
+                logger.info(
+                    f"✓ Retrieved {len(intersections)} intersections from PostgreSQL"
+                )
                 return intersections
             else:
                 logger.warning("No data in PostgreSQL view, falling back to compute")
@@ -190,7 +231,7 @@ def get_all() -> List[Intersection]:
             logger.warning("Falling back to compute indices from MCDM database")
 
     # Fallback to computing indices from MCDM database
-    return compute_current_indices()
+    return compute_current_indices(mapping_results)
 
 
 def get_by_id(intersection_id: int) -> Optional[Intersection]:

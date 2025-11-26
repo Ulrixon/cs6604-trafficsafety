@@ -55,6 +55,10 @@ class MCDMSafetyIndexService:
             # This ensures we have data from all sources (BSM, PSM, vehicle-count, VRU, speed, events)
             latest_query = """
             SELECT MIN(max_ts) as latest FROM (
+                SELECT MAX(publish_timestamp) as max_ts FROM bsm
+                UNION ALL
+                SELECT MAX(publish_timestamp) as max_ts FROM psm
+                UNION ALL
                 SELECT MAX(publish_timestamp) as max_ts FROM "vehicle-count"
                 UNION ALL
                 SELECT MAX(publish_timestamp) as max_ts FROM "vru-count"
@@ -671,15 +675,18 @@ class MCDMSafetyIndexService:
 
     def get_available_intersections(self) -> List[str]:
         """
-        Get list of available intersections in the database.
+        Get list of available intersections from psm and hiresdata tables using cache.
 
         Returns:
-            List of intersection names
+            List of unique intersection names
         """
-        try:
-            query = 'SELECT DISTINCT intersection FROM "vehicle-count" ORDER BY intersection;'
-            result = self.client.execute_query(query)
-            return [row["intersection"] for row in result]
-        except Exception as e:
-            logger.error(f"Error getting available intersections: {e}", exc_info=True)
-            return []
+        from app.core.intersection_mapping import (
+            load_intersection_cache,
+            _INTERSECTION_CACHE,
+        )
+
+        load_intersection_cache(self.client)
+        intersections = _INTERSECTION_CACHE["hiresdata"].union(
+            _INTERSECTION_CACHE["psm"]
+        )
+        return sorted(intersections)

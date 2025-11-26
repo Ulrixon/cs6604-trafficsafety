@@ -68,12 +68,28 @@ if not bsm_intersection_name:
 print("\n4. Finding crash intersection ID using find_crash_intersection_for_bsm...")
 from app.api.intersection import find_crash_intersection_for_bsm
 
-crash_intersection_id = find_crash_intersection_for_bsm(
-    bsm_intersection_name, db_client
-)
-if crash_intersection_id:
-    print(f"   ✓ Found crash intersection ID: {crash_intersection_id}")
+intersection_list = find_crash_intersection_for_bsm(bsm_intersection_name, db_client)
+if intersection_list:
+    # Use first valid result
+    valid_intersection = next(
+        (
+            item
+            for item in intersection_list
+            if item["crash_intersection_id"] is not None
+        ),
+        intersection_list[0] if intersection_list else None,
+    )
+    if valid_intersection:
+        crash_intersection_id = valid_intersection["crash_intersection_id"]
+        print(f"   ✓ Found crash intersection ID: {crash_intersection_id}")
+        print(
+            f"   Source: {valid_intersection['source']}, Name: {valid_intersection['intersection_name']}"
+        )
+    else:
+        crash_intersection_id = None
+        print(f"   ✗ No valid crash intersection found")
 else:
+    crash_intersection_id = None
     print(
         f"   ✗ Could not find crash intersection ID for BSM '{bsm_intersection_name}'"
     )

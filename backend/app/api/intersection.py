@@ -15,18 +15,107 @@ from ..services.db_client import get_db_client
 from ..services.mcdm_service import MCDMSafetyIndexService
 from ..services.rt_si_service import RTSIService
 from ..core.config import settings
+from ..core.intersection_mapping import (
+    normalize_intersection_name,
+    validate_intersection_in_tables,
+)
 
 router = APIRouter(prefix="/safety/index", tags=["Safety Index"])
 logger = logging.getLogger(__name__)
 
 
-def find_crash_intersection_for_bsm(bsm_intersection: str, db_client) -> Optional[int]:
+def find_crash_intersection_for_bsm(bsm_intersection: str, db_client) -> list:
     """
-    Find the crash intersection ID for a BSM intersection.
-    Uses PSM table coordinates and Haversine distance to find nearest intersection.
+    Find intersections for a BSM intersection by querying BOTH hiresdata AND PSM tables.
+
+    Process:
+    1. Query hiresdata table: Get avg lat/lon, apply name mapping for safety-event queries
+    2. Query PSM table: Get avg lat/lon, use BSM name as-is (no mapping)
+    3. For each result, validate existence in required tables and find nearest crash intersection
+    4. Combine results from both sources into a single list
+
+    Returns:
+        List of dictionaries with:
+        - intersection_name: Name to use for most tables
+        - short_name: Mapped short name for safety-event queries (only for hiresdata)
+        - lat: Average latitude
+        - lon: Average longitude
+        - crash_intersection_id: Nearest crash intersection ID (if found)
+        - source: 'hiresdata' or 'psm'
+        - valid_in_tables: Dict showing which tables have data
     """
+    all_results = []
+
+    # Part 1: Query hiresdata table using normalized name
     try:
-        # Get coordinates from PSM table
+        bsm_intersection = bsm_intersection.strip()
+        logger.info(
+            f"Querying hiresdata for intersection: '{bsm_intersection}' (repr: {repr(bsm_intersection)})"
+        )
+        hiresdata_query = """
+        SELECT 
+            intersection,
+            AVG(intersection_lat) as avg_lat,
+            AVG(intersection_long) as avg_lon
+        FROM hiresdata
+        WHERE intersection = %(int_id)s
+        GROUP BY intersection;
+        """
+        hiresdata_results = db_client.execute_query(
+            hiresdata_query, {"int_id": bsm_intersection}
+        )
+
+        if hiresdata_results:
+            for row in hiresdata_results:
+                if row["avg_lat"] is None or row["avg_lon"] is None:
+                    continue
+
+                full_name = row["intersection"]
+                lat = float(row["avg_lat"])
+                lon = float(row["avg_lon"])
+
+                # Apply name mapping for safety-event table queries
+                short_name = normalize_intersection_name(full_name)
+
+                # Validate intersection exists in required tables
+                table_validity = validate_intersection_in_tables(
+                    full_name, short_name, db_client
+                )
+
+                # Skip if not found in critical tables
+                # if not table_validity.get(
+                #    "vehicle-count", False
+                # ) or not table_validity.get("speed-distribution", False):
+                #    logger.warning(
+                #        f"Skipping hiresdata intersection '{full_name}' - not found in required tables"
+                #    )
+                #    continue
+
+                # Find nearest crash intersection
+                crash_id = _find_nearest_crash_intersection(lat, lon, db_client)
+
+                all_results.append(
+                    {
+                        "intersection_name": full_name,
+                        "short_name": short_name,
+                        "lat": lat,
+                        "lon": lon,
+                        "crash_intersection_id": crash_id,
+                        "source": "hiresdata",
+                        "valid_in_tables": table_validity,
+                    }
+                )
+
+            if all_results:
+                logger.info(
+                    f"Found {len(all_results)} valid intersection(s) from hiresdata for '{bsm_intersection}'')"
+                )
+
+    except Exception as e:
+        logger.warning(f"Error querying hiresdata for '{bsm_intersection}'): {e}")
+
+    # Part 2: Query PSM table (ALWAYS, not a fallback)
+    try:
         psm_query = """
         SELECT 
             AVG(lat) as avg_lat,
@@ -37,23 +126,84 @@ def find_crash_intersection_for_bsm(bsm_intersection: str, db_client) -> Optiona
         """
         psm_results = db_client.execute_query(psm_query, {"int_id": bsm_intersection})
 
-        if not psm_results or psm_results[0]["avg_lat"] is None:
-            logger.warning(f"No PSM data found for intersection '{bsm_intersection}'")
-            return None
+        if psm_results and psm_results[0]["avg_lat"] is not None:
+            lat = float(psm_results[0]["avg_lat"])
+            lon = float(psm_results[0]["avg_lon"])
 
-        bsm_lat = float(psm_results[0]["avg_lat"])
-        bsm_lon = float(psm_results[0]["avg_lon"])
+            # For PSM, use BSM name as-is (no mapping)
+            # Validate intersection exists in tables
+            table_validity = validate_intersection_in_tables(
+                bsm_intersection, bsm_intersection, db_client
+            )
 
-        # Find nearest crash intersection using Haversine
+            # Skip if not found in critical tables
+            if not table_validity.get("vehicle-count", False) or not table_validity.get(
+                "speed-distribution", False
+            ):
+                logger.warning(
+                    f"Skipping PSM intersection '{bsm_intersection}' - not found in required tables"
+                )
+            else:
+                # Find nearest crash intersection
+                crash_id = _find_nearest_crash_intersection(lat, lon, db_client)
+
+                all_results.append(
+                    {
+                        "intersection_name": bsm_intersection,
+                        "short_name": bsm_intersection,  # PSM: no name mapping
+                        "lat": lat,
+                        "lon": lon,
+                        "crash_intersection_id": crash_id,
+                        "source": "psm",
+                        "valid_in_tables": table_validity,
+                    }
+                )
+
+                logger.info(
+                    f"Found valid intersection from PSM for '{bsm_intersection}'"
+                )
+        else:
+            logger.info(f"No PSM data found for '{bsm_intersection}'")
+
+    except Exception as e:
+        logger.warning(f"Error querying PSM for '{bsm_intersection}': {e}")
+
+    if not all_results:
+        logger.warning(
+            f"No valid intersections found for '{bsm_intersection}' in either hiresdata or PSM"
+        )
+    else:
+        logger.info(
+            f"Total: Found {len(all_results)} valid intersection(s) for '{bsm_intersection}'"
+        )
+
+    return all_results
+
+
+def _find_nearest_crash_intersection(
+    lat: float, lon: float, db_client
+) -> Optional[int]:
+    """
+    Helper function to find the nearest crash intersection using Haversine distance.
+
+    Args:
+        lat: Latitude
+        lon: Longitude
+        db_client: Database client
+
+    Returns:
+        Crash intersection ID or None
+    """
+    try:
         nearest_query = """
         WITH distances AS (
             SELECT 
                 i.intersection_id,
                 6371 * acos(
-                    cos(radians(%(bsm_lat)s)) * 
+                    cos(radians(%(lat)s)) * 
                     cos(radians(i.transport_junction_latitude)) * 
-                    cos(radians(i.transport_junction_longitude) - radians(%(bsm_lon)s)) + 
-                    sin(radians(%(bsm_lat)s)) * 
+                    cos(radians(i.transport_junction_longitude) - radians(%(lon)s)) + 
+                    sin(radians(%(lat)s)) * 
                     sin(radians(i.transport_junction_latitude))
                 ) as distance_km
             FROM lrs_road_intersections i
@@ -67,23 +217,14 @@ def find_crash_intersection_for_bsm(bsm_intersection: str, db_client) -> Optiona
         LIMIT 1;
         """
 
-        results = db_client.execute_query(
-            nearest_query, {"bsm_lat": bsm_lat, "bsm_lon": bsm_lon}
-        )
+        results = db_client.execute_query(nearest_query, {"lat": lat, "lon": lon})
 
         if results:
             return results[0]["intersection_id"]
-
-        logger.warning(
-            f"No crash intersection found within 0.5 km of '{bsm_intersection}'"
-        )
         return None
 
     except Exception as e:
-        logger.error(
-            f"Error finding crash intersection for '{bsm_intersection}': {e}",
-            exc_info=True,
-        )
+        logger.error(f"Error finding nearest crash intersection: {e}")
         return None
 
 
@@ -112,9 +253,21 @@ def list_intersections(
     - GET /api/v1/safety/index/ - Fast MCDM-only response
     - GET /api/v1/safety/index/?include_rtsi=true - Includes RT-SI for blending in frontend
     """
+
+    db_client = get_db_client()
+    mcdm_service = MCDMSafetyIndexService(db_client)
+    # Get available BSM intersections
+    bsm_intersections = mcdm_service.get_available_intersections()
+    # Build mapping_results for all intersections
+    mapping_results = {}
+    for intersection in bsm_intersections:
+        mapping_list = find_crash_intersection_for_bsm(intersection, db_client)
+        if mapping_list:
+            # Use the first valid mapping for each intersection
+            mapping_results[intersection] = mapping_list[0]
+
     if not include_rtsi:
-        # Fast path: just return MCDM indices
-        intersections = get_all()
+        intersections = get_all(mapping_results)
         if not intersections:
             logger.warning("No intersections returned from get_all()")
         else:
@@ -122,15 +275,10 @@ def list_intersections(
         return intersections
 
     # Slow path: calculate RT-SI for each intersection
-    db_client = get_db_client()
+
     rt_si_service = RTSIService(db_client)
-    mcdm_service = MCDMSafetyIndexService(db_client)
-
     # Get base MCDM data
-    base_intersections = get_all()
-
-    # Get available BSM intersections
-    bsm_intersections = mcdm_service.get_available_intersections()
+    base_intersections = get_all(mapping_results)
 
     # Calculate RT-SI for each intersection
     current_time = datetime.now()
@@ -174,11 +322,20 @@ def list_intersections(
 
         if bsm_intersection_name:
             # Use find_crash_intersection_for_bsm to get the proper crash intersection ID
-            crash_intersection_id = find_crash_intersection_for_bsm(
+            crash_intersection_list = find_crash_intersection_for_bsm(
                 bsm_intersection_name, db_client
             )
-
-            if crash_intersection_id:
+            # Use first valid result with crash_intersection_id
+            valid_crash = next(
+                (
+                    item
+                    for item in crash_intersection_list
+                    if item["crash_intersection_id"] is not None
+                ),
+                crash_intersection_list[0] if crash_intersection_list else None,
+            )
+            if valid_crash and valid_crash["crash_intersection_id"]:
+                crash_intersection_id = valid_crash["crash_intersection_id"]
                 logger.info(
                     f"Calculating RT-SI for {intersection.intersection_name} (Crash ID: {crash_intersection_id}, BSM: {bsm_intersection_name})"
                 )
@@ -392,35 +549,51 @@ def get_safety_score_at_time(
             detail=f"No data available for intersection '{intersection}' at time {time}",
         )
 
-    # Find corresponding crash intersection for RT-SI
-    crash_intersection_id = find_crash_intersection_for_bsm(intersection, db_client)
+    # Find corresponding crash intersections for RT-SI
+    intersection_list = find_crash_intersection_for_bsm(intersection, db_client)
 
-    if crash_intersection_id:
-        # Calculate RT-SI
-        try:
-            rt_si_result = rt_si_service.calculate_rt_si(
-                crash_intersection_id,
-                time,
-                bin_minutes=bin_minutes,
-                realtime_intersection=intersection,
-            )
+    if intersection_list:
+        # Use first valid result with crash_intersection_id
+        valid_intersection = next(
+            (
+                item
+                for item in intersection_list
+                if item["crash_intersection_id"] is not None
+            ),
+            intersection_list[0] if intersection_list else None,
+        )
 
-            if rt_si_result is not None:
-                result["rt_si_score"] = rt_si_result["RT_SI"]
-                result["vru_index"] = rt_si_result["VRU_index"]
-                result["vehicle_index"] = rt_si_result["VEH_index"]
+        if valid_intersection and valid_intersection["crash_intersection_id"]:
+            crash_id = valid_intersection["crash_intersection_id"]
+            realtime_name = valid_intersection["intersection_name"]
 
-                logger.info(
-                    f"Safety scores for {intersection} at {time}: "
-                    f"RT-SI={rt_si_result['RT_SI']:.2f}, MCDM={result['mcdm_index']:.2f} "
-                    f"(blending to be done in frontend)"
+            # Calculate RT-SI
+            try:
+                rt_si_result = rt_si_service.calculate_rt_si(
+                    crash_id,
+                    time,
+                    bin_minutes=bin_minutes,
+                    realtime_intersection=realtime_name,
                 )
-            else:
-                logger.warning(f"No RT-SI data for {intersection} at {time}")
-        except Exception as e:
-            logger.error(f"Error calculating RT-SI: {e}", exc_info=True)
+
+                if rt_si_result is not None:
+                    result["rt_si_score"] = rt_si_result["RT_SI"]
+                    result["vru_index"] = rt_si_result["VRU_index"]
+                    result["vehicle_index"] = rt_si_result["VEH_index"]
+
+                    logger.info(
+                        f"Safety scores for {intersection} at {time}: "
+                        f"RT-SI={rt_si_result['RT_SI']:.2f}, MCDM={result['mcdm_index']:.2f} "
+                        f"(Source: {valid_intersection['source']}, blending to be done in frontend)"
+                    )
+                else:
+                    logger.warning(f"No RT-SI data for {intersection} at {time}")
+            except Exception as e:
+                logger.error(f"Error calculating RT-SI: {e}", exc_info=True)
+        else:
+            logger.warning(f"No valid crash intersection found for '{intersection}'")
     else:
-        logger.warning(f"No crash intersection found for '{intersection}'")
+        logger.warning(f"No intersections found for '{intersection}'")
 
     return result
 
@@ -492,63 +665,78 @@ def get_safety_score_trend(
             detail=f"No data available for intersection '{intersection}' in the specified time range",
         )
 
-    # Find corresponding crash intersection for RT-SI
-    crash_intersection_id = find_crash_intersection_for_bsm(intersection, db_client)
+    # Find corresponding crash intersections for RT-SI
+    intersection_list = find_crash_intersection_for_bsm(intersection, db_client)
 
-    if crash_intersection_id:
-        try:
-            # Calculate RT-SI trend using optimized method
-            # This calculates RT-SI for each time bin with data (no lookback)
-            logger.info(
-                f"Calculating RT-SI trend for {intersection} "
-                f"(crash ID: {crash_intersection_id}) from {start_time} to {end_time}"
-            )
+    if intersection_list:
+        # Use first valid result with crash_intersection_id
+        valid_intersection = next(
+            (
+                item
+                for item in intersection_list
+                if item["crash_intersection_id"] is not None
+            ),
+            intersection_list[0] if intersection_list else None,
+        )
 
-            rt_si_results = rt_si_service.calculate_rt_si_trend(
-                crash_intersection_id,
-                start_time,
-                end_time,
-                bin_minutes=bin_minutes,
-                realtime_intersection=intersection,
-            )
+        if valid_intersection and valid_intersection["crash_intersection_id"]:
+            crash_id = valid_intersection["crash_intersection_id"]
+            realtime_name = valid_intersection["intersection_name"]
 
-            # Create a map of timestamp -> RT-SI result for quick lookup
-            rt_si_map = {
-                datetime.fromisoformat(r["timestamp"]): r for r in rt_si_results
-            }
+            try:
+                # Calculate RT-SI trend using optimized method
+                logger.info(
+                    f"Calculating RT-SI trend for {intersection} "
+                    f"(crash ID: {crash_id}, Source: {valid_intersection['source']}) from {start_time} to {end_time}"
+                )
 
-            # Add RT-SI data to matching MCDM time points
-            for result in results:
-                time_bin = result["time_bin"]
-                if time_bin in rt_si_map:
-                    rt_si_data = rt_si_map[time_bin]
-                    result["rt_si_score"] = rt_si_data["RT_SI"]
-                    result["vru_index"] = rt_si_data["VRU_index"]
-                    result["vehicle_index"] = rt_si_data["VEH_index"]
-                    result["raw_crash_rate"] = rt_si_data["raw_crash_rate"]
-                    result["eb_crash_rate"] = rt_si_data["eb_crash_rate"]
-                else:
-                    # No RT-SI data for this time bin - leave as None
-                    logger.debug(f"No RT-SI data for time bin {time_bin}")
+                rt_si_results = rt_si_service.calculate_rt_si_trend(
+                    crash_id,
+                    start_time,
+                    end_time,
+                    bin_minutes=bin_minutes,
+                    realtime_intersection=realtime_name,
+                )
 
-            # Add RT-SI component data for correlation analysis
-            for result in results:
-                time_bin = result["time_bin"]
-                if time_bin in rt_si_map:
-                    rt_si_data = rt_si_map[time_bin]
-                    # Add uplift factors for correlation analysis
-                    result["F_speed"] = rt_si_data.get("F_speed")
-                    result["F_variance"] = rt_si_data.get("F_variance")
-                    result["F_conflict"] = rt_si_data.get("F_conflict")
-                    result["uplift_factor"] = rt_si_data.get("uplift_factor")
+                # Create a map of timestamp -> RT-SI result for quick lookup
+                rt_si_map = {
+                    datetime.fromisoformat(r["timestamp"]): r for r in rt_si_results
+                }
 
-            logger.info(
-                f"Successfully calculated safety scores: {len(results)} MCDM points, "
-                f"{len(rt_si_results)} RT-SI points (blending to be done in frontend)"
-            )
+                # Add RT-SI data to matching MCDM time points
+                for result in results:
+                    time_bin = result["time_bin"]
+                    if time_bin in rt_si_map:
+                        rt_si_data = rt_si_map[time_bin]
+                        result["rt_si_score"] = rt_si_data["RT_SI"]
+                        result["vru_index"] = rt_si_data["VRU_index"]
+                        result["vehicle_index"] = rt_si_data["VEH_index"]
+                        result["raw_crash_rate"] = rt_si_data["raw_crash_rate"]
+                        result["eb_crash_rate"] = rt_si_data["eb_crash_rate"]
+                    else:
+                        # No RT-SI data for this time bin - leave as None
+                        logger.debug(f"No RT-SI data for time bin {time_bin}")
 
-        except Exception as e:
-            logger.error(f"Error calculating RT-SI trend: {e}", exc_info=True)
+                # Add RT-SI component data for correlation analysis
+                for result in results:
+                    time_bin = result["time_bin"]
+                    if time_bin in rt_si_map:
+                        rt_si_data = rt_si_map[time_bin]
+                        # Add uplift factors for correlation analysis
+                        result["F_speed"] = rt_si_data.get("F_speed")
+                        result["F_variance"] = rt_si_data.get("F_variance")
+                        result["F_conflict"] = rt_si_data.get("F_conflict")
+                        result["uplift_factor"] = rt_si_data.get("uplift_factor")
+
+                logger.info(
+                    f"Successfully calculated safety scores: {len(results)} MCDM points, "
+                    f"{len(rt_si_results)} RT-SI points (blending to be done in frontend)"
+                )
+
+            except Exception as e:
+                logger.error(f"Error calculating RT-SI trend: {e}", exc_info=True)
+        else:
+            logger.warning(f"No valid crash intersection found for '{intersection}'")
     else:
         logger.warning(f"No crash intersection found for '{intersection}'")
 

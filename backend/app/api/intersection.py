@@ -54,7 +54,7 @@ def find_crash_intersection_for_bsm(bsm_intersection: str, db_client) -> list:
     query = """
         SELECT intersection_name,short_name, lat, lon, source
         FROM public.intersection_details_view
-        WHERE LOWER(intersection_name) = LOWER(%(int_id)s)
+        WHERE LOWER(intersection_name) = LOWER(%(int_id)s) OR LOWER(short_name) = LOWER(%(int_id)s);
     """
     results = db_client.execute_query(query, {"int_id": bsm_intersection})
 
@@ -309,7 +309,9 @@ def debug_status():
 
 @router.get("/debug/rt-si")
 def debug_rt_si(
-    intersection: str = Query(..., description="Intersection name (e.g., 'glebe-potomac')"),
+    intersection: str = Query(
+        ..., description="Intersection name (e.g., 'glebe-potomac')"
+    ),
     start_time: datetime = Query(..., description="Start datetime (ISO 8601 format)"),
     end_time: datetime = Query(..., description="End datetime (ISO 8601 format)"),
     bin_minutes: int = Query(15, description="Time bin size in minutes", ge=1, le=60),
@@ -335,16 +337,26 @@ def debug_rt_si(
     # Find crash intersection mapping for the provided BSM intersection name
     intersection_list = find_crash_intersection_for_bsm(intersection, db_client)
     if not intersection_list:
-        raise HTTPException(status_code=404, detail=f"No mapping found for intersection '{intersection}'")
+        raise HTTPException(
+            status_code=404,
+            detail=f"No mapping found for intersection '{intersection}'",
+        )
 
     # Prefer a mapping with a crash_intersection_id
     valid_intersection = next(
-        (item for item in intersection_list if item.get("crash_intersection_id") is not None),
+        (
+            item
+            for item in intersection_list
+            if item.get("crash_intersection_id") is not None
+        ),
         intersection_list[0],
     )
 
     if not valid_intersection or not valid_intersection.get("crash_intersection_id"):
-        raise HTTPException(status_code=404, detail=f"No crash_intersection_id found for '{intersection}'")
+        raise HTTPException(
+            status_code=404,
+            detail=f"No crash_intersection_id found for '{intersection}'",
+        )
 
     crash_id = valid_intersection["crash_intersection_id"]
     realtime_name = valid_intersection["intersection_name"]
@@ -371,7 +383,9 @@ def debug_rt_si(
         }
     except Exception as e:
         logger.error(f"Error in debug_rt_si: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error computing RT-SI debug data: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error computing RT-SI debug data: {e}"
+        )
 
 
 @router.get("/intersections/list", response_model=IntersectionList)

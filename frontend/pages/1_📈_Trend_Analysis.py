@@ -20,7 +20,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 import requests
 
-from app.utils.config import APP_ICON, API_URL
+from app.utils.config import APP_ICON, API_URL, API_TIMEOUT
 
 # API configuration - use the full API_URL as base (already includes /api/v1/safety/index/)
 API_BASE_URL = API_URL.rstrip("/") + "/safety/index"
@@ -29,7 +29,9 @@ API_BASE_URL = API_URL.rstrip("/") + "/safety/index"
 def get_available_intersections():
     """Fetch list of available intersections."""
     try:
-        response = requests.get(f"{API_BASE_URL}/intersections/list", timeout=10)
+        response = requests.get(
+            f"{API_BASE_URL}/intersections/list", timeout=API_TIMEOUT
+        )
         response.raise_for_status()
         data = response.json()
         return data.get("intersections", [])
@@ -47,7 +49,7 @@ def get_safety_score_at_time(intersection: str, time: datetime, bin_minutes: int
             "bin_minutes": bin_minutes,
         }
         response = requests.get(
-            f"{API_BASE_URL}/time/specific", params=params, timeout=30
+            f"{API_BASE_URL}/time/specific", params=params, timeout=API_TIMEOUT
         )
         response.raise_for_status()
         return response.json()
@@ -76,7 +78,9 @@ def get_safety_score_trend(
             "bin_minutes": bin_minutes,
             "include_correlations": include_correlations,
         }
-        response = requests.get(f"{API_BASE_URL}/time/range", params=params, timeout=60)
+        response = requests.get(
+            f"{API_BASE_URL}/time/range", params=params, timeout=API_TIMEOUT
+        )
         response.raise_for_status()
         return response.json()
     except requests.HTTPError as e:

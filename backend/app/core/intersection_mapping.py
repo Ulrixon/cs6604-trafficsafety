@@ -76,9 +76,8 @@ def normalize_intersection_name(full_name: str) -> str:
     if not cleaned_parts:
         return full_name.lower()
 
-    # Sort alphabetically for consistency
-    cleaned_parts.sort()
-
+    # Preserve original order of roads (do not sort) so normalized names
+    # reflect the same ordering as used in the source tables.
     result = "-".join(cleaned_parts)
     logger.debug(f"Mapped '{full_name}' -> '{result}'")
     return result
@@ -166,19 +165,25 @@ def validate_intersection_in_tables(
         Dictionary with table names as keys and boolean existence as values
     """
     results = {}
-    # For other tables, keep original logic
-    tables_with_full_name = [
-        "vehicle-count",
-        "vru-count",
-        "speed-distribution",
-        "safety-event",
-    ]
+
+    # Tables that store the full intersection name
+    tables_with_full_name = ["vehicle-count", "vru-count", "speed-distribution"]
     for table in tables_with_full_name:
         try:
             query = f'SELECT 1 FROM "{table}" WHERE intersection = %(name)s LIMIT 1'
-            result = db_client.execute_query(query, {"name": short_name})
+            result = db_client.execute_query(query, {"name": intersection_name})
             results[table] = len(result) > 0
         except Exception as e:
-            logger.error(f"Error checking {table} for '{short_name}': {e}")
+            logger.error(f"Error checking {table} for '{intersection_name}': {e}")
             results[table] = False
+
+    # safety-event table uses short names (normalized form)
+    try:
+        query = 'SELECT 1 FROM "safety-event" WHERE intersection = %(name)s LIMIT 1'
+        result = db_client.execute_query(query, {"name": short_name})
+        results["safety-event"] = len(result) > 0
+    except Exception as e:
+        logger.error(f"Error checking safety-event for '{short_name}': {e}")
+        results["safety-event"] = False
+
     return results

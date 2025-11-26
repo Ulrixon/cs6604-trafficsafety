@@ -14,8 +14,8 @@ load_dotenv(dotenv_path=env_path)
 # API Configuration
 API_URL = os.getenv("API_URL", "http://localhost:8000/api/v1")
 API_TIMEOUT = int(
-    os.getenv("API_TIMEOUT", "60")
-)  # seconds (increased for RT-SI calculation)
+    os.getenv("API_TIMEOUT", "300")
+)  # seconds (increased for RT-SI calculation) - default 300s
 API_MAX_RETRIES = int(os.getenv("API_MAX_RETRIES", "3"))
 API_CACHE_TTL = int(os.getenv("API_CACHE_TTL", "300"))  # seconds (5 minutes)
 

@@ -15,9 +15,22 @@ from typing import Dict, Optional, List
 import numpy as np
 
 from .db_client import VTTIPostgresClient
-from ..core.intersection_mapping import normalize_intersection_name
+from ..core.intersection_mapping import (
+    normalize_intersection_name,
+    reverse_lookup_intersection,
+)
 
 logger = logging.getLogger(__name__)
+# Respect the application's logging configuration: ensure INFO level and allow propagation
+logger.setLevel(logging.INFO)
+logger.propagate = True
+# Ensure root logger has a handler and is at INFO level (fallback for environments
+# where the application's logging config hasn't run yet). This is temporary and
+# intended for debugging only.
+root_logger = logging.getLogger()
+if not root_logger.handlers:
+    logging.basicConfig(level=logging.INFO)
+root_logger.setLevel(logging.INFO)
 
 
 class RTSIService:
@@ -58,8 +71,23 @@ class RTSIService:
     def __init__(self, db_client: VTTIPostgresClient):
         self.db_client = db_client
 
+    def _to_short_name(self, intersection) -> str:
+        """
+        Ensure we use the normalized short name for real-time tables.
+
+        If `intersection` is a string, normalize it. If it's an int (crash id),
+        return it unchanged as caller should provide a realtime_intersection
+        string when needed.
+        """
+        try:
+            if isinstance(intersection, str):
+                return normalize_intersection_name(intersection)
+        except Exception:
+            pass
+        return intersection
+
     def get_historical_crash_rate(
-        self, intersection_id: int, hour: int, dow: int
+        self, intersection_id: int, start_year: int = 2017, end_year: int = 2024
     ) -> Dict:
         """
         Get historical severity-weighted crash rate for intersection-time bin.
@@ -69,8 +97,18 @@ class RTSIService:
         - exposure: total vehicle volume
         - raw_rate: crashes per vehicle
         """
-        query = """
-        SELECT 
+        # Query crashes for the intersection across the provided year range.
+        params = {
+            "intersection_id": intersection_id,
+            "w_fatal": self.W_FATAL,
+            "w_injury": self.W_INJURY,
+            "w_pdo": self.W_PDO,
+            "start_year": start_year,
+            "end_year": end_year,
+        }
+
+        query = f"""
+        SELECT
             COALESCE(
                 COUNT(*) FILTER (WHERE crash_severity IN ('K', 'Fatal')) * %(w_fatal)s +
                 COUNT(*) FILTER (WHERE crash_severity IN ('A', 'B', 'Injury')) * %(w_injury)s +
@@ -80,22 +118,10 @@ class RTSIService:
             1 as exposure
         FROM vdot_crashes_with_intersections
         WHERE matched_intersection_id = %(intersection_id)s
-          AND FLOOR(crash_military_time / 100) = %(hour)s
-          AND EXTRACT(DOW FROM TO_DATE(crash_date::TEXT, 'YYYY-MM-DD')) = %(dow)s
-          AND crash_year BETWEEN 2017 AND 2024;
+          AND crash_year BETWEEN %(start_year)s AND %(end_year)s;
         """
 
-        results = self.db_client.execute_query(
-            query,
-            {
-                "intersection_id": intersection_id,
-                "hour": hour,
-                "dow": dow,
-                "w_fatal": self.W_FATAL,
-                "w_injury": self.W_INJURY,
-                "w_pdo": self.W_PDO,
-            },
-        )
+        results = self.db_client.execute_query(query, params)
 
         if not results:
             return {"weighted_crashes": 0, "exposure": 1, "raw_rate": 0.0}
@@ -138,10 +164,6 @@ class RTSIService:
         Returns:
             Capacity value (95th percentile of vehicle counts), or DEFAULT_CAPACITY if insufficient data
         """
-        # If intersection_id is a string (BSM name), normalize it
-        if isinstance(intersection_id, str):
-            intersection_id = normalize_intersection_name(intersection_id)
-
         try:
             # Get historical vehicle counts for the last N days
             lookback_us = (
@@ -155,13 +177,20 @@ class RTSIService:
               AND publish_timestamp >= (EXTRACT(EPOCH FROM NOW()) * 1000000 - %(lookback_us)s)::bigint;
             """
 
+            # Try using the provided intersection_id first (may be full name)
+            intersection_identifier = self._to_short_name(intersection_id)
             result = self.db_client.execute_query(
                 capacity_query,
                 {
-                    "intersection_id": intersection_id,
+                    "intersection_id": intersection_identifier,
                     "lookback_us": lookback_us,
                 },
             )
+
+            # If no result and intersection_id is a short name, try reverse lookup
+            # No reverse-lookup fallback: we rely on normalized short names
+            # being used for real-time tables. If no capacity found, we'll
+            # fall back to DEFAULT_CAPACITY below.
 
             if result and result[0]["capacity"]:
                 capacity = float(result[0]["capacity"])
@@ -201,13 +230,12 @@ class RTSIService:
 
         Returns dict with traffic data, or None if no data exists for this time bin.
         """
-        # If intersection_id is a string (BSM name), normalize it
-        if isinstance(intersection_id, str):
-            intersection_id = normalize_intersection_name(intersection_id)
-
         end_time = timestamp + timedelta(minutes=bin_minutes)
         start_time_us = int(timestamp.timestamp() * 1000000)
         end_time_us = int(end_time.timestamp() * 1000000)
+
+        # Normalize to short-name for real-time tables
+        intersection_identifier = self._to_short_name(intersection_id)
 
         # Query vehicle count and turning movements
         vehicle_query = """
@@ -220,29 +248,16 @@ class RTSIService:
           AND publish_timestamp < %(end_time)s;
         """
 
-        # Query speed distribution for avg speed and variance
+        # Query speed distribution grouped by bin; compute metrics in Python for robustness
         speed_query = """
-        WITH speed_data AS (
-            SELECT 
-                speed_interval,
-                SUM(count) as bin_count
-            FROM "speed-distribution"
-            WHERE intersection = %(intersection_id)s::text
-              AND publish_timestamp >= %(start_time)s
-              AND publish_timestamp < %(end_time)s
-            GROUP BY speed_interval
-        )
-        SELECT 
-            SUM(bin_count) as total_count,
-            SUM(
-                (CAST(SPLIT_PART(SPLIT_PART(speed_interval, '-', 1), ' ', 1) AS FLOAT) + 
-                 CAST(SPLIT_PART(SPLIT_PART(speed_interval, '-', 2), ' ', 1) AS FLOAT)) / 2.0 * bin_count
-            ) / NULLIF(SUM(bin_count), 0) as avg_speed,
-            PERCENTILE_CONT(0.85) WITHIN GROUP (
-                ORDER BY (CAST(SPLIT_PART(SPLIT_PART(speed_interval, '-', 1), ' ', 1) AS FLOAT) + 
-                         CAST(SPLIT_PART(SPLIT_PART(speed_interval, '-', 2), ' ', 1) AS FLOAT)) / 2.0
-            ) as free_flow_speed
-        FROM speed_data;
+        SELECT
+            speed_interval,
+            SUM(count) as bin_count
+        FROM "speed-distribution"
+        WHERE intersection = %(intersection_id)s::text
+          AND publish_timestamp >= %(start_time)s
+          AND publish_timestamp < %(end_time)s
+        GROUP BY speed_interval;
         """
 
         # Query VRU count
@@ -258,7 +273,7 @@ class RTSIService:
         vehicle_results = self.db_client.execute_query(
             vehicle_query,
             {
-                "intersection_id": intersection_id,
+                "intersection_id": intersection_identifier,
                 "start_time": start_time_us,
                 "end_time": end_time_us,
             },
@@ -267,52 +282,161 @@ class RTSIService:
         speed_results = self.db_client.execute_query(
             speed_query,
             {
-                "intersection_id": intersection_id,
+                "intersection_id": intersection_identifier,
                 "start_time": start_time_us,
                 "end_time": end_time_us,
             },
         )
-
         vru_results = self.db_client.execute_query(
             vru_query,
             {
-                "intersection_id": intersection_id,
+                "intersection_id": intersection_identifier,
                 "start_time": start_time_us,
                 "end_time": end_time_us,
             },
         )
 
-        # Extract results
+        # Extract vehicle / turning counts
         vehicle_count = 0
         turning_count = 0
         if vehicle_results and vehicle_results[0]["vehicle_count"]:
             vehicle_count = int(vehicle_results[0]["vehicle_count"])
             turning_count = (
-                int(vehicle_results[0]["turning_count"])
-                if vehicle_results[0]["turning_count"]
-                else 0
+                int(vehicle_results[0]["turning_count"]) if vehicle_results[0]["turning_count"] else 0
             )
 
-        avg_speed = 0.0
-        free_flow_speed = 30.0  # Default
+        # Compute avg_speed, free_flow_speed, and speed_variance from speed_results
+        def parse_midpoint(bin_label: str) -> float:
+            try:
+                if not bin_label:
+                    return 0.0
+                s = str(bin_label).replace(" mph", "").strip()
+                parts = [p.strip() for p in s.split("-")]
+                if len(parts) == 2:
+                    return (float(parts[0]) + float(parts[1])) / 2.0
+                return float(parts[0]) if parts[0] else 0.0
+            except Exception:
+                return 0.0
+
+        total_count = 0
+        weighted_speed_sum = 0.0
+        speed_values = []
+        if speed_results:
+            for r in speed_results:
+                bin_label = str(r.get("speed_interval"))
+                bin_count = int(r.get("bin_count") or 0)
+                midpoint = parse_midpoint(bin_label)
+                total_count += bin_count
+                weighted_speed_sum += midpoint * bin_count
+                if bin_count > 0:
+                    speed_values.extend([midpoint] * min(bin_count, 1000))
+
+        avg_speed = (weighted_speed_sum / total_count) if total_count > 0 else 0.0
+        free_flow_speed = (
+            np.percentile(speed_values, 85) if len(speed_values) > 0 else 30.0
+        )
         speed_variance = 0.0
-
-        if speed_results and speed_results[0]["total_count"]:
-            speed_row = speed_results[0]
-            avg_speed = float(speed_row["avg_speed"]) if speed_row["avg_speed"] else 0.0
-            free_flow_speed = (
-                float(speed_row["free_flow_speed"])
-                if speed_row["free_flow_speed"]
-                else 30.0
-            )
-            # Approximate variance from speed distribution
-            # (simplified: using 10% of avg_speed as std dev)
-            speed_variance = (avg_speed * 0.1) ** 2
+        if total_count > 0:
+            mean = avg_speed
+            var_acc = 0.0
+            for r in speed_results:
+                midpoint = parse_midpoint(str(r.get("speed_interval")))
+                bin_count = int(r.get("bin_count") or 0)
+                var_acc += ((midpoint - mean) ** 2) * bin_count
+            speed_variance = var_acc / total_count if total_count > 0 else 0.0
 
         # Extract VRU count
         vru_count = 0
         if vru_results and vru_results[0]["vru_count"]:
             vru_count = int(vru_results[0]["vru_count"])
+
+        # If no vehicle data found and a short-name was provided, attempt reverse lookup
+        if (
+            not vehicle_results or not vehicle_results[0]["vehicle_count"]
+        ) and isinstance(intersection_id, str):
+            try:
+                full_name = reverse_lookup_intersection(intersection_id, self.db_client)
+                if full_name and full_name != intersection_id:
+                    vehicle_results_full = self.db_client.execute_query(
+                        vehicle_query,
+                        {
+                            "intersection_id": full_name,
+                            "start_time": start_time_us,
+                            "end_time": end_time_us,
+                        },
+                    )
+                    if (
+                        vehicle_results_full
+                        and vehicle_results_full[0]["vehicle_count"]
+                    ):
+                        vehicle_count = int(vehicle_results_full[0]["vehicle_count"])
+                        turning_count = (
+                            int(vehicle_results_full[0]["turning_count"])
+                            if vehicle_results_full[0]["turning_count"]
+                            else 0
+                        )
+                    # try to fetch speed/vru using full_name if needed
+                    speed_results_full = self.db_client.execute_query(
+                        speed_query,
+                        {
+                            "intersection_id": full_name,
+                            "start_time": start_time_us,
+                            "end_time": end_time_us,
+                        },
+                    )
+                    if speed_results_full:
+                        total_count = 0
+                        weighted_speed_sum = 0.0
+                        speed_values = []
+                        for r in speed_results_full:
+                            bin_label = str(r.get("speed_interval"))
+                            bin_count = int(r.get("bin_count") or 0)
+                            midpoint = parse_midpoint(bin_label)
+                            total_count += bin_count
+                            weighted_speed_sum += midpoint * bin_count
+                            if bin_count > 0:
+                                speed_values.extend([midpoint] * min(bin_count, 1000))
+                        avg_speed = (
+                            (weighted_speed_sum / total_count)
+                            if total_count > 0
+                            else avg_speed
+                        )
+                        free_flow_speed = (
+                            np.percentile(speed_values, 85)
+                            if len(speed_values) > 0
+                            else free_flow_speed
+                        )
+                        if total_count > 0:
+                            mean = avg_speed
+                            var_acc = 0.0
+                            for r in speed_results_full:
+                                midpoint = parse_midpoint(str(r.get("speed_interval")))
+                                bin_count = int(r.get("bin_count") or 0)
+                                var_acc += ((midpoint - mean) ** 2) * bin_count
+                            speed_variance = (
+                                var_acc / total_count
+                                if total_count > 0
+                                else speed_variance
+                            )
+                    vru_results_full = self.db_client.execute_query(
+                        vru_query,
+                        {
+                            "intersection_id": full_name,
+                            "start_time": start_time_us,
+                            "end_time": end_time_us,
+                        },
+                    )
+                    if vru_results_full and vru_results_full[0]["vru_count"]:
+                        vru_count = int(vru_results_full[0]["vru_count"])
+            except Exception:
+                pass
+
+        # Log computed speed and counts for debugging
+        logger.info(
+            f"RT-SI: computed traffic for {intersection_id} at {timestamp.isoformat()}: "
+            f"vehicle_count={vehicle_count}, vru_count={vru_count}, turning_count={turning_count}, "
+            f"avg_speed={avg_speed:.2f}, speed_variance={speed_variance:.4f}, free_flow_speed={free_flow_speed:.2f}"
+        )
 
         return {
             "vehicle_count": vehicle_count,
@@ -348,10 +472,13 @@ class RTSIService:
         - speed_variance: variance in speed
         - free_flow_speed: free-flow speed (85th percentile)
         """
-        # Try to find a time bin with data, starting from the requested timestamp
-        # and looking back in bin_minutes increments
+
+        # Start search from requested timestamp and look back if needed
         current_timestamp = timestamp
         lookback_limit = timestamp - timedelta(hours=lookback_hours)
+
+        # Normalize to short-name for real-time tables
+        intersection_identifier = self._to_short_name(intersection_id)
 
         while current_timestamp >= lookback_limit:
             end_time = current_timestamp + timedelta(minutes=bin_minutes)
@@ -370,7 +497,7 @@ class RTSIService:
             check_result = self.db_client.execute_query(
                 check_query,
                 {
-                    "intersection_id": intersection_id,
+                    "intersection_id": intersection_identifier,
                     "start_time": start_time_us,
                     "end_time": end_time_us,
                 },
@@ -454,7 +581,7 @@ class RTSIService:
         vehicle_results = self.db_client.execute_query(
             vehicle_query,
             {
-                "intersection_id": intersection_id,
+                "intersection_id": intersection_identifier,
                 "start_time": start_time_us,
                 "end_time": end_time_us,
             },
@@ -463,33 +590,27 @@ class RTSIService:
         speed_results = self.db_client.execute_query(
             speed_query,
             {
-                "intersection_id": intersection_id,
+                "intersection_id": intersection_identifier,
                 "start_time": start_time_us,
                 "end_time": end_time_us,
             },
         )
-
         vru_results = self.db_client.execute_query(
             vru_query,
             {
-                "intersection_id": intersection_id,
+                "intersection_id": intersection_identifier,
                 "start_time": start_time_us,
                 "end_time": end_time_us,
             },
         )
-
-        # Extract results - set to 0 if no data exists
+        # Extract vehicle / turning counts
         vehicle_count = 0
         turning_count = 0
         if vehicle_results and vehicle_results[0]["vehicle_count"]:
             vehicle_count = int(vehicle_results[0]["vehicle_count"])
             turning_count = (
-                int(vehicle_results[0]["turning_count"])
-                if vehicle_results[0]["turning_count"]
-                else 0
+                int(vehicle_results[0]["turning_count"]) if vehicle_results[0]["turning_count"] else 0
             )
-
-        avg_speed = 0.0
         free_flow_speed = 30.0  # Default
         speed_variance = 0.0
 
@@ -656,12 +777,8 @@ class RTSIService:
         Returns dict with all components of RT-SI calculation.
         """
         try:
-            # Extract time bin features
-            hour = timestamp.hour
-            dow = timestamp.weekday()  # 0=Monday, 6=Sunday
-
-            # Step 1: Get historical crash rate
-            hist_data = self.get_historical_crash_rate(intersection_id, hour, dow)
+            # Step 1: Get historical crash rate (year-only)
+            hist_data = self.get_historical_crash_rate(intersection_id)
             raw_rate = hist_data["raw_rate"]
             exposure = hist_data["exposure"]
 
@@ -673,8 +790,14 @@ class RTSIService:
             rt_intersection = (
                 realtime_intersection if realtime_intersection else intersection_id
             )
+            logger.info(
+                f"RT-SI: resolved realtime_intersection for DB queries: {repr(rt_intersection)}"
+            )
             rt_data = self.get_realtime_data(
                 rt_intersection, timestamp, bin_minutes, lookback_hours
+            )
+            logger.info(
+                f"RT-SI: realtime data for {repr(rt_intersection)} at {timestamp.isoformat()}: {rt_data}"
             )
 
             # Note: We now allow zero traffic counts to proceed with calculation
@@ -684,6 +807,22 @@ class RTSIService:
             capacity = self.get_intersection_capacity(
                 rt_intersection, bin_minutes=bin_minutes, lookback_days=30
             )
+            logger.info(
+                f"RT-SI: computed capacity for {repr(rt_intersection)}: {capacity} vehicles per {bin_minutes}min"
+            )
+
+            # Log key realtime values before uplift/sub-index calculations
+            try:
+                logger.info(
+                    "RT-SI: pre-compute values: "
+                    f"vehicle_count={rt_data.get('vehicle_count')}, "
+                    f"vru_count={rt_data.get('vru_count')}, "
+                    f"avg_speed={rt_data.get('avg_speed')}, "
+                    f"speed_variance={rt_data.get('speed_variance')}, "
+                    f"turning_count={rt_data.get('turning_count')}"
+                )
+            except Exception:
+                logger.debug("RT-SI: could not log pre-compute realtime values")
 
             # Step 5: Compute uplift factors
             uplift = self.compute_uplift_factors(
@@ -770,6 +909,9 @@ class RTSIService:
         end_time_us = int(end_time.timestamp() * 1000000)
         bin_microseconds = bin_minutes * 60 * 1000000
 
+        # Normalize to short-name for real-time tables
+        intersection_identifier = self._to_short_name(intersection_id)
+
         # Single query for all vehicle data, grouped by time bin
         vehicle_query = """
         SELECT 
@@ -829,7 +971,7 @@ class RTSIService:
         vehicle_results = self.db_client.execute_query(
             vehicle_query,
             {
-                "intersection_id": intersection_id,
+                "intersection_id": intersection_identifier,
                 "start_time": start_time_us,
                 "end_time": end_time_us,
                 "bin_us": bin_microseconds,
@@ -839,7 +981,7 @@ class RTSIService:
         speed_results = self.db_client.execute_query(
             speed_query,
             {
-                "intersection_id": intersection_id,
+                "intersection_id": intersection_identifier,
                 "start_time": start_time_us,
                 "end_time": end_time_us,
                 "bin_us": bin_microseconds,
@@ -849,7 +991,7 @@ class RTSIService:
         vru_results = self.db_client.execute_query(
             vru_query,
             {
-                "intersection_id": intersection_id,
+                "intersection_id": intersection_identifier,
                 "start_time": start_time_us,
                 "end_time": end_time_us,
                 "bin_us": bin_microseconds,
@@ -922,6 +1064,66 @@ class RTSIService:
             # Move to next time bin
             current_time += timedelta(minutes=bin_minutes)
 
+        # Post-process: forward-fill short gaps of missing data so RT-SI does not
+        # collapse to zero for intermittent empty bins. We consider a bin "empty"
+        # when vehicle_count==0 and vru_count==0 and avg_speed==0.
+        # Fill-forward is applied only for short gaps (default up to 1 hour)
+        # to avoid inventing data over long periods.
+        max_gap_bins = max(1, int(60 / bin_minutes))  # e.g., 4 bins for 15-min
+
+        sorted_bins = sorted(result_map.keys())
+        last_seen = None
+        last_seen_idx = None
+
+        for idx, t in enumerate(sorted_bins):
+            bin_row = result_map[t]
+            is_empty = (
+                (bin_row.get("vehicle_count", 0) == 0)
+                and (bin_row.get("vru_count", 0) == 0)
+                and (bin_row.get("avg_speed", 0.0) == 0.0)
+            )
+
+            if not is_empty:
+                # Update last seen non-empty observation
+                last_seen = dict(bin_row)
+                last_seen_idx = idx
+                # Ensure a small variance floor if avg_speed > 0 but variance is zero
+                if (
+                    last_seen.get("avg_speed", 0.0) > 0
+                    and last_seen.get("speed_variance", 0.0) <= 0.0
+                ):
+                    sigma_floor = max(1.0, last_seen["avg_speed"] * 0.05)
+                    last_seen["speed_variance"] = sigma_floor * sigma_floor
+                    bin_row["speed_variance"] = last_seen["speed_variance"]
+            else:
+                # Empty bin: try to fill from last_seen if gap is small
+                if (
+                    last_seen is not None
+                    and last_seen_idx is not None
+                    and (idx - last_seen_idx) <= max_gap_bins
+                ):
+                    # copy values from last_seen into current bin
+                    filled = dict(last_seen)
+                    # keep the timestamp-specific fields as-is
+                    filled["vehicle_count"] = last_seen.get("vehicle_count", 0)
+                    filled["turning_count"] = last_seen.get("turning_count", 0)
+                    filled["vru_count"] = last_seen.get("vru_count", 0)
+                    filled["avg_speed"] = last_seen.get("avg_speed", 0.0)
+                    filled["speed_variance"] = last_seen.get("speed_variance", 0.0)
+                    filled["free_flow_speed"] = last_seen.get("free_flow_speed", 30.0)
+                    result_map[t] = filled
+                    logger.debug(
+                        f"Filled empty bin {t} with last seen data from {sorted_bins[last_seen_idx]}"
+                    )
+                else:
+                    # Leave empty bin as-is, but ensure a tiny variance floor to avoid divide-by-zero
+                    if (
+                        bin_row.get("avg_speed", 0.0) > 0
+                        and bin_row.get("speed_variance", 0.0) <= 0.0
+                    ):
+                        sigma_floor = max(0.5, bin_row["avg_speed"] * 0.03)
+                        bin_row["speed_variance"] = sigma_floor * sigma_floor
+
         return result_map
 
     def calculate_rt_si_trend(
@@ -962,36 +1164,15 @@ class RTSIService:
         )
         logger.info(f"Retrieved data for {len(traffic_data_map)} time bins")
 
-        # Cache for historical crash rates (hour, dow) -> data
-        hist_cache = {}
+        # Use year-only historical crash rate (same for all bins)
+        hist_data = self.get_historical_crash_rate(intersection_id)
+        raw_rate = hist_data["raw_rate"]
+        exposure = hist_data["exposure"]
+        r_hat = self.compute_eb_rate(raw_rate, exposure)
 
         # Process each time bin that has data
         for current_time, rt_data in sorted(traffic_data_map.items()):
             try:
-                # Get or compute historical crash rate for this hour/dow
-                hour = current_time.hour
-                dow = current_time.weekday()
-                cache_key = (hour, dow)
-
-                if cache_key not in hist_cache:
-                    hist_data = self.get_historical_crash_rate(
-                        intersection_id, hour, dow
-                    )
-                    raw_rate = hist_data["raw_rate"]
-                    exposure = hist_data["exposure"]
-                    r_hat = self.compute_eb_rate(raw_rate, exposure)
-                    hist_cache[cache_key] = {
-                        "hist_data": hist_data,
-                        "raw_rate": raw_rate,
-                        "exposure": exposure,
-                        "r_hat": r_hat,
-                    }
-
-                cached = hist_cache[cache_key]
-                hist_data = cached["hist_data"]
-                raw_rate = cached["raw_rate"]
-                exposure = cached["exposure"]
-                r_hat = cached["r_hat"]
 
                 # Compute uplift factors
                 uplift = self.compute_uplift_factors(
@@ -1081,34 +1262,15 @@ class RTSIService:
             List of RT-SI result dicts
         """
         results = []
-        hist_cache = {}
+
+        # Use year-only historical crash rate for all bins
+        hist_data = self.get_historical_crash_rate(intersection_id)
+        raw_rate = hist_data["raw_rate"]
+        exposure = hist_data["exposure"]
+        r_hat = self.compute_eb_rate(raw_rate, exposure)
 
         for current_time, rt_data in sorted(traffic_data_map.items()):
             try:
-                # Get or compute historical crash rate for this hour/dow
-                hour = current_time.hour
-                dow = current_time.weekday()
-                cache_key = (hour, dow)
-
-                if cache_key not in hist_cache:
-                    hist_data = self.get_historical_crash_rate(
-                        intersection_id, hour, dow
-                    )
-                    raw_rate = hist_data["raw_rate"]
-                    exposure = hist_data["exposure"]
-                    r_hat = self.compute_eb_rate(raw_rate, exposure)
-                    hist_cache[cache_key] = {
-                        "hist_data": hist_data,
-                        "raw_rate": raw_rate,
-                        "exposure": exposure,
-                        "r_hat": r_hat,
-                    }
-
-                cached = hist_cache[cache_key]
-                hist_data = cached["hist_data"]
-                exposure = cached["exposure"]
-                raw_rate = cached["raw_rate"]
-                r_hat = cached["r_hat"]
 
                 # Compute uplift factors
                 uplift = self.compute_uplift_factors(

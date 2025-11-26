@@ -18,6 +18,7 @@ from ..core.config import settings
 from ..core.intersection_mapping import (
     normalize_intersection_name,
     validate_intersection_in_tables,
+    reverse_lookup_intersection,
 )
 
 router = APIRouter(prefix="/safety/index", tags=["Safety Index"])
@@ -68,7 +69,8 @@ def find_crash_intersection_for_bsm(bsm_intersection: str, db_client) -> list:
         table_validity = validate_intersection_in_tables(
             full_name, short_name, db_client
         )
-        crash_id = _find_nearest_crash_intersection(lat, lon, db_client)
+        # Find crash_intersection_id using the normalized short name only.
+        crash_id = _find_nearest_crash_intersection(short_name, db_client)
         all_results.append(
             {
                 "intersection_name": full_name,
@@ -92,34 +94,35 @@ def find_crash_intersection_for_bsm(bsm_intersection: str, db_client) -> list:
     return all_results
 
 
-def _find_nearest_crash_intersection(
-    lat: float, lon: float, db_client
-) -> Optional[int]:
+def _find_nearest_crash_intersection(short_name: str, db_client) -> Optional[int]:
     """
-    Helper function to find the nearest crash intersection using Haversine distance.
+    Helper function to find a crash intersection ID by exact `short_name` match.
 
-    Args:
-        lat: Latitude
-        lon: Longitude
-        db_client: Database client
-
-    Returns:
-        Crash intersection ID or None
+    This helper only accepts `short_name` and `db_client` and will not perform
+    any coordinate-based fallbacks. It returns the first matching
+    `crash_intersection_id` or `None`.
     """
     try:
-        # Query the precomputed view for nearest crash_intersection_id
-        query = """
+        if not short_name:
+            return None
+
+        query_sn = """
             SELECT crash_intersection_id
             FROM public.crash_intersection_id_with_coord
-            WHERE abs(lat - %(lat)s) < 0.0001 AND abs(lon - %(lon)s) < 0.0001
+            WHERE LOWER(short_name) = LOWER(%(short_name)s)
             LIMIT 1;
         """
-        results = db_client.execute_query(query, {"lat": lat, "lon": lon})
+        results = db_client.execute_query(query_sn, {"short_name": short_name})
         if results:
+            logger.info(f"Found crash_intersection_id by short_name='{short_name}'")
             return results[0]["crash_intersection_id"]
+
+        logger.info(f"No crash_intersection_id found for short_name='{short_name}'")
         return None
     except Exception as e:
-        logger.error(f"Error finding nearest crash intersection: {e}")
+        logger.error(
+            f"Error finding crash intersection by short_name='{short_name}': {e}"
+        )
         return None
 
 
@@ -304,6 +307,73 @@ def debug_status():
         }
 
 
+@router.get("/debug/rt-si")
+def debug_rt_si(
+    intersection: str = Query(..., description="Intersection name (e.g., 'glebe-potomac')"),
+    start_time: datetime = Query(..., description="Start datetime (ISO 8601 format)"),
+    end_time: datetime = Query(..., description="End datetime (ISO 8601 format)"),
+    bin_minutes: int = Query(15, description="Time bin size in minutes", ge=1, le=60),
+):
+    """
+    Debug endpoint that returns per-bin traffic and uplift components (for diagnosis).
+
+    Returns a JSON list of time bins with the following fields:
+    - timestamp
+    - vehicle_count, turning_count, vru_count
+    - avg_speed, speed_variance, free_flow_speed
+    - F_speed, F_variance, F_conflict, uplift_factor
+
+    Example:
+    GET /api/v1/safety/index/debug/rt-si?intersection=glebe-potomac&start_time=2025-11-01T00:00:00&end_time=2025-11-02T00:00:00&bin_minutes=15
+    """
+    if end_time <= start_time:
+        raise HTTPException(status_code=400, detail="end_time must be after start_time")
+
+    db_client = get_db_client()
+    rt_si_service = RTSIService(db_client)
+
+    # Find crash intersection mapping for the provided BSM intersection name
+    intersection_list = find_crash_intersection_for_bsm(intersection, db_client)
+    if not intersection_list:
+        raise HTTPException(status_code=404, detail=f"No mapping found for intersection '{intersection}'")
+
+    # Prefer a mapping with a crash_intersection_id
+    valid_intersection = next(
+        (item for item in intersection_list if item.get("crash_intersection_id") is not None),
+        intersection_list[0],
+    )
+
+    if not valid_intersection or not valid_intersection.get("crash_intersection_id"):
+        raise HTTPException(status_code=404, detail=f"No crash_intersection_id found for '{intersection}'")
+
+    crash_id = valid_intersection["crash_intersection_id"]
+    realtime_name = valid_intersection["intersection_name"]
+
+    try:
+        rt_si_results = rt_si_service.calculate_rt_si_trend(
+            crash_id,
+            start_time,
+            end_time,
+            bin_minutes=bin_minutes,
+            realtime_intersection=realtime_name,
+        )
+
+        return {
+            "status": "ok",
+            "intersection": intersection,
+            "crash_intersection_id": crash_id,
+            "realtime_name": realtime_name,
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "bin_minutes": bin_minutes,
+            "data_points": len(rt_si_results),
+            "results": rt_si_results,
+        }
+    except Exception as e:
+        logger.error(f"Error in debug_rt_si: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error computing RT-SI debug data: {e}")
+
+
 @router.get("/intersections/list", response_model=IntersectionList)
 def list_available_intersections():
     """
@@ -433,13 +503,39 @@ def get_safety_score_at_time(
     mcdm_service = MCDMSafetyIndexService(db_client)
     rt_si_service = RTSIService(db_client)
 
-    # Normalize intersection name to short name for querying
-    normalized_intersection = normalize_intersection_name(intersection)
-
-    # Calculate MCDM index
+    # Attempt multiple intersection name forms when querying MCDM
+    # 1) Try as-provided
     result = mcdm_service.calculate_safety_score_for_time(
-        intersection=normalized_intersection, target_time=time, bin_minutes=bin_minutes
+        intersection=intersection, target_time=time, bin_minutes=bin_minutes
     )
+
+    # 2) If not found, try reverse lookup (short -> full) if caller provided a short name
+    if result is None:
+        try:
+            full_name = reverse_lookup_intersection(intersection, db_client)
+            if full_name:
+                logger.info(
+                    f"Reverse lookup found full name '{full_name}' for '{intersection}'"
+                )
+                result = mcdm_service.calculate_safety_score_for_time(
+                    intersection=full_name, target_time=time, bin_minutes=bin_minutes
+                )
+        except Exception:
+            # If reverse lookup fails, keep going
+            pass
+
+    # 3) If still not found, try normalized short name (in case caller passed full and service expects short)
+    if result is None:
+        try:
+            normalized_intersection = normalize_intersection_name(intersection)
+            if normalized_intersection and normalized_intersection != intersection:
+                result = mcdm_service.calculate_safety_score_for_time(
+                    intersection=normalized_intersection,
+                    target_time=time,
+                    bin_minutes=bin_minutes,
+                )
+        except Exception:
+            pass
 
     if not result:
         raise HTTPException(

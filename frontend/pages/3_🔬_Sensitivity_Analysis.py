@@ -20,7 +20,7 @@ from typing import Optional, Dict, List
 from datetime import datetime, timedelta
 import requests
 
-from app.utils.config import APP_ICON, API_URL
+from app.utils.config import APP_ICON, API_URL, API_TIMEOUT
 
 # API configuration
 API_BASE_URL = API_URL.rstrip("/") + "/safety/index"
@@ -29,7 +29,9 @@ API_BASE_URL = API_URL.rstrip("/") + "/safety/index"
 def get_available_intersections():
     """Fetch list of available intersections."""
     try:
-        response = requests.get(f"{API_BASE_URL}/intersections/list", timeout=10)
+        response = requests.get(
+            f"{API_BASE_URL}/intersections/list", timeout=API_TIMEOUT
+        )
         response.raise_for_status()
         data = response.json()
         return data.get("intersections", [])
@@ -63,7 +65,7 @@ def get_sensitivity_analysis(
             response = requests.get(
                 f"{API_BASE_URL}/sensitivity-analysis",
                 params=params,
-                timeout=180,  # 3 minutes timeout
+                timeout=API_TIMEOUT,
             )
             response.raise_for_status()
             return response.json()

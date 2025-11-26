@@ -25,7 +25,7 @@ COPY . .
 
 # Create production .env file with backend API URL
 RUN echo "API_URL=https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1" > .env && \
-    echo "API_TIMEOUT=30" >> .env && \
+    echo "API_TIMEOUT=300" >> .env && \
     echo "API_MAX_RETRIES=3" >> .env && \
     echo "API_CACHE_TTL=300" >> .env && \
     echo "DEFAULT_LATITUDE=38.86" >> .env && \

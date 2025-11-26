@@ -207,9 +207,11 @@ def fetch_latest_blended_scores(alpha: float = 0.7) -> tuple[List[dict], Optiona
             params["include_rtsi"] = "true"
             params["bin_minutes"] = 15
 
-        # Use a longer timeout for this heavy calculation endpoint
+        # Use configured timeout for this heavy calculation endpoint
         # The RT-SI calculation for all intersections can take time
-        response = session.get(f"{api_base}/safety/index/", params=params, timeout=120)
+        response = session.get(
+            f"{api_base}/safety/index/", params=params, timeout=API_TIMEOUT
+        )
         response.raise_for_status()
 
         intersections = response.json()

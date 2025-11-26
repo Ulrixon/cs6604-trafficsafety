@@ -144,15 +144,24 @@ def compute_current_indices(
 
         for idx, score_data in enumerate(safety_scores):
             intersection_name = score_data["intersection"]
+            # Debug: log intersection being processed
+            logger.debug(f"Processing MCDM intersection: {intersection_name}")
             # Always use mapping_results if provided and has lat/lon
             mapping = None
             normalized = None
             if mapping_results:
+                # Debug: show available mapping keys (sample)
+                try:
+                    sample_keys = list(mapping_results.keys())[:50]
+                    logger.debug(f"Mapping results keys sample: {sample_keys}")
+                except Exception:
+                    pass
                 # Try direct key
                 mapping = mapping_results.get(intersection_name)
                 # If not found, try normalized key (case-insensitive)
                 if mapping is None:
                     from ..core.intersection_mapping import normalize_intersection_name
+
                     normalized = normalize_intersection_name(intersection_name)
                     mapping = mapping_results.get(normalized)
                 # If still not found, try lower-case match
@@ -187,11 +196,34 @@ def compute_current_indices(
                     latitude = 0.0
             else:
                 logger.warning(
-                    f"No mapping results for {intersection_name}, from {mapping_results}"
+                    f"No mapping results for {intersection_name} in provided mapping_results"
                 )
-                continue
-                longitude = 0.0
-                latitude = 0.0
+                # Attempt to resolve mapping on-the-fly using API helper
+                try:
+                    logger.info(
+                        f"Attempting on-the-fly lookup for '{intersection_name}'"
+                    )
+                    lookup = find_crash_intersection_for_bsm(
+                        intersection_name, db_client
+                    )
+                    if lookup:
+                        mapping = lookup[0]
+                        logger.info(
+                            f"On-the-fly mapping found for '{intersection_name}': {mapping}"
+                        )
+                    else:
+                        logger.warning(
+                            f"On-the-fly lookup found no mapping for '{intersection_name}'"
+                        )
+                except Exception as e:
+                    logger.error(
+                        f"Error during on-the-fly lookup for '{intersection_name}': {e}"
+                    )
+
+                if not mapping:
+                    continue
+                longitude = mapping.get("lon", 0.0)
+                latitude = mapping.get("lat", 0.0)
             intersections.append(
                 Intersection(
                     intersection_id=100 + idx + 1,  # Generate sequential IDs

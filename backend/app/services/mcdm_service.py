@@ -55,10 +55,6 @@ class MCDMSafetyIndexService:
             # This ensures we have data from all sources (BSM, PSM, vehicle-count, VRU, speed, events)
             latest_query = """
             SELECT MIN(max_ts) as latest FROM (
-                SELECT MAX(publish_timestamp) as max_ts FROM bsm
-                UNION ALL
-                SELECT MAX(publish_timestamp) as max_ts FROM psm
-                UNION ALL
                 SELECT MAX(publish_timestamp) as max_ts FROM "vehicle-count"
                 UNION ALL
                 SELECT MAX(publish_timestamp) as max_ts FROM "vru-count"

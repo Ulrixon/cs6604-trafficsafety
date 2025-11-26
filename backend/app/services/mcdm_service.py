@@ -14,6 +14,8 @@ import numpy as np
 from .db_client import VTTIPostgresClient
 
 logger = logging.getLogger(__name__)
+# Ensure INFO logs are shown for this module
+logger.setLevel(logging.INFO)
 
 
 class MCDMSafetyIndexService:
@@ -55,10 +57,6 @@ class MCDMSafetyIndexService:
             # This ensures we have data from all sources (BSM, PSM, vehicle-count, VRU, speed, events)
             latest_query = """
             SELECT MIN(max_ts) as latest FROM (
-                SELECT MAX(publish_timestamp) as max_ts FROM bsm
-                UNION ALL
-                SELECT MAX(publish_timestamp) as max_ts FROM psm
-                UNION ALL
                 SELECT MAX(publish_timestamp) as max_ts FROM "vehicle-count"
                 UNION ALL
                 SELECT MAX(publish_timestamp) as max_ts FROM "vru-count"
@@ -675,29 +673,17 @@ class MCDMSafetyIndexService:
 
     def get_available_intersections(self) -> List[str]:
         """
-        Get list of available intersections from psm and hiresdata tables.
+        Get list of available intersections from the intersection_details_view.
 
         Returns:
             List of unique intersection names
         """
         try:
-            intersections = set()
-            # Get from psm
-            query_psm = (
-                "SELECT DISTINCT intersection FROM psm WHERE intersection IS NOT NULL;"
-            )
-            result_psm = self.client.execute_query(query_psm)
-            intersections.update(
-                row["intersection"] for row in result_psm if row["intersection"]
-            )
-
-            # Get from hiresdata
-            query_hires = "SELECT DISTINCT intersection FROM hiresdata WHERE intersection IS NOT NULL;"
-            result_hires = self.client.execute_query(query_hires)
-            intersections.update(
-                row["intersection"] for row in result_hires if row["intersection"]
-            )
-
+            query = "SELECT DISTINCT intersection_name FROM public.intersection_details_view WHERE intersection_name IS NOT NULL;"
+            results = self.client.execute_query(query)
+            intersections = [
+                row["intersection_name"] for row in results if row["intersection_name"]
+            ]
             return sorted(intersections)
         except Exception as e:
             logger.error(f"Error getting available intersections: {e}", exc_info=True)

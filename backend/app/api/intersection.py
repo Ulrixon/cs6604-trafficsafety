@@ -45,138 +45,50 @@ def find_crash_intersection_for_bsm(bsm_intersection: str, db_client) -> list:
         - valid_in_tables: Dict showing which tables have data
     """
     all_results = []
+    bsm_intersection = bsm_intersection.strip()
+    logger.info(
+        f"Querying intersection_details_view for intersection: '{bsm_intersection}' (repr: {repr(bsm_intersection)})"
+    )
+    # Query the view for all matching intersection_name (case-insensitive)
+    query = """
+        SELECT intersection_name,short_name, lat, lon, source
+        FROM public.intersection_details_view
+        WHERE LOWER(intersection_name) = LOWER(%(int_id)s)
+    """
+    results = db_client.execute_query(query, {"int_id": bsm_intersection})
 
-    # Part 1: Query hiresdata table using normalized name
-    try:
-        bsm_intersection = bsm_intersection.strip()
-        logger.info(
-            f"Querying hiresdata for intersection: '{bsm_intersection}' (repr: {repr(bsm_intersection)})"
+    for row in results:
+        full_name = row["intersection_name"]
+        lat = float(row["lat"]) if row["lat"] is not None else None
+        lon = float(row["lon"]) if row["lon"] is not None else None
+        source = row["source"]
+        if lat is None or lon is None:
+            continue
+        short_name = normalize_intersection_name(full_name)
+        table_validity = validate_intersection_in_tables(
+            full_name, short_name, db_client
         )
-        hiresdata_query = """
-        SELECT 
-            intersection,
-            AVG(intersection_lat) as avg_lat,
-            AVG(intersection_long) as avg_lon
-        FROM hiresdata
-        WHERE intersection = %(int_id)s
-        GROUP BY intersection;
-        """
-        hiresdata_results = db_client.execute_query(
-            hiresdata_query, {"int_id": bsm_intersection}
+        crash_id = _find_nearest_crash_intersection(lat, lon, db_client)
+        all_results.append(
+            {
+                "intersection_name": full_name,
+                "short_name": short_name,
+                "lat": lat,
+                "lon": lon,
+                "crash_intersection_id": crash_id,
+                "source": source,
+                "valid_in_tables": table_validity,
+            }
         )
-
-        if hiresdata_results:
-            for row in hiresdata_results:
-                if row["avg_lat"] is None or row["avg_lon"] is None:
-                    continue
-
-                full_name = row["intersection"]
-                lat = float(row["avg_lat"])
-                lon = float(row["avg_lon"])
-
-                # Apply name mapping for safety-event table queries
-                short_name = normalize_intersection_name(full_name)
-
-                # Validate intersection exists in required tables
-                table_validity = validate_intersection_in_tables(
-                    full_name, short_name, db_client
-                )
-
-                # Skip if not found in critical tables
-                # if not table_validity.get(
-                #    "vehicle-count", False
-                # ) or not table_validity.get("speed-distribution", False):
-                #    logger.warning(
-                #        f"Skipping hiresdata intersection '{full_name}' - not found in required tables"
-                #    )
-                #    continue
-
-                # Find nearest crash intersection
-                crash_id = _find_nearest_crash_intersection(lat, lon, db_client)
-
-                all_results.append(
-                    {
-                        "intersection_name": full_name,
-                        "short_name": short_name,
-                        "lat": lat,
-                        "lon": lon,
-                        "crash_intersection_id": crash_id,
-                        "source": "hiresdata",
-                        "valid_in_tables": table_validity,
-                    }
-                )
-
-            if all_results:
-                logger.info(
-                    f"Found {len(all_results)} valid intersection(s) from hiresdata for '{bsm_intersection}'')"
-                )
-
-    except Exception as e:
-        logger.warning(f"Error querying hiresdata for '{bsm_intersection}'): {e}")
-
-    # Part 2: Query PSM table (ALWAYS, not a fallback)
-    try:
-        psm_query = """
-        SELECT 
-            AVG(lat) as avg_lat,
-            AVG(lon) as avg_lon
-        FROM psm
-        WHERE intersection = %(int_id)s
-        GROUP BY intersection;
-        """
-        psm_results = db_client.execute_query(psm_query, {"int_id": bsm_intersection})
-
-        if psm_results and psm_results[0]["avg_lat"] is not None:
-            lat = float(psm_results[0]["avg_lat"])
-            lon = float(psm_results[0]["avg_lon"])
-
-            # For PSM, use BSM name as-is (no mapping)
-            # Validate intersection exists in tables
-            table_validity = validate_intersection_in_tables(
-                bsm_intersection, bsm_intersection, db_client
-            )
-
-            # Skip if not found in critical tables
-            if not table_validity.get("vehicle-count", False) or not table_validity.get(
-                "speed-distribution", False
-            ):
-                logger.warning(
-                    f"Skipping PSM intersection '{bsm_intersection}' - not found in required tables"
-                )
-            else:
-                # Find nearest crash intersection
-                crash_id = _find_nearest_crash_intersection(lat, lon, db_client)
-
-                all_results.append(
-                    {
-                        "intersection_name": bsm_intersection,
-                        "short_name": bsm_intersection,  # PSM: no name mapping
-                        "lat": lat,
-                        "lon": lon,
-                        "crash_intersection_id": crash_id,
-                        "source": "psm",
-                        "valid_in_tables": table_validity,
-                    }
-                )
-
-                logger.info(
-                    f"Found valid intersection from PSM for '{bsm_intersection}'"
-                )
-        else:
-            logger.info(f"No PSM data found for '{bsm_intersection}'")
-
-    except Exception as e:
-        logger.warning(f"Error querying PSM for '{bsm_intersection}': {e}")
 
     if not all_results:
         logger.warning(
-            f"No valid intersections found for '{bsm_intersection}' in either hiresdata or PSM"
+            f"No valid intersections found for '{bsm_intersection}' in intersection_details_view"
         )
     else:
         logger.info(
-            f"Total: Found {len(all_results)} valid intersection(s) for '{bsm_intersection}'"
+            f"Total: Found {len(all_results)} valid intersection(s) for '{bsm_intersection}' in intersection_details_view"
         )
-
     return all_results
 
 
@@ -195,34 +107,17 @@ def _find_nearest_crash_intersection(
         Crash intersection ID or None
     """
     try:
-        nearest_query = """
-        WITH distances AS (
-            SELECT 
-                i.intersection_id,
-                6371 * acos(
-                    cos(radians(%(lat)s)) * 
-                    cos(radians(i.transport_junction_latitude)) * 
-                    cos(radians(i.transport_junction_longitude) - radians(%(lon)s)) + 
-                    sin(radians(%(lat)s)) * 
-                    sin(radians(i.transport_junction_latitude))
-                ) as distance_km
-            FROM lrs_road_intersections i
-            WHERE i.transport_junction_latitude IS NOT NULL
-              AND i.transport_junction_longitude IS NOT NULL
-        )
-        SELECT intersection_id, distance_km
-        FROM distances
-        WHERE distance_km < 0.5
-        ORDER BY distance_km
-        LIMIT 1;
+        # Query the precomputed view for nearest crash_intersection_id
+        query = """
+            SELECT crash_intersection_id
+            FROM public.crash_intersection_id_with_coord
+            WHERE abs(lat - %(lat)s) < 0.0001 AND abs(lon - %(lon)s) < 0.0001
+            LIMIT 1;
         """
-
-        results = db_client.execute_query(nearest_query, {"lat": lat, "lon": lon})
-
+        results = db_client.execute_query(query, {"lat": lat, "lon": lon})
         if results:
-            return results[0]["intersection_id"]
+            return results[0]["crash_intersection_id"]
         return None
-
     except Exception as e:
         logger.error(f"Error finding nearest crash intersection: {e}")
         return None
@@ -538,9 +433,12 @@ def get_safety_score_at_time(
     mcdm_service = MCDMSafetyIndexService(db_client)
     rt_si_service = RTSIService(db_client)
 
+    # Normalize intersection name to short name for querying
+    normalized_intersection = normalize_intersection_name(intersection)
+
     # Calculate MCDM index
     result = mcdm_service.calculate_safety_score_for_time(
-        intersection=intersection, target_time=time, bin_minutes=bin_minutes
+        intersection=normalized_intersection, target_time=time, bin_minutes=bin_minutes
     )
 
     if not result:
@@ -647,7 +545,7 @@ def get_safety_score_trend(
     try:
         # Calculate MCDM trend
         results = mcdm_service.calculate_safety_score_trend(
-            intersection=intersection,
+            intersection=normalize_intersection_name(intersection),
             start_time=start_time,
             end_time=end_time,
             bin_minutes=bin_minutes,

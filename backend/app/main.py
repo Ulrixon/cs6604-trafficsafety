@@ -3,6 +3,10 @@ Main entry point for the FastAPI backend server.
 
 This module creates a FastAPI application, configures CORS,
 loads settings, and includes API routers.
+import logging
+
+# Ensure INFO level logs are shown in CLI
+logging.basicConfig(level=logging.INFO)
 
 Run the server with:
     uvicorn backend.app.main:app --reload

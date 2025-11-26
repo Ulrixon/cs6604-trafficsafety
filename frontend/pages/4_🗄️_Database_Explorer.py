@@ -128,11 +128,17 @@ if tables:
                         and "speed_interval" in df.columns
                         and "count" in df.columns
                     ):
-                        # Ensure timestamp is datetime
+                        # Ensure timestamp is datetime, coerce errors to NaT
                         if df["start_timestamp"].dtype == "int64":
                             df["start_timestamp"] = pd.to_datetime(
-                                df["start_timestamp"], unit="ms"
+                                df["start_timestamp"], unit="ms", errors="coerce"
                             )
+                        else:
+                            df["start_timestamp"] = pd.to_datetime(
+                                df["start_timestamp"], errors="coerce"
+                            )
+                        # Drop rows with invalid timestamps
+                        df = df.dropna(subset=["start_timestamp"])
 
                         # Aggregate by time bin if needed (e.g. hourly)
                         # For now, just plot raw

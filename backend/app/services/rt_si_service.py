@@ -15,6 +15,7 @@ from typing import Dict, Optional, List
 import numpy as np
 
 from .db_client import VTTIPostgresClient
+from ..core.intersection_mapping import normalize_intersection_name
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,10 @@ class RTSIService:
         Returns:
             Capacity value (95th percentile of vehicle counts), or DEFAULT_CAPACITY if insufficient data
         """
+        # If intersection_id is a string (BSM name), normalize it
+        if isinstance(intersection_id, str):
+            intersection_id = normalize_intersection_name(intersection_id)
+
         try:
             # Get historical vehicle counts for the last N days
             lookback_us = (
@@ -196,6 +201,10 @@ class RTSIService:
 
         Returns dict with traffic data, or None if no data exists for this time bin.
         """
+        # If intersection_id is a string (BSM name), normalize it
+        if isinstance(intersection_id, str):
+            intersection_id = normalize_intersection_name(intersection_id)
+
         end_time = timestamp + timedelta(minutes=bin_minutes)
         start_time_us = int(timestamp.timestamp() * 1000000)
         end_time_us = int(end_time.timestamp() * 1000000)

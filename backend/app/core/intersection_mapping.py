@@ -1,29 +1,3 @@
-# Global cache for intersections
-_INTERSECTION_CACHE = {"hiresdata": set(), "psm": set(), "loaded": False}
-
-
-def load_intersection_cache(db_client):
-    """
-    Load all unique intersections from hiresdata and psm tables into cache.
-    """
-    if not _INTERSECTION_CACHE["loaded"]:
-        # Load hiresdata
-        query_hires = "SELECT DISTINCT intersection FROM hiresdata WHERE intersection IS NOT NULL;"
-        result_hires = db_client.execute_query(query_hires)
-        _INTERSECTION_CACHE["hiresdata"] = set(
-            row["intersection"] for row in result_hires if row["intersection"]
-        )
-        # Load psm
-        query_psm = (
-            "SELECT DISTINCT intersection FROM psm WHERE intersection IS NOT NULL;"
-        )
-        result_psm = db_client.execute_query(query_psm)
-        _INTERSECTION_CACHE["psm"] = set(
-            row["intersection"] for row in result_psm if row["intersection"]
-        )
-        _INTERSECTION_CACHE["loaded"] = True
-
-
 """
 Intersection Name Mapping Utility
 
@@ -191,7 +165,6 @@ def validate_intersection_in_tables(
     Returns:
         Dictionary with table names as keys and boolean existence as values
     """
-    load_intersection_cache(db_client)
     results = {}
     # For other tables, keep original logic
     tables_with_full_name = [

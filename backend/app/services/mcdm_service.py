@@ -675,18 +675,30 @@ class MCDMSafetyIndexService:
 
     def get_available_intersections(self) -> List[str]:
         """
-        Get list of available intersections from psm and hiresdata tables using cache.
+        Get list of available intersections from psm and hiresdata tables.
 
         Returns:
             List of unique intersection names
         """
-        from app.core.intersection_mapping import (
-            load_intersection_cache,
-            _INTERSECTION_CACHE,
-        )
+        try:
+            intersections = set()
+            # Get from psm
+            query_psm = (
+                "SELECT DISTINCT intersection FROM psm WHERE intersection IS NOT NULL;"
+            )
+            result_psm = self.client.execute_query(query_psm)
+            intersections.update(
+                row["intersection"] for row in result_psm if row["intersection"]
+            )
 
-        load_intersection_cache(self.client)
-        intersections = _INTERSECTION_CACHE["hiresdata"].union(
-            _INTERSECTION_CACHE["psm"]
-        )
-        return sorted(intersections)
+            # Get from hiresdata
+            query_hires = "SELECT DISTINCT intersection FROM hiresdata WHERE intersection IS NOT NULL;"
+            result_hires = self.client.execute_query(query_hires)
+            intersections.update(
+                row["intersection"] for row in result_hires if row["intersection"]
+            )
+
+            return sorted(intersections)
+        except Exception as e:
+            logger.error(f"Error getting available intersections: {e}", exc_info=True)
+            return []

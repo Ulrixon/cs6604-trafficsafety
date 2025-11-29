@@ -162,8 +162,8 @@ services:
       - "8501:8501"
     environment:
       - PORT=8501
-      # Override API URL to point to local backend
-      - API_URL=http://api:8000/api/v1/safety/index/
+      # Override API URL to point to local backend (base URL only)
+      - API_URL=http://api:8000/api/v1
       - API_TIMEOUT=30
       - API_MAX_RETRIES=3
       - API_CACHE_TTL=300

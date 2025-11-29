@@ -12,8 +12,11 @@ import pandas as pd
 import numpy as np
 
 from .db_client import VTTIPostgresClient
+from ..core.intersection_mapping import normalize_intersection_name
 
 logger = logging.getLogger(__name__)
+# Ensure INFO logs are shown for this module
+logger.setLevel(logging.INFO)
 
 
 class MCDMSafetyIndexService:
@@ -55,10 +58,6 @@ class MCDMSafetyIndexService:
             # This ensures we have data from all sources (BSM, PSM, vehicle-count, VRU, speed, events)
             latest_query = """
             SELECT MIN(max_ts) as latest FROM (
-                SELECT MAX(publish_timestamp) as max_ts FROM bsm
-                UNION ALL
-                SELECT MAX(publish_timestamp) as max_ts FROM psm
-                UNION ALL
                 SELECT MAX(publish_timestamp) as max_ts FROM "vehicle-count"
                 UNION ALL
                 SELECT MAX(publish_timestamp) as max_ts FROM "vru-count"
@@ -114,6 +113,7 @@ class MCDMSafetyIndexService:
                         "vehicle_count": int(row["vehicle_count"]),
                         "vru_count": int(row["vru_count"]),
                         "incident_count": int(row["incident_count"]),
+                        "near_miss_count": int(row.get("near_miss_count", 0)),
                         "time_bin": row["time_bin"],
                     }
                 )
@@ -164,14 +164,17 @@ class MCDMSafetyIndexService:
         vru_data = pd.DataFrame(self.client.execute_query(vru_query))
 
         # Collect speed distribution data (column is 'speed_interval', use 'count')
+        # Aggregate speed distribution by intersection/time_bin/speed_bin to
+        # reduce rows and push work to the database.
         speed_query = f"""
         SELECT 
             intersection,
             FLOOR(publish_timestamp / {bin_microseconds}) * {bin_microseconds} as time_bin,
             speed_interval as speed_bin,
-            count as event_count
+            SUM(count) as event_count
         FROM "speed-distribution"
         WHERE publish_timestamp >= {start_ts} AND publish_timestamp < {end_ts}
+        GROUP BY intersection, time_bin, speed_bin
         """
         speed_data = pd.DataFrame(self.client.execute_query(speed_query))
 
@@ -187,6 +190,19 @@ class MCDMSafetyIndexService:
         """
         incident_data = pd.DataFrame(self.client.execute_query(incident_query))
 
+        # Collect near miss data (NM-VRU or NM-VV)
+        near_miss_query = f"""
+        SELECT 
+            intersection,
+            FLOOR(publish_timestamp / {bin_microseconds}) * {bin_microseconds} as time_bin,
+            COUNT(*) as near_miss_count
+        FROM "safety-event"
+        WHERE publish_timestamp >= {start_ts} AND publish_timestamp < {end_ts}
+          AND event_type IN ('NM-VRU', 'NM-VV')
+        GROUP BY intersection, time_bin
+        """
+        near_miss_data = pd.DataFrame(self.client.execute_query(near_miss_query))
+
         # Process speed data
         speed_stats = self._process_speed_distribution(speed_data)
 
@@ -201,6 +217,10 @@ class MCDMSafetyIndexService:
         if len(incident_data) > 0:
             matrix = matrix.merge(
                 incident_data, on=["intersection", "time_bin"], how="outer"
+            )
+        if len(near_miss_data) > 0:
+            matrix = matrix.merge(
+                near_miss_data, on=["intersection", "time_bin"], how="outer"
             )
 
         # Fill missing values
@@ -263,8 +283,16 @@ class MCDMSafetyIndexService:
         # Normalize matrix
         matrix_normalized = self._normalize_matrix(matrix)
 
-        # Calculate CRITIC weights for criteria
-        self.criterion_weights = self._calculate_critic_weights(matrix_normalized)
+        # Handle small sample / low-variance cases: if there is less than 2
+        # rows or all columns have zero stddev, fall back to uniform weights
+        if matrix.shape[0] < 2:
+            # Not enough data for CRITIC (requires variance & correlations)
+            n = len(self.criteria_list)
+            uniform = 1.0 / n
+            self.criterion_weights = dict(zip(self.criteria_list, [uniform] * n))
+        else:
+            # Calculate CRITIC weights for criteria
+            self.criterion_weights = self._calculate_critic_weights(matrix_normalized)
 
         # Calculate SAW, EDAS, CODAS scores
         result["SAW"] = self._calculate_saw(matrix_normalized)
@@ -303,19 +331,33 @@ class MCDMSafetyIndexService:
         return normalized
 
     def _calculate_critic_weights(
-        self, matrix: np.ndarray, criteria: List[str] = None
+        self, matrix: np.ndarray, criteria: Optional[List[str]] = None
     ) -> Dict[str, float]:
         """Calculate CRITIC weights."""
         if criteria is None:
             criteria = self.criteria_list
-
         # Standard deviations
         std_devs = np.std(matrix, axis=0)
 
-        # Correlation matrix
-        corr_matrix = np.corrcoef(matrix, rowvar=False)
+        # If all std devs are zero, return uniform weights
+        if np.all(std_devs == 0):
+            return dict(zip(criteria, np.ones(len(criteria)) / len(criteria)))
 
-        # Conflict measures
+        # Compute correlation matrix safely, suppressing divide warnings
+        with np.errstate(divide="ignore", invalid="ignore"):
+            corr_matrix = np.corrcoef(matrix, rowvar=False)
+
+        # Replace NaNs that result from zero-variance columns
+        if np.isnan(corr_matrix).any():
+            corr_matrix = np.nan_to_num(corr_matrix, nan=0.0)
+
+        # Ensure diagonal is 1.0
+        try:
+            np.fill_diagonal(corr_matrix, 1.0)
+        except Exception:
+            pass
+
+        # Conflict measures: sum of (1 - correlation) per criterion
         conflicts = np.sum(1 - corr_matrix, axis=1)
 
         # Information content
@@ -332,6 +374,11 @@ class MCDMSafetyIndexService:
 
     def _calculate_saw(self, matrix: np.ndarray) -> np.ndarray:
         """Calculate SAW (Simple Additive Weighting) scores."""
+        # Ensure criterion weights are initialized
+        if self.criterion_weights is None:
+            n = len(self.criteria_list)
+            self.criterion_weights = dict(zip(self.criteria_list, [1.0 / n] * n))
+
         weights = np.array([self.criterion_weights[c] for c in self.criteria_list])
         scores = np.dot(matrix, weights)
         # Scale to 0-100
@@ -341,11 +388,19 @@ class MCDMSafetyIndexService:
         """Calculate EDAS (Evaluation based on Distance from Average Solution) scores."""
         avg_solution = np.mean(matrix, axis=0)
 
+        # Avoid divide-by-zero when avg_solution has zeros
+        denom = np.where(avg_solution != 0, avg_solution, 1.0)
+
         # Positive and negative distances
-        pda = np.maximum(0, (matrix - avg_solution) / avg_solution)
-        nda = np.maximum(0, (avg_solution - matrix) / avg_solution)
+        pda = np.maximum(0, (matrix - avg_solution) / denom)
+        nda = np.maximum(0, (avg_solution - matrix) / denom)
 
         # Weighted sums
+        # Ensure criterion weights are initialized
+        if self.criterion_weights is None:
+            n = len(self.criteria_list)
+            self.criterion_weights = dict(zip(self.criteria_list, [1.0 / n] * n))
+
         weights = np.array([self.criterion_weights[c] for c in self.criteria_list])
         sp = np.dot(pda, weights)
         sn = np.dot(nda, weights)
@@ -361,6 +416,11 @@ class MCDMSafetyIndexService:
 
     def _calculate_codas(self, matrix: np.ndarray) -> np.ndarray:
         """Calculate CODAS (COmbinative Distance-based ASsessment) scores."""
+        # Ensure criterion weights are initialized
+        if self.criterion_weights is None:
+            n = len(self.criteria_list)
+            self.criterion_weights = dict(zip(self.criteria_list, [1.0 / n] * n))
+
         weights = np.array([self.criterion_weights[c] for c in self.criteria_list])
         weighted_matrix = matrix * weights
 
@@ -424,24 +484,87 @@ class MCDMSafetyIndexService:
                 logger.warning(f"No data available for {intersection} at {bin_start}")
                 return None
 
-            # Filter to the specific intersection
-            matrix = matrix[matrix["intersection"] == intersection]
+            # Debug: show normalized target and available normalized intersections
+            try:
+                norm_target_debug = normalize_intersection_name(intersection)
+                unique_norms = []
+                if "intersection" in matrix.columns:
+                    unique_norms = (
+                        matrix["intersection"]
+                        .astype(str)
+                        .apply(lambda x: normalize_intersection_name(str(x)))
+                        .unique()
+                    )
+                logger.info(
+                    f"MCDM: norm_target={norm_target_debug}, available_norms_sample={list(unique_norms)[:20]}"
+                )
+            except Exception:
+                logger.debug(
+                    "MCDM: could not compute normalized intersection debug info"
+                )
 
-            if len(matrix) == 0:
+            # Ensure intersection column is string and add normalized short-name column
+            matrix["intersection"] = matrix["intersection"].astype(str)
+            try:
+                matrix["intersection_norm"] = matrix["intersection"].apply(
+                    lambda x: normalize_intersection_name(str(x))
+                )
+            except Exception:
+                # Fallback: use original intersection as normalized
+                matrix["intersection_norm"] = matrix["intersection"]
+
+            # Filter by normalized intersection name (short form)
+            norm_target = normalize_intersection_name(intersection)
+
+            # Debug: log matrix metadata to help diagnose missing target bins
+            try:
+                matrix_time_min = matrix["time_bin"].min()
+                matrix_time_max = matrix["time_bin"].max()
+                logger.info(
+                    f"MCDM: matrix rows={len(matrix)}, time_bin_min={matrix_time_min}, time_bin_max={matrix_time_max}"
+                )
+                # Log a small sample of time_bin values and intersections
+                try:
+                    sample_time_bins = list(matrix["time_bin"].head(10))
+                    logger.info(f"MCDM: sample time_bins={sample_time_bins}")
+                except Exception:
+                    logger.debug("MCDM: unable to log sample time_bins")
+            except Exception:
+                logger.debug("MCDM: unable to compute matrix time range")
+
+            filtered = matrix[matrix["intersection_norm"] == norm_target]
+
+            if filtered.empty:
                 logger.warning(
                     f"No data for intersection {intersection} at {bin_start}"
                 )
+                try:
+                    # Show sample rows to help debugging
+                    sample_rows = matrix.head(10).to_dict(orient="records")
+                    logger.info(f"MCDM: sample matrix rows: {sample_rows}")
+                except Exception:
+                    logger.debug("MCDM: unable to log sample matrix rows")
                 return None
+
+            matrix = filtered
 
             # Calculate MCDM scores
             results = self._calculate_hybrid_mcdm(matrix)
 
-            # Filter to target time bin
-            target_results = results[results["time_bin"] == bin_start]
+            # Filter to target time bin using a range to avoid exact-equality
+            # issues due to timezone/microsecond differences between pandas and
+            # Python datetimes. Use >= bin_start and < bin_end.
+            bin_start_ts = pd.to_datetime(bin_start)
+            bin_end_ts = pd.to_datetime(bin_end)
+
+            target_results = results[
+                (results["time_bin"] >= bin_start_ts)
+                & (results["time_bin"] < bin_end_ts)
+            ]
 
             if len(target_results) == 0:
                 logger.warning(
-                    f"No results for {intersection} at target time {bin_start}"
+                    f"No results for {intersection} at target time {bin_start} (checked range {bin_start_ts} to {bin_end_ts})"
                 )
                 return None
 
@@ -456,6 +579,7 @@ class MCDMSafetyIndexService:
                 "avg_speed": float(row["avg_speed"]),
                 "speed_variance": float(row["speed_variance"]),
                 "incident_count": int(row["incident_count"]),
+                "near_miss_count": int(row.get("near_miss_count", 0)),
                 "saw_score": float(row["SAW"]),
                 "edas_score": float(row["EDAS"]),
                 "codas_score": float(row["CODAS"]),
@@ -503,14 +627,26 @@ class MCDMSafetyIndexService:
                 )
                 return []
 
-            # Filter to the specific intersection
-            matrix = matrix[matrix["intersection"] == intersection]
+            # Ensure intersection column is string and add normalized short-name column
+            matrix["intersection"] = matrix["intersection"].astype(str)
+            try:
+                matrix["intersection_norm"] = matrix["intersection"].apply(
+                    lambda x: normalize_intersection_name(str(x))
+                )
+            except Exception:
+                matrix["intersection_norm"] = matrix["intersection"]
 
-            if len(matrix) == 0:
+            # Filter by normalized intersection name (short form)
+            norm_target = normalize_intersection_name(intersection)
+            filtered = matrix[matrix["intersection_norm"] == norm_target]
+
+            if filtered.empty:
                 logger.warning(
                     f"No data for intersection {intersection} in specified period"
                 )
                 return []
+
+            matrix = filtered
 
             # Calculate MCDM scores with error handling
             try:
@@ -552,6 +688,7 @@ class MCDMSafetyIndexService:
                             "avg_speed": float(row["avg_speed"]),
                             "speed_variance": float(row["speed_variance"]),
                             "incident_count": int(row["incident_count"]),
+                            "near_miss_count": int(row.get("near_miss_count", 0)),
                             "saw_score": float(row["SAW"]),
                             "edas_score": float(row["EDAS"]),
                             "codas_score": float(row["CODAS"]),
@@ -638,6 +775,7 @@ class MCDMSafetyIndexService:
                         "avg_speed": float(row["avg_speed"]),
                         "speed_variance": float(row["speed_variance"]),
                         "incident_count": int(row["incident_count"]),
+                        "near_miss_count": int(row.get("near_miss_count", 0)),
                         "saw_score": float(row["SAW"]),
                         "edas_score": float(row["EDAS"]),
                         "codas_score": float(row["CODAS"]),
@@ -654,15 +792,18 @@ class MCDMSafetyIndexService:
 
     def get_available_intersections(self) -> List[str]:
         """
-        Get list of available intersections in the database.
+        Get list of available intersections from the intersection_details_view.
 
         Returns:
-            List of intersection names
+            List of unique intersection names
         """
         try:
-            query = 'SELECT DISTINCT intersection FROM "vehicle-count" ORDER BY intersection;'
-            result = self.client.execute_query(query)
-            return [row["intersection"] for row in result]
+            query = "SELECT DISTINCT intersection_name FROM public.intersection_details_view WHERE intersection_name IS NOT NULL;"
+            results = self.client.execute_query(query)
+            intersections = [
+                row["intersection_name"] for row in results if row["intersection_name"]
+            ]
+            return sorted(intersections)
         except Exception as e:
             logger.error(f"Error getting available intersections: {e}", exc_info=True)
             return []

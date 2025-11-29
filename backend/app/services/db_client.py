@@ -154,7 +154,8 @@ class VTTIPostgresClient:
         with self.get_cursor() as cursor:
             cursor.execute(query, params)
             results = cursor.fetchall()
-            return results
+            # Convert RealDictRow to plain dict to avoid serialization issues
+            return [dict(row) for row in results]
 
     def execute_update(self, query: str, params: tuple = None) -> int:
         """

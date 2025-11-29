@@ -30,13 +30,9 @@ def check_rt_si_availability():
     # Check 1: Historical crash data
     print("1. HISTORICAL CRASH DATA")
     print("-" * 70)
-    hour = target_time.hour
-    dow = target_time.weekday()
-    print(f"   Hour: {hour}, Day of Week: {dow} (0=Mon)")
+    print("   Using year-only historical crash data (2017-2024)")
 
-    hist_data = rt_si_service.get_historical_crash_rate(
-        crash_intersection_id, hour, dow
-    )
+    hist_data = rt_si_service.get_historical_crash_rate(crash_intersection_id)
     print(f"   Weighted crashes: {hist_data['weighted_crashes']}")
     print(f"   Raw crash rate: {hist_data['raw_rate']:.6f}")
     print(f"   ✓ Historical data available")

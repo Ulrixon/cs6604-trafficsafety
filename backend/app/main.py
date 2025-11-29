@@ -3,6 +3,10 @@ Main entry point for the FastAPI backend server.
 
 This module creates a FastAPI application, configures CORS,
 loads settings, and includes API routers.
+import logging
+
+# Ensure INFO level logs are shown in CLI
+logging.basicConfig(level=logging.INFO)
 
 Run the server with:
     uvicorn backend.app.main:app --reload
@@ -45,20 +49,12 @@ except Exception as e:
     HISTORY_AVAILABLE = False
 
 try:
-    from .api.transparency import router as transparency_router
+    from .api.database_explorer import router as db_explorer_router
 
-    TRANSPARENCY_AVAILABLE = True
+    DB_EXPLORER_AVAILABLE = True
 except Exception as e:
-    logger.warning(f"Transparency router not available: {e}")
-    TRANSPARENCY_AVAILABLE = False
-
-try:
-    from .api.analytics import router as analytics_router
-
-    ANALYTICS_AVAILABLE = True
-except Exception as e:
-    logger.warning(f"Analytics router not available: {e}")
-    ANALYTICS_AVAILABLE = False
+    logger.warning(f"Database Explorer router not available: {e}")
+    DB_EXPLORER_AVAILABLE = False
 
 
 @asynccontextmanager
@@ -81,13 +77,15 @@ async def lifespan(app: FastAPI):
             init_db(
                 database_url=settings.DATABASE_URL,
                 pool_size=settings.DB_POOL_SIZE,
-                max_overflow=settings.DB_MAX_OVERFLOW
+                max_overflow=settings.DB_MAX_OVERFLOW,
             )
 
             # Check database health
             health = check_db_health()
             if health["status"] == "healthy":
-                logger.info(f"PostgreSQL connection successful: {health['database']} ({health['postgis_version']})")
+                logger.info(
+                    f"PostgreSQL connection successful: {health['database']} ({health['postgis_version']})"
+                )
             else:
                 logger.error(f"PostgreSQL health check failed: {health['error']}")
         except Exception as e:
@@ -153,15 +151,13 @@ def create_app() -> FastAPI:
         app.include_router(history_router, prefix="/api/v1")
         logger.info("✓ History router registered")
 
-    if TRANSPARENCY_AVAILABLE:
-        app.include_router(transparency_router, prefix="/api/v1")
-        logger.info("✓ Transparency router registered")
+    if DB_EXPLORER_AVAILABLE:
+        app.include_router(
+            db_explorer_router, prefix="/api/v1/database", tags=["Database Explorer"]
+        )
+        logger.info("✓ Database Explorer router registered")
 
-    if ANALYTICS_AVAILABLE:
-        app.include_router(analytics_router, prefix="/api/v1")
-        logger.info("✓ Analytics router registered")
-
-    # Health‑check endpoint
+    # Simple health‑check endpoint
     @app.get("/health", tags=["Health"])
     async def health_check() -> dict:
         """
@@ -173,8 +169,8 @@ def create_app() -> FastAPI:
             "version": settings.VERSION,
             "database": {
                 "enabled": settings.USE_POSTGRESQL,
-                "status": "not_configured"
-            }
+                "status": "not_configured",
+            },
         }
 
         if settings.USE_POSTGRESQL:
@@ -183,8 +179,12 @@ def create_app() -> FastAPI:
                 response["database"]["status"] = db_health["status"]
                 if db_health["status"] == "healthy":
                     response["database"]["name"] = db_health["database"]
-                    response["database"]["postgis_version"] = db_health["postgis_version"]
-                    response["database"]["connection_pool"] = db_health["connection_pool"]
+                    response["database"]["postgis_version"] = db_health[
+                        "postgis_version"
+                    ]
+                    response["database"]["connection_pool"] = db_health[
+                        "connection_pool"
+                    ]
                 else:
                     response["database"]["error"] = db_health.get("error")
                     response["status"] = "degraded"

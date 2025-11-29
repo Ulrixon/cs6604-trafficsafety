@@ -20,7 +20,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 import requests
 
-from app.utils.config import APP_ICON, API_URL
+from app.utils.config import APP_ICON, API_URL, API_TIMEOUT
 
 # API configuration - use the full API_URL as base (already includes /api/v1/safety/index/)
 API_BASE_URL = API_URL.rstrip("/") + "/safety/index"
@@ -29,7 +29,9 @@ API_BASE_URL = API_URL.rstrip("/") + "/safety/index"
 def get_available_intersections():
     """Fetch list of available intersections."""
     try:
-        response = requests.get(f"{API_BASE_URL}/intersections/list", timeout=10)
+        response = requests.get(
+            f"{API_BASE_URL}/intersections/list", timeout=API_TIMEOUT
+        )
         response.raise_for_status()
         data = response.json()
         return data.get("intersections", [])
@@ -47,7 +49,7 @@ def get_safety_score_at_time(intersection: str, time: datetime, bin_minutes: int
             "bin_minutes": bin_minutes,
         }
         response = requests.get(
-            f"{API_BASE_URL}/time/specific", params=params, timeout=30
+            f"{API_BASE_URL}/time/specific", params=params, timeout=API_TIMEOUT
         )
         response.raise_for_status()
         return response.json()
@@ -76,7 +78,9 @@ def get_safety_score_trend(
             "bin_minutes": bin_minutes,
             "include_correlations": include_correlations,
         }
-        response = requests.get(f"{API_BASE_URL}/time/range", params=params, timeout=60)
+        response = requests.get(
+            f"{API_BASE_URL}/time/range", params=params, timeout=API_TIMEOUT
+        )
         response.raise_for_status()
         return response.json()
     except requests.HTTPError as e:
@@ -218,14 +222,21 @@ def render_single_time_view(
 
     with col4:
         st.metric(
-            "Average Speed",
-            f"{data['avg_speed']:.1f} mph",
-            help="Average vehicle speed",
+            "Near Misses",
+            data.get("near_miss_count", 0),
+            help="Number of near-miss events (NM-VRU, NM-VV)",
         )
 
     col1, col2 = st.columns(2)
 
     with col1:
+        st.metric(
+            "Average Speed",
+            f"{data['avg_speed']:.1f} mph",
+            help="Average vehicle speed",
+        )
+
+    with col2:
         st.metric(
             "Speed Variance",
             f"{data['speed_variance']:.1f}",
@@ -585,7 +596,7 @@ def render_trend_view(
     st.markdown("### Summary Statistics")
 
     if has_final_index:
-        col1, col2, col3, col5, col6 = st.columns(5)
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
 
         with col1:
             st.metric("Avg Final Index", f"{df['final_safety_index'].mean():.2f}")
@@ -600,13 +611,19 @@ def render_trend_view(
         with col3:
             st.metric("Avg MCDM", f"{df['mcdm_index'].mean():.2f}")
 
-        with col5:
+        with col4:
             st.metric("Total Vehicles", f"{df['vehicle_count'].sum():,}")
 
-        with col6:
+        with col5:
             st.metric("Total Incidents", f"{df['incident_count'].sum()}")
+
+        with col6:
+            st.metric(
+                "Total Near Misses",
+                f"{df.get('near_miss_count', pd.Series([0]*len(df))).sum()}",
+            )
     else:
-        col1, col2, col3, col4, col5 = st.columns(5)
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
 
         with col1:
             st.metric("Avg MCDM", f"{df['mcdm_index'].mean():.2f}")
@@ -622,6 +639,12 @@ def render_trend_view(
 
         with col5:
             st.metric("Total Incidents", f"{df['incident_count'].sum()}")
+
+        with col6:
+            st.metric(
+                "Total Near Misses",
+                f"{df.get('near_miss_count', pd.Series([0]*len(df))).sum()}",
+            )
 
     st.divider()
 
@@ -748,7 +771,7 @@ def render_trend_view(
     st.plotly_chart(fig1, use_container_width=True)
 
     # Traffic Metrics
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         fig2 = create_trend_chart(df, "vehicle_count", "Vehicle Count", "#2ca02c")
@@ -757,6 +780,13 @@ def render_trend_view(
     with col2:
         fig3 = create_trend_chart(df, "incident_count", "Incident Count", "#d62728")
         st.plotly_chart(fig3, use_container_width=True)
+
+    with col3:
+        if "near_miss_count" in df.columns:
+            fig_nm = create_trend_chart(
+                df, "near_miss_count", "Near Miss Count", "#e377c2"
+            )
+            st.plotly_chart(fig_nm, use_container_width=True)
 
     # VRU and Speed Metrics
     col1, col2 = st.columns(2)
@@ -846,6 +876,7 @@ def render_trend_view(
         ("rt_si_score", "RT-SI Score"),
         ("vehicle_count", "Vehicle Count"),
         ("incident_count", "Incident Count"),
+        ("near_miss_count", "Near Miss Count"),
         ("vru_count", "VRU Count"),
         ("avg_speed", "Avg Speed"),
         ("speed_variance", "Speed Variance"),
@@ -855,15 +886,13 @@ def render_trend_view(
     for col, label in variables_to_normalize:
         if col in df_normalized.columns:
             col_max = df_normalized[col].max()
-            if col_max > 0:
-                # If max is greater than 100, normalize to 0-100
-                if col_max > 100:
-                    df_normalized[f"{col}_normalized"] = (
-                        df_normalized[col] / col_max
-                    ) * 100
-                else:
-                    # If max is already <= 100, keep as is
-                    df_normalized[f"{col}_normalized"] = df_normalized[col]
+
+            # Normalize relative to max value in the series to scale to 0-100
+            # This ensures all variables use the full height of the chart for trend comparison
+            if pd.notna(col_max) and col_max > 0:
+                df_normalized[f"{col}_normalized"] = (
+                    df_normalized[col] / col_max
+                ) * 100
             else:
                 df_normalized[f"{col}_normalized"] = 0
 
@@ -876,6 +905,7 @@ def render_trend_view(
         "rt_si_score": "#e74c3c",
         "vehicle_count": "#2ca02c",
         "incident_count": "#d62728",
+        "near_miss_count": "#e377c2",
         "vru_count": "#17becf",
         "avg_speed": "#bcbd22",
         "speed_variance": "#9467bd",

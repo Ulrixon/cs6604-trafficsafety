@@ -94,7 +94,9 @@ def fetch_intersections_from_api() -> tuple[List[dict], Optional[str]]:
     """
     try:
         session = _get_session_with_retries()
-        response = session.get(API_URL, timeout=API_TIMEOUT)
+        # Append the correct endpoint path
+        url = f"{API_URL}/safety/index/"
+        response = session.get(url, timeout=API_TIMEOUT)
         response.raise_for_status()
 
         data = response.json()
@@ -205,6 +207,8 @@ def fetch_latest_blended_scores(alpha: float = 0.7) -> tuple[List[dict], Optiona
             params["include_rtsi"] = "true"
             params["bin_minutes"] = 15
 
+        # Use configured timeout for this heavy calculation endpoint
+        # The RT-SI calculation for all intersections can take time
         response = session.get(
             f"{api_base}/safety/index/", params=params, timeout=API_TIMEOUT
         )
@@ -299,7 +303,7 @@ def fetch_intersection_history(
         url = f"{API_URL}/safety/history/{intersection_id}"
 
         # Build query parameters
-        params = {"days": days}
+        params: dict = {"days": days}
         if aggregation:
             params["aggregation"] = aggregation
 

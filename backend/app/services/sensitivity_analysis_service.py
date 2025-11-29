@@ -115,16 +115,35 @@ class SensitivityAnalysisService:
         """
         from app.api.intersection import find_crash_intersection_for_bsm
 
-        # Find crash intersection ID
-        crash_intersection_id = find_crash_intersection_for_bsm(
+        # Find crash intersection ID (returns list)
+        intersection_list = find_crash_intersection_for_bsm(
             intersection, self.db_client
         )
 
-        if not crash_intersection_id:
+        if not intersection_list:
             return {
                 "error": f"No crash intersection found for '{intersection}'",
                 "intersection": intersection,
             }
+
+        # Use first valid result with crash_intersection_id
+        valid_intersection = next(
+            (
+                item
+                for item in intersection_list
+                if item["crash_intersection_id"] is not None
+            ),
+            intersection_list[0] if intersection_list else None,
+        )
+
+        if not valid_intersection or not valid_intersection["crash_intersection_id"]:
+            return {
+                "error": f"No valid crash intersection found for '{intersection}'",
+                "intersection": intersection,
+            }
+
+        crash_intersection_id = valid_intersection["crash_intersection_id"]
+        realtime_name = valid_intersection["intersection_name"]
 
         # Generate parameter perturbations
         perturbations = self.generate_parameter_perturbations(

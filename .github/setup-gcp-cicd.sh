@@ -4,9 +4,10 @@
 
 set -e
 
-PROJECT_ID="180117512369"
+PROJECT_ID="symbolic-cinema-305010"
+PROJECT_NUMBER="180117512369"
 SERVICE_ACCOUNT_NAME="github-actions"
-SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_NAME}@${PROJECT_NUMBER}.iam.gserviceaccount.com"
 POOL_NAME="github-pool"
 PROVIDER_NAME="github-provider"
 REPO_OWNER="Ulrixon"

@@ -328,33 +328,97 @@ gcloud run services update-traffic cs6604-trafficsafety-backend \
 6. ⚠️ Restrict API to specific origins with CORS
 7. ⚠️ Use VPC connector for database access
 
-## Updates & CI/CD
+## Automated Deployment with Cloud Build
 
-For continuous deployment, consider:
+### Cloud Build Configuration Files
 
-1. **Cloud Build** triggers on git push
-2. **GitHub Actions** for automated testing and deployment
-3. **Terraform** for infrastructure as code
+The repository includes Cloud Build configuration files for automated deployment:
 
-Example Cloud Build trigger:
+- **Backend**: [backend/cloudbuild.yaml](backend/cloudbuild.yaml)
+- **Frontend**: [frontend/cloudbuild.yaml](frontend/cloudbuild.yaml)
 
-```yaml
-steps:
-  - name: "gcr.io/cloud-builders/docker"
-    args:
-      ["build", "-t", "gcr.io/$PROJECT_ID/cs6604-trafficsafety-backend", "."]
-  - name: "gcr.io/cloud-builders/docker"
-    args: ["push", "gcr.io/$PROJECT_ID/cs6604-trafficsafety-backend"]
-  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    args:
-      [
-        "gcloud",
-        "run",
-        "deploy",
-        "cs6604-trafficsafety-backend",
-        "--image",
-        "gcr.io/$PROJECT_ID/cs6604-trafficsafety-backend",
-        "--region",
-        "europe-west1",
-      ]
+These files define the build, push, and deploy steps for each service.
+
+### Setting Up Cloud Build Triggers
+
+**Option 1: Using GCP Console (Recommended)**
+
+1. Go to [Cloud Build Triggers](https://console.cloud.google.com/cloud-build/triggers) in GCP Console
+2. Click **Create Trigger**
+
+**For Backend:**
+- **Name**: `deploy-backend`
+- **Event**: Push to a branch
+- **Source**: Connect your GitHub repository (`Ulrixon/cs6604-trafficsafety`)
+- **Branch**: `^main$`
+- **Included files filter**: `backend/**`
+- **Cloud Build configuration file**: `backend/cloudbuild.yaml`
+- Click **Create**
+
+**For Frontend:**
+- **Name**: `deploy-frontend`
+- **Event**: Push to a branch
+- **Source**: Connect your GitHub repository (`Ulrixon/cs6604-trafficsafety`)
+- **Branch**: `^main$`
+- **Included files filter**: `frontend/**`
+- **Cloud Build configuration file**: `frontend/cloudbuild.yaml`
+- Click **Create**
+
+**Option 2: Using gcloud CLI**
+
+```bash
+# Create backend trigger
+gcloud builds triggers create github \
+  --name="deploy-backend" \
+  --repo-name="cs6604-trafficsafety" \
+  --repo-owner="Ulrixon" \
+  --branch-pattern="^main$" \
+  --build-config="backend/cloudbuild.yaml" \
+  --included-files="backend/**"
+
+# Create frontend trigger
+gcloud builds triggers create github \
+  --name="deploy-frontend" \
+  --repo-name="cs6604-trafficsafety" \
+  --repo-owner="Ulrixon" \
+  --branch-pattern="^main$" \
+  --build-config="frontend/cloudbuild.yaml" \
+  --included-files="frontend/**"
 ```
+
+### How Automated Deployment Works
+
+Once Cloud Build triggers are configured:
+
+1. **Developer pushes changes** to `main` branch
+2. **Cloud Build detects changes** in `backend/` or `frontend/` directories
+3. **Builds Docker image** and tags with commit SHA + latest
+4. **Pushes to Container Registry** (or Artifact Registry)
+5. **Deploys to Cloud Run** with configured settings
+6. **Full deployment** typically takes 5-8 minutes
+
+### Monitoring Deployments
+
+**View build history:**
+- GCP Console: https://console.cloud.google.com/cloud-build/builds
+- CLI: `gcloud builds list --limit=10`
+
+**View build logs:**
+```bash
+gcloud builds log <BUILD_ID>
+```
+
+**View trigger details:**
+```bash
+gcloud builds triggers list
+gcloud builds triggers describe deploy-backend
+```
+
+### Cost
+
+Cloud Build provides:
+- **120 free build-minutes per day**
+- **$0.003 per build-minute** after free tier
+- Typical deployment: ~5 minutes = ~$0.015 per deployment
+
+Expected monthly cost: **$5-15** depending on deployment frequency

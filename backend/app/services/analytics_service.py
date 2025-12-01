@@ -24,12 +24,13 @@ from ..schemas.analytics import (
 
 logger = logging.getLogger(__name__)
 
-# GCP PostgreSQL Database Configuration
-GCP_DB_HOST = "34.140.49.230"
-GCP_DB_PORT = 5432
-GCP_DB_NAME = "vtsi"
-GCP_DB_USER = "jason"
-GCP_DB_PASSWORD = "*9ZS^l(HGq].BA]6"
+# GCP PostgreSQL Database Configuration (from environment/secrets)
+import os
+GCP_DB_HOST = os.getenv("VTTI_DB_HOST", "34.140.49.230")
+GCP_DB_PORT = int(os.getenv("VTTI_DB_PORT", "5432"))
+GCP_DB_NAME = os.getenv("VTTI_DB_NAME", "vtsi")
+GCP_DB_USER = os.getenv("VTTI_DB_USER")
+GCP_DB_PASSWORD = os.getenv("VTTI_DB_PASSWORD")
 
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

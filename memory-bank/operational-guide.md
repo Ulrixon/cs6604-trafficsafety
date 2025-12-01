@@ -1,39 +1,92 @@
 # Operational Guide - Traffic Safety Index System
 
-## System Status: ✅ FULLY OPERATIONAL
+## System Status: ✅ FULLY OPERATIONAL | 🚀 DEPLOYED TO GCP CLOUD RUN
 
-Last Updated: 2025-11-20
+Last Updated: 2025-12-01
 
 ---
 
 ## Architecture Overview
+
+### Production Environment (GCP Cloud Run)
 
 ```
 VCC API (https://vcc.vtti.vt.edu)
     ↓
 Data Collector (60s interval)
     ↓
-Parquet Storage (/app/data/parquet/)
-    ├── raw/bsm/        - Basic Safety Messages
-    ├── raw/psm/        - Personal Safety Messages
-    ├── raw/mapdata/    - Map Data
-    ├── features/       - Extracted features
-    ├── indices/        - Computed safety indices
-    └── constants/      - Normalization constants
+PostgreSQL Database (GCP vtsi)
+    ├── public.intersections
+    ├── public.safety_indices_realtime
+    ├── public.vcc_* (message data)
+    └── analytics.* (validation features)
     ↓
-Historical Processing (batch)
+Cloud Run Backend (europe-west1)
+    URL: https://cs6604-trafficsafety-180117512369.europe-west1.run.app
+    └── /api/v1/*
     ↓
-Real-time Processing (1-min intervals)
+Cloud Run Frontend (europe-west1)
+    URL: https://safety-index-frontend-180117512369.europe-west1.run.app
+```
+
+### Deployment Pipeline
+
+```
+Git Push to main
     ↓
-FastAPI (http://localhost:8001)
-    └── /api/v1/safety/index/
+Cloud Build Trigger (file filtering)
+    ├─→ backend/** → Build & Deploy Backend
+    └─→ frontend/** → Build & Deploy Frontend
+    ↓
+Live in ~5-8 minutes
 ```
 
 ---
 
 ## Quick Commands
 
-### Monitoring
+### Production (GCP Cloud Run)
+
+**View Backend Logs:**
+```bash
+gcloud run services logs read cs6604-trafficsafety --region=europe-west1 --limit=50
+```
+
+**View Frontend Logs:**
+```bash
+gcloud run services logs read safety-index-frontend --region=europe-west1 --limit=50
+```
+
+**Check Cloud Build Status:**
+```bash
+gcloud builds list --limit=5
+```
+
+**View Recent Build Logs:**
+```bash
+gcloud builds log <BUILD_ID>
+```
+
+**Monitor Active Deployment:**
+```bash
+# Watch Cloud Build in real-time
+gcloud builds list --ongoing --format="table(id,status,createTime)"
+```
+
+**Check Secret Access:**
+```bash
+# View secret permissions
+gcloud secrets get-iam-policy db_password --project=symbolic-cinema-305010
+gcloud secrets get-iam-policy db_user --project=symbolic-cinema-305010
+```
+
+**Run Database Migration:**
+```bash
+psql -h 34.140.49.230 -p 5432 -U jason -d vtsi
+\i backend/db/migrations/002_create_analytics_schema.sql
+```
+
+### Local Development
 
 **View Data Collection Logs:**
 

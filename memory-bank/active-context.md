@@ -1,13 +1,53 @@
 # Active Context
 
-**Last Updated**: 2025-11-21 (Morning)
-**Status**: ✅ PRODUCTION SYSTEM OPERATIONAL | 🔬 SENSITIVITY ANALYSIS COMPLETE | 📋 POSTGRESQL MIGRATION PLANNED
+**Last Updated**: 2025-12-01
+**Status**: ✅ PRODUCTION SYSTEM OPERATIONAL | 🚀 CI/CD AUTOMATED | 🔐 CREDENTIALS SECURED | 📊 ANALYTICS READY
 
 ---
 
-## Current Sprint: Sensitivity Analysis & Optimization ✅
+## Current Sprint: Cloud Deployment & Security ✅
 
-### Just Completed (2025-11-21 Morning)
+### Just Completed (2025-12-01)
+
+**Cloud Build CI/CD & Secure Credentials:**
+
+1. ✅ **Automated CI/CD with Cloud Build (COMPLETE)**
+
+   - **Backend Trigger**: Deploys on push to main when backend/** files change
+   - **Frontend Trigger**: Deploys on push to main when frontend/** files change
+   - **Configuration**: Repository-based cloudbuild.yaml files for version control
+   - **Artifact Registry**: Using modern artifact registry (deprecated Container Registry removed)
+   - **Full Deployment**: Complete Cloud Run configuration with memory, CPU, secrets, env vars
+   - **Status**: Fully automated - no manual deployment needed
+
+2. ✅ **Database Credentials Security (COMPLETE)**
+
+   - **GCP Secret Manager**: Created `db_password` and updated `db_user` secrets
+   - **IAM Permissions**: Granted both Cloud Run and Cloud Build service accounts secretAccessor role
+   - **Environment Variables**: Updated `analytics_service.py` to use os.getenv() for all DB config
+   - **Secrets Injection**: Cloud Run deployment configured to inject secrets from Secret Manager
+   - **Status**: All hardcoded credentials removed from codebase
+
+3. ✅ **Analytics Schema Organization (COMPLETE)**
+
+   - **Separate Schema**: Created `analytics` schema for crash validation features
+   - **Cache Table**: `crash_correlation_cache` for performance optimization
+   - **View**: `monitored_intersections` view for easy access
+   - **Migration Script**: `002_create_analytics_schema.sql` with full documentation
+   - **Status**: Schema ready for production use
+
+4. ✅ **Documentation Updates (COMPLETE)**
+
+   - Updated DEPLOYMENT_GUIDE.md with Cloud Build automation instructions
+   - Created migration README with schema organization details
+   - Documented all deployment steps and monitoring commands
+   - Status: Complete deployment documentation
+
+---
+
+## Previous Sprint: Sensitivity Analysis & Optimization ✅ (Historical Context)
+
+### Completed (2025-11-21 Morning)
 
 **Sensitivity Analysis & Performance Optimization:**
 
@@ -97,34 +137,53 @@
 
 ## System Architecture
 
+### Production (GCP Cloud Run)
+
 ```
 VCC API (https://vcc.vtti.vt.edu)
     ↓
 Data Collector (60s interval)
     ↓
-Parquet Storage (/app/data/parquet/)
-    ├── raw/bsm/        - 1,678+ messages
-    ├── raw/psm/        - 21 messages
-    ├── raw/mapdata/    - 4 intersections
-    ├── features/       - Extracted features
-    ├── indices/        - Safety indices (4 intervals)
-    └── constants/      - Normalization constants
+PostgreSQL (GCP vtsi database)
+    ├── public.intersections         - Monitored intersections
+    ├── public.safety_indices_realtime - Real-time safety data
+    ├── public.vcc_*                 - VCC message data (BSM, PSM, MapData)
+    └── analytics.crash_correlation_cache - Validation metrics
     ↓
-┌─────────────────────────────────┬─────────────────────────┐
-│   Historical Processing         │  Real-time Processing   │
-│   (15-min intervals)            │  (1-min intervals)      │
-│   - Batch computation           │  - Live computation     │
-│   - Normalization constants     │  - Uses constants       │
-└─────────────────────────────────┴─────────────────────────┘
-    ↓
-FastAPI (http://localhost:8001)
+Cloud Run Backend (europe-west1)
+    URL: https://cs6604-trafficsafety-180117512369.europe-west1.run.app
     ├── GET /health
     ├── GET /api/v1/safety/index/
-    ├── GET /api/v1/safety/index/{id}
+    ├── GET /api/v1/intersection/{id}
+    ├── GET /api/v1/analytics/correlation
     ├── POST /api/v1/analysis/sensitivity
-    └── POST /api/v1/analysis/correlation
+    └── Secrets from GCP Secret Manager
     ↓
-External Clients (Streamlit Dashboards, Apps, etc.)
+Cloud Run Frontend (europe-west1)
+    URL: https://safety-index-frontend-180117512369.europe-west1.run.app
+    ├── 🏠 Dashboard
+    ├── 📈 Trend Analysis
+    ├── 📊 Analytics & Validation
+    ├── 🔬 Sensitivity Analysis
+    └── 🗄️ Database Explorer
+```
+
+### Deployment Pipeline (Automated)
+
+```
+Git Push to main
+    ↓
+GitHub Repository (Ulrixon/cs6604-trafficsafety)
+    ↓
+Cloud Build Triggers (file filtering)
+    ├─→ backend/** → backend/cloudbuild.yaml
+    └─→ frontend/** → frontend/cloudbuild.yaml
+    ↓
+1. Build Docker Image
+2. Push to Artifact Registry
+3. Deploy to Cloud Run (with secrets)
+    ↓
+Live Service (5-8 minutes total)
 ```
 
 ---

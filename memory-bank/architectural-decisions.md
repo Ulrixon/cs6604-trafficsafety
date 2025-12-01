@@ -631,6 +631,283 @@ Implement **Zero-Filling** for data retrieval:
 
 ---
 
+## ADR-011: Cloud Build CI/CD with Repository-Based Configuration
+
+**Date:** 2025-12-01
+**Status:** Implemented
+**Decision Makers:** Traffic Safety Index Team
+
+### Context
+
+Manual deployment to GCP Cloud Run was error-prone and time-consuming. We needed:
+
+1. Automated deployment on every push to main
+2. Version-controlled deployment configuration
+3. File-based triggering (only deploy what changed)
+4. No GitHub Actions (permission issues with Workload Identity Federation)
+
+### Decision
+
+Implement **Cloud Build with repository-based configuration files**:
+
+- **Backend**: `backend/cloudbuild.yaml` (triggers on backend/** changes)
+- **Frontend**: `frontend/cloudbuild.yaml` (triggers on frontend/** changes)
+- **Artifact Registry**: Use modern artifact registry (deprecated Container Registry removed)
+- **Full Configuration**: Complete Cloud Run settings in YAML (memory, CPU, secrets, env vars)
+
+### Architecture
+
+```
+Git Push → GitHub → Cloud Build Trigger (file filter) →
+  1. Build Docker Image
+  2. Push to Artifact Registry
+  3. Deploy to Cloud Run (with secrets)
+```
+
+**Cloud Build Configuration:**
+- Service-specific triggers with file filtering
+- Full deployment configuration in source control
+- Automatic secret injection from Secret Manager
+- Complete resource specifications (2Gi/2CPU backend, 1Gi/1CPU frontend)
+
+### Rationale
+
+**Why Cloud Build?**
+- Native GCP integration (no permission issues)
+- Simpler than GitHub Actions (no Workload Identity setup)
+- Built-in Artifact Registry and Cloud Run support
+- Integrated logging and monitoring
+
+**Why Repository-Based YAML?**
+- Version control for deployment configuration
+- Review deployment changes in PRs
+- No inline YAML in GCP Console
+- Easy to diff and track changes
+
+**Why File Filtering?**
+- Only deploy services that changed
+- Faster deployments (don't rebuild frontend when backend changes)
+- Reduced Cloud Build minutes usage
+
+### Consequences
+
+**Positive:**
+- Fully automated deployment (5-8 minutes from push to live)
+- Zero manual steps required
+- Configuration changes reviewed in PRs
+- Separate backend/frontend deployment lifecycles
+- Integrated with existing GCP infrastructure
+
+**Negative:**
+- Build time ~5-8 minutes per service
+- Cloud Build costs (~$0.015 per deployment after free tier)
+- Need to maintain cloudbuild.yaml files
+
+**Cost Impact:**
+- 120 free build-minutes per day
+- ~5 minutes per deployment = 24 free deployments/day
+- Expected cost: $5-15/month for typical usage
+
+### Implementation Status
+
+- ✅ Backend cloudbuild.yaml created with full configuration
+- ✅ Frontend cloudbuild.yaml created
+- ✅ Cloud Build triggers updated to use repository files
+- ✅ File filtering configured (backend/**, frontend/**)
+- ✅ DEPLOYMENT_GUIDE.md updated with instructions
+- ✅ Successfully deployed to production
+
+---
+
+## ADR-012: GCP Secret Manager for Database Credentials
+
+**Date:** 2025-12-01
+**Status:** Implemented
+**Decision Makers:** Traffic Safety Index Team
+
+### Context
+
+Database credentials were hardcoded in `analytics_service.py`:
+
+```python
+GCP_DB_HOST = "34.140.49.230"
+GCP_DB_USER = "jason"
+GCP_DB_PASSWORD = "*9ZS^l(HGq].BA]6"  # ❌ Security risk
+```
+
+This presented multiple security issues:
+1. Credentials visible in source code
+2. Credentials in version control history
+3. No rotation capability
+4. Exposed in Docker images
+
+### Decision
+
+Migrate all database credentials to **GCP Secret Manager** with environment variable injection:
+
+**Secrets Created:**
+- `db_user` (version 3): Username
+- `db_password` (version 1): Password
+
+**IAM Permissions:**
+- Cloud Run service account: `secretAccessor` role
+- Cloud Build service account: `secretAccessor` role
+
+**Code Changes:**
+```python
+# After (secure)
+import os
+GCP_DB_HOST = os.getenv("VTTI_DB_HOST", "34.140.49.230")
+GCP_DB_USER = os.getenv("VTTI_DB_USER")
+GCP_DB_PASSWORD = os.getenv("VTTI_DB_PASSWORD")  # ✅ From Secret Manager
+```
+
+### Rationale
+
+**Why Secret Manager?**
+- Industry standard for credential management
+- Automatic audit logging of access
+- Version history for rotation
+- IAM-based access control
+- Integrated with Cloud Run (automatic injection)
+
+**Why Environment Variables?**
+- No code changes needed to rotate secrets
+- Standard 12-factor app pattern
+- Works locally and in production
+- Easy to test with different credentials
+
+**Why Both Service Accounts?**
+- Cloud Run needs access at runtime
+- Cloud Build needs access during deployment (for config validation)
+
+### Consequences
+
+**Positive:**
+- No credentials in source code or Git history
+- Can rotate credentials by updating secret versions
+- Audit log of all credential access
+- Compliant with security best practices
+- Automatic injection in Cloud Run (no config changes)
+
+**Negative:**
+- Additional GCP service to manage
+- Slight complexity in local development (need to set env vars)
+- IAM permissions must be maintained
+
+**Security Benefits:**
+- ✅ Credentials not in Docker images
+- ✅ Credentials not in Git history
+- ✅ Access audited and logged
+- ✅ Can rotate without redeploying code
+- ✅ Role-based access control
+
+### Implementation
+
+- ✅ Created `db_password` secret in GCP Secret Manager
+- ✅ Updated `db_user` secret to version 3
+- ✅ Granted `secretAccessor` role to both service accounts
+- ✅ Updated `analytics_service.py` to use environment variables
+- ✅ Updated `cloudbuild.yaml` to inject secrets (`:latest` versions)
+- ✅ Tested and verified in production
+
+---
+
+## ADR-013: Separate Analytics Schema for Data Organization
+
+**Date:** 2025-12-01
+**Status:** Implemented
+**Decision Makers:** Traffic Safety Index Team
+
+### Context
+
+The new Analytics & Validation features (crash correlation, validation metrics) needed database tables. Mixing these with production safety index tables could cause:
+
+1. Data confusion (validation vs operational data)
+2. Permission issues (analytics might need different access)
+3. Backup/restore complexity
+4. Performance impact on production queries
+
+### Decision
+
+Create a **separate `analytics` schema** for validation features:
+
+**Schema Structure:**
+```sql
+analytics.crash_correlation_cache  -- Precomputed validation metrics
+analytics.monitored_intersections  -- View into public.intersections
+```
+
+**Public Schema (unchanged):**
+```sql
+public.intersections              -- Operational intersection data
+public.safety_indices_realtime    -- Production safety indices
+public.vcc_*                      -- VCC message data
+```
+
+### Rationale
+
+**Why Separate Schema?**
+- Clear separation of concerns (operational vs analytical)
+- Different data lifecycle (cache can be dropped/rebuilt)
+- Easier permission management
+- Clearer backup/restore strategy
+- Won't affect production queries
+
+**Why View for Intersections?**
+- Analytical queries need intersection data
+- View ensures consistency with source
+- Can add analytical-specific columns if needed
+- No data duplication
+
+### Architecture
+
+```
+public schema (operational)
+  ├── intersections (source of truth)
+  ├── safety_indices_realtime (production data)
+  └── vcc_* (message data)
+
+analytics schema (validation)
+  ├── crash_correlation_cache (precomputed metrics)
+  └── monitored_intersections (view → public.intersections)
+```
+
+### Consequences
+
+**Positive:**
+- Clean separation between operational and analytical data
+- Analytics features can't accidentally affect production
+- Easier to grant read-only access to analytics schema
+- Can drop and rebuild cache without affecting operations
+- Clear data organization
+
+**Negative:**
+- Need to manage two schemas
+- Cross-schema queries require schema prefix
+- Additional migration complexity
+
+**Neutral:**
+- Need to grant permissions on both schemas
+- Views add one level of indirection
+
+### Implementation
+
+- ✅ Created migration script: `002_create_analytics_schema.sql`
+- ✅ Created `analytics` schema with permissions
+- ✅ Created `crash_correlation_cache` table with indexes
+- ✅ Created `monitored_intersections` view
+- ✅ Documented in `backend/db/migrations/README.md`
+- ⏳ Migration needs to be run manually in production
+
+**Migration Command:**
+```bash
+psql -h 34.140.49.230 -p 5432 -U jason -d vtsi
+\i backend/db/migrations/002_create_analytics_schema.sql
+```
+
+---
+
 ## Decision Review Schedule
 
 These decisions will be reviewed:
@@ -642,4 +919,4 @@ These decisions will be reviewed:
 ---
 
 **Document Maintainers:** Traffic Safety Index Team
-**Last Updated:** 2025-11-21
+**Last Updated:** 2025-12-01

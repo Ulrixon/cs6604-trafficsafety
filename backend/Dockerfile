@@ -33,4 +33,4 @@ ENV PORT=8080 \
     VTTI_DB_PORT=5432
 
 # Run the application directly with uvicorn
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}
+CMD uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-8080}

@@ -19,17 +19,17 @@ class Settings(BaseSettings):
     DATABASE_URL: str = Field(
         "postgresql://trafficsafety:trafficsafety_dev@db:5432/trafficsafety",
         env="DATABASE_URL",
-        description="PostgreSQL connection string"
+        description="PostgreSQL connection string",
     )
     DB_POOL_SIZE: int = Field(
         5,
         env="DB_POOL_SIZE",
-        description="Number of database connections to maintain in pool"
+        description="Number of database connections to maintain in pool",
     )
     DB_MAX_OVERFLOW: int = Field(
         10,
         env="DB_MAX_OVERFLOW",
-        description="Maximum overflow connections beyond pool size"
+        description="Maximum overflow connections beyond pool size",
     )
 
     # Trino database configuration
@@ -78,92 +78,88 @@ class Settings(BaseSettings):
     USE_POSTGRESQL: bool = Field(
         False,
         env="USE_POSTGRESQL",
-        description="Use PostgreSQL for queries (migration feature flag)"
+        description="Use PostgreSQL for queries (migration feature flag)",
     )
     FALLBACK_TO_PARQUET: bool = Field(
         True,
         env="FALLBACK_TO_PARQUET",
-        description="Fallback to Parquet if PostgreSQL query fails"
+        description="Fallback to Parquet if PostgreSQL query fails",
     )
     ENABLE_DUAL_WRITE: bool = Field(
         False,
         env="ENABLE_DUAL_WRITE",
-        description="Write to both PostgreSQL and Parquet during migration"
+        description="Write to both PostgreSQL and Parquet during migration",
     )
 
     # GCP Cloud Storage configuration (for future use)
     GCS_BUCKET_NAME: str = Field(
         "",
         env="GCS_BUCKET_NAME",
-        description="GCP bucket name for Parquet storage (e.g., trafficsafety-prod-parquet)"
+        description="GCP bucket name for Parquet storage (e.g., trafficsafety-prod-parquet)",
     )
-    GCS_PROJECT_ID: str = Field(
-        "",
-        env="GCS_PROJECT_ID",
-        description="GCP project ID"
-    )
+    GCS_PROJECT_ID: str = Field("", env="GCS_PROJECT_ID", description="GCP project ID")
     ENABLE_GCS_UPLOAD: bool = Field(
         False,
         env="ENABLE_GCS_UPLOAD",
-        description="Enable uploading Parquet files to GCS"
+        description="Enable uploading Parquet files to GCS",
     )
 
     # Parquet Storage Configuration
     PARQUET_STORAGE_PATH: str = Field(
         "./data/parquet",
         env="PARQUET_STORAGE_PATH",
-        description="Local path for Parquet file storage"
+        description="Local path for Parquet file storage",
     )
 
     # Data Plugin System Configuration
     ENABLE_DATA_PLUGINS: bool = Field(
         False,
         env="ENABLE_DATA_PLUGINS",
-        description="Enable plugin-based data source architecture"
+        description="Enable plugin-based data source architecture",
     )
 
     # VCC Plugin Configuration
     USE_VCC_PLUGIN: bool = Field(
         False,
         env="USE_VCC_PLUGIN",
-        description="Use VCC as a plugin (vs legacy VCC client)"
+        description="Use VCC as a plugin (vs legacy VCC client)",
     )
     VCC_PLUGIN_WEIGHT: float = Field(
         0.70,
         env="VCC_PLUGIN_WEIGHT",
-        description="Weight of VCC features in safety index (0.0-1.0)"
+        description="Weight of VCC features in safety index (0.0-1.0)",
     )
 
     # Weather Plugin Configuration
     ENABLE_WEATHER_PLUGIN: bool = Field(
         False,
         env="ENABLE_WEATHER_PLUGIN",
-        description="Enable NOAA/NWS weather data plugin"
+        description="Enable NOAA/NWS weather data plugin",
     )
     WEATHER_PLUGIN_WEIGHT: float = Field(
         0.15,
         env="WEATHER_PLUGIN_WEIGHT",
-        description="Weight of weather features in safety index (0.0-1.0)"
+        description="Weight of weather features in safety index (0.0-1.0)",
     )
     WEATHER_STATION_ID: str = Field(
         "KRIC",
         env="WEATHER_STATION_ID",
-        description="NOAA weather station ID (default: KRIC - Richmond Intl Airport)"
+        description="NOAA weather station ID (default: KRIC - Richmond Intl Airport)",
     )
     WEATHER_API_BASE: str = Field(
         "https://api.weather.gov",
         env="WEATHER_API_BASE",
-        description="NOAA API base URL"
+        description="NOAA API base URL",
     )
     WEATHER_API_TIMEOUT: int = Field(
         10,
         env="WEATHER_API_TIMEOUT",
-        description="Weather API request timeout (seconds)"
+        description="Weather API request timeout (seconds)",
     )
     WEATHER_RETRY_ATTEMPTS: int = Field(
         3,
         env="WEATHER_RETRY_ATTEMPTS",
-        description="Number of retry attempts for weather API failures"
+        description="Number of retry attempts for weather API failures",
     )
 
     model_config = SettingsConfigDict(
@@ -174,4 +170,20 @@ class Settings(BaseSettings):
 
 
 # Export a singleton for easy import
-settings = Settings()
+# Attempt normal validation, but fall back to an un-validated construct
+# to avoid hard crashes in environments where env vars may be missing
+try:
+    settings = Settings()
+except Exception as e:  # noqa: BLE001 - broad fallback by intent
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.warning(
+        "Settings validation failed; falling back to unvalidated Settings.model_construct(). "
+        f"Error: {e}"
+    )
+    # model_construct creates an instance without running validation and without
+    # loading environment variables. This is a safe fallback for deployments
+    # where strict validation prevents the app from starting. Note: when using
+    # this fallback, environment-derived values will NOT be applied.
+    settings = Settings.model_construct()

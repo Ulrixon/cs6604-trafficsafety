@@ -28,9 +28,7 @@ EXPOSE 8080
 # Set default environment variables
 ENV PORT=8080 \
     VTTI_DB_NAME=vtsi \
-    VTTI_DB_USER=postgres \
-    VTTI_DB_HOST=34.140.49.230 \
-    VTTI_DB_PORT=5432
+    VTTI_DB_USER=postgres
 
 # Run the application directly with uvicorn
 CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}

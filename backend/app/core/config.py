@@ -1,5 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+import os
+from pathlib import Path
 
 
 class Settings(BaseSettings):
@@ -49,14 +51,7 @@ class Settings(BaseSettings):
     # PostgreSQL database configuration (for MCDM calculations)
     # For local development: use VTTI_DB_HOST and VTTI_DB_PORT
     # For Cloud Run: use VTTI_DB_INSTANCE_CONNECTION_NAME (Unix socket)
-    VTTI_DB_HOST: str = "127.0.0.1"
-    VTTI_DB_PORT: int = 9470
     VTTI_DB_NAME: str = "vtsi"
-    VTTI_DB_USER: str = "postgres"
-    VTTI_DB_PASSWORD: str = ""  # Must be set in .env file
-    VTTI_DB_INSTANCE_CONNECTION_NAME: str = (
-        ""  # Cloud SQL instance (e.g., project:region:instance)
-    )
 
     # MCDM Safety Index settings
     MCDM_BIN_MINUTES: int = Field(
@@ -170,6 +165,27 @@ class Settings(BaseSettings):
 
 
 # Export a singleton for easy import
+# Preload environment variables from the repository's `backend/.env` file
+# into `os.environ` so that Pydantic's BaseSettings picks them up when
+# constructing `Settings()` inside a container where the file was copied.
+try:
+    env_file = Path(__file__).resolve().parents[1] / ".env"
+    if env_file.exists():
+        for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip('"').strip("'")
+                # Only set if not already present in the environment
+                if os.environ.get(k) is None:
+                    os.environ[k] = v
+except Exception:
+    # Best-effort only; don't fail startup just because we couldn't read .env
+    pass
+
 # Attempt normal validation, but fall back to an un-validated construct
 # to avoid hard crashes in environments where env vars may be missing
 try:
@@ -182,8 +198,6 @@ except Exception as e:  # noqa: BLE001 - broad fallback by intent
         "Settings validation failed; falling back to unvalidated Settings.model_construct(). "
         f"Error: {e}"
     )
-    # model_construct creates an instance without running validation and without
-    # loading environment variables. This is a safe fallback for deployments
-    # where strict validation prevents the app from starting. Note: when using
-    # this fallback, environment-derived values will NOT be applied.
+    # model_construct creates an instance without running validation. When
+    # falling back we prefer at least to have the object so the app can start.
     settings = Settings.model_construct()

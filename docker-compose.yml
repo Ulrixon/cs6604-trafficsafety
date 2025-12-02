@@ -39,6 +39,7 @@ services:
       - VERSION=0.1.0
       - DEBUG=true
       - BASE_URL=http://localhost:8000
+      - PORT=8000
 
       # Database
       - DATABASE_URL=postgresql://trafficsafety:trafficsafety_dev@db:5432/trafficsafety
@@ -48,6 +49,13 @@ services:
       # Enable PostgreSQL for safety indices
       - USE_POSTGRESQL=${USE_POSTGRESQL:-true}
       - FALLBACK_TO_PARQUET=${FALLBACK_TO_PARQUET:-false}
+
+      # VTTI Cloud SQL database connection (for crash data and RT-SI)
+      - VTTI_DB_HOST=34.140.49.230
+      - VTTI_DB_PORT=5432
+      - VTTI_DB_NAME=vtsi
+      - VTTI_DB_USER=jason
+      - VTTI_DB_PASSWORD=*9ZS^l(HGq].BA]6
 
       # Trino connection
       - TRINO_HOST=${TRINO_HOST:-smart-cities-trino.pre-prod.cloud.vtti.vt.edu}

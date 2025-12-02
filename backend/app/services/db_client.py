@@ -195,13 +195,7 @@ def get_db_client() -> VTTIPostgresClient:
     if _db_client is None:
         from ..core.config import settings
 
-        _db_client = VTTIPostgresClient(
-            host=settings.VTTI_DB_HOST,
-            database=settings.VTTI_DB_NAME,
-            user=settings.VTTI_DB_USER,
-            password=settings.VTTI_DB_PASSWORD,
-            port=settings.VTTI_DB_PORT,
-        )
+        _db_client = VTTIPostgresClient()
     return _db_client
 
 

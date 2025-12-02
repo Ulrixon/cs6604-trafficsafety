@@ -13,18 +13,22 @@ class Intersection(BaseModel):
     Attributes:
         intersection_id: Unique identifier for the intersection
         intersection_name: Human-readable name/location
-        safety_index: Safety score (0-100, higher = less safe / more risk)
+        safety_index: Primary safety score (RT-SI or MCDM, 0-100, higher = less safe)
+        index_type: Calculation method ("RT-SI-Full", "RT-SI-Realtime", or "MCDM")
         traffic_volume: Traffic count or volume metric
         latitude: Geographic latitude (-90 to 90)
         longitude: Geographic longitude (-180 to 180)
+        mcdm_index: Optional MCDM comparison metric (when RT-SI is primary)
     """
 
     intersection_id: int = Field(..., description="Unique intersection identifier")
     intersection_name: str = Field(..., description="Intersection name or location")
-    safety_index: float = Field(..., ge=0, le=100, description="Safety index (0-100)")
+    safety_index: float = Field(..., ge=0, le=100, description="Primary safety index (0-100)")
+    index_type: str = Field(default="MCDM", description="Index calculation method")
     traffic_volume: float = Field(..., ge=0, description="Traffic volume metric")
     latitude: float = Field(..., ge=-90, le=90, description="Latitude coordinate")
     longitude: float = Field(..., ge=-180, le=180, description="Longitude coordinate")
+    mcdm_index: Optional[float] = Field(None, ge=0, le=100, description="MCDM comparison metric")
 
     @field_validator("safety_index")
     @classmethod
@@ -54,9 +58,11 @@ class Intersection(BaseModel):
             "intersection_id": self.intersection_id,
             "intersection_name": self.intersection_name,
             "safety_index": self.safety_index,
+            "index_type": self.index_type,
             "traffic_volume": self.traffic_volume,
             "latitude": self.latitude,
             "longitude": self.longitude,
+            "mcdm_index": self.mcdm_index,
         }
 
     def get_risk_level(self) -> str:

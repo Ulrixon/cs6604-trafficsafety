@@ -41,7 +41,17 @@ gcloud run deploy ${SERVICE_NAME} \
   --max-instances 10 \
   --min-instances 0 \
   --add-cloudsql-instances ${CLOUD_SQL_INSTANCE} \
-  --set-env-vars "VTTI_DB_INSTANCE_CONNECTION_NAME=${CLOUD_SQL_INSTANCE},VTTI_DB_NAME=vtsi,MCDM_BIN_MINUTES=15,MCDM_LOOKBACK_HOURS=24" \
+  --set-env-vars "\
+VTTI_DB_INSTANCE_CONNECTION_NAME=${CLOUD_SQL_INSTANCE},\
+VTTI_DB_NAME=vtsi,\
+MCDM_BIN_MINUTES=15,\
+MCDM_LOOKBACK_HOURS=24,\
+GCS_BUCKET_NAME=cs6604-trafficsafety-parquet,\
+GCS_PROJECT_ID=${PROJECT_ID},\
+ENABLE_GCS_UPLOAD=false,\
+PARQUET_STORAGE_PATH=/gcs/cs6604-trafficsafety-parquet,\
+USE_POSTGRESQL=false,\
+FALLBACK_TO_PARQUET=true" \
   --set-secrets "VTTI_DB_USER=db_user:1,VTTI_DB_PASSWORD=db_password:1"
 
 echo ""

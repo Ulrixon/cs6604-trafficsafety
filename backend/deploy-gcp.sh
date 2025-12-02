@@ -3,10 +3,13 @@
 
 set -e
 
-PROJECT_ID="180117512369"
+PROJECT_ID="symbolic-cinema-305010"
+PROJECT_NUMBER="180117512369"
 REGION="europe-west1"
-SERVICE_NAME="cs6604-trafficsafety-backend"
-IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
+SERVICE_NAME="cs6604-trafficsafety"
+AR_HOSTNAME="europe-west1-docker.pkg.dev"
+REPOSITORY="cloud-run-source-deploy"
+IMAGE_NAME="${AR_HOSTNAME}/${PROJECT_ID}/${REPOSITORY}/${SERVICE_NAME}"
 
 echo "=== Deploying Traffic Safety Backend API to Cloud Run ==="
 echo "Project: ${PROJECT_ID}"
@@ -47,7 +50,7 @@ VTTI_DB_NAME=vtsi,\
 MCDM_BIN_MINUTES=15,\
 MCDM_LOOKBACK_HOURS=24,\
 GCS_BUCKET_NAME=cs6604-trafficsafety-parquet,\
-GCS_PROJECT_ID=${PROJECT_ID},\
+GCS_PROJECT_ID=${PROJECT_NUMBER},\
 ENABLE_GCS_UPLOAD=false,\
 PARQUET_STORAGE_PATH=/gcs/cs6604-trafficsafety-parquet,\
 USE_POSTGRESQL=false,\
@@ -56,7 +59,7 @@ FALLBACK_TO_PARQUET=true" \
 
 echo ""
 echo "✅ Backend deployment complete!"
-echo "Service URL: https://cs6604-trafficsafety-180117512369.europe-west1.run.app"
+echo "Service URL: https://${SERVICE_NAME}-${PROJECT_NUMBER}.${REGION}.run.app"
 echo ""
 echo "Test with:"
-echo "  curl https://cs6604-trafficsafety-180117512369.europe-west1.run.app/health"
+echo "  curl https://${SERVICE_NAME}-${PROJECT_NUMBER}.${REGION}.run.app/health"

@@ -302,7 +302,9 @@ class RTSIService:
         if vehicle_results and vehicle_results[0]["vehicle_count"]:
             vehicle_count = int(vehicle_results[0]["vehicle_count"])
             turning_count = (
-                int(vehicle_results[0]["turning_count"]) if vehicle_results[0]["turning_count"] else 0
+                int(vehicle_results[0]["turning_count"])
+                if vehicle_results[0]["turning_count"]
+                else 0
             )
 
         # Compute avg_speed, free_flow_speed, and speed_variance from speed_results
@@ -609,7 +611,9 @@ class RTSIService:
         if vehicle_results and vehicle_results[0]["vehicle_count"]:
             vehicle_count = int(vehicle_results[0]["vehicle_count"])
             turning_count = (
-                int(vehicle_results[0]["turning_count"]) if vehicle_results[0]["turning_count"] else 0
+                int(vehicle_results[0]["turning_count"])
+                if vehicle_results[0]["turning_count"]
+                else 0
             )
         free_flow_speed = 30.0  # Default
         speed_variance = 0.0

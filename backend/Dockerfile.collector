@@ -28,8 +28,11 @@ COPY data_collector.py .
 # Copy historical processing script
 COPY process_historical.py .
 
+# Copy HTTP wrapper for Cloud Run
+COPY collector_http_wrapper.py .
+
 # Create data directory
 RUN mkdir -p /app/data/parquet
 
-# Run the data collector
-CMD ["python", "data_collector.py", "--interval", "60", "--storage-path", "/app/data/parquet"]
+# Run the data collector with HTTP wrapper for Cloud Run
+CMD ["python", "collector_http_wrapper.py"]

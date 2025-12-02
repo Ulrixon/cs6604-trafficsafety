@@ -12,13 +12,31 @@ class SafetyScoreTimePoint(BaseModel):
 
     intersection: str = Field(..., example="glebe-potomac")
     time_bin: datetime = Field(..., example="2025-11-09T10:00:00")
-    mcdm_index: float = Field(
+
+    # Primary safety index (now RT-SI)
+    safety_index: float = Field(
         ...,
         ge=0,
         le=100,
-        example=67.66,
-        description="MCDM prioritization index (0-100)",
+        example=71.79,
+        description="Primary safety index (RT-SI: 0-100, lower=safer)",
     )
+    index_type: str = Field(
+        ...,
+        example="RT-SI-Full",
+        description="Index calculation method: 'RT-SI-Full' (with crash data), 'RT-SI-Realtime' (without), or 'MCDM' (fallback)",
+    )
+
+    # RT-SI components (detailed breakdown)
+    rt_si_score: Optional[float] = Field(
+        None,
+        ge=0,
+        le=100,
+        example=71.79,
+        description="Real-Time Safety Index (0-100, lower=safer) - same as safety_index when RT-SI is primary",
+    )
+
+    # Traffic metrics
     vehicle_count: int = Field(..., ge=0, example=184)
     vru_count: int = Field(..., ge=0, example=11)
     avg_speed: float = Field(..., ge=0, example=25.5)
@@ -27,18 +45,18 @@ class SafetyScoreTimePoint(BaseModel):
     near_miss_count: int = Field(
         ..., ge=0, example=1, description="Count of near-miss events (NM-VRU, NM-VV)"
     )
-    saw_score: float = Field(..., ge=0, le=100, example=45.2)
-    edas_score: float = Field(..., ge=0, le=100, example=67.8)
-    codas_score: float = Field(..., ge=0, le=100, example=72.1)
 
-    # RT-SI components
-    rt_si_score: Optional[float] = Field(
+    # MCDM components (now secondary/comparison metrics)
+    mcdm_index: Optional[float] = Field(
         None,
         ge=0,
         le=100,
-        example=71.79,
-        description="Real-Time Safety Index (0-100, higher=safer)",
+        example=67.66,
+        description="MCDM prioritization index (0-100) - secondary comparison metric",
     )
+    saw_score: Optional[float] = Field(None, ge=0, le=100, example=45.2, description="SAW score component")
+    edas_score: Optional[float] = Field(None, ge=0, le=100, example=67.8, description="EDAS score component")
+    codas_score: Optional[float] = Field(None, ge=0, le=100, example=72.1, description="CODAS score component")
     vru_index: Optional[float] = Field(
         None, ge=0, example=0.0, description="VRU sub-index from RT-SI calculation"
     )

@@ -10,7 +10,8 @@ class IntersectionBase(BaseModel):
     """
 
     intersection_name: str = Field(..., example="Glebe & Potomac")
-    safety_index: float = Field(..., ge=0, le=100, example=63.0)
+    safety_index: float = Field(..., ge=0, le=100, example=63.0, description="Primary safety index (RT-SI)")
+    index_type: str = Field(..., example="RT-SI-Full", description="Index calculation method")
     traffic_volume: int = Field(..., ge=0, example=253)
     longitude: float = Field(..., example=-77.053)
     latitude: float = Field(..., example=38.856)
@@ -18,10 +19,11 @@ class IntersectionBase(BaseModel):
 
 class IntersectionRead(IntersectionBase):
     """
-    Schema returned to the client.
+    Schema returned to the client with primary safety index (RT-SI).
     """
 
     intersection_id: int = Field(..., example=101)
+    mcdm_index: Optional[float] = Field(None, ge=0, le=100, example=58.5, description="MCDM comparison metric")
 
 
 class IntersectionWithRTSI(IntersectionBase):

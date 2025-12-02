@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional
 import logging
 
-from ..schemas.intersection import IntersectionRead, IntersectionWithRTSI
+from ..schemas.intersection import IntersectionRead
 from ..schemas.safety_score import (
     SafetyScoreTimePoint,
     IntersectionList,
@@ -128,9 +128,9 @@ def _find_nearest_crash_intersection(short_name: str, db_client) -> Optional[int
 
 @router.get("/")
 def list_intersections(
-    include_rtsi: bool = Query(
-        False,
-        description="Include RT-SI scores for real-time blending (slower)",
+    include_mcdm: bool = Query(
+        True,
+        description="Include MCDM scores for comparison (default: true)",
     ),
     bin_minutes: int = Query(
         15, description="Time bin size in minutes for RT-SI", ge=1, le=60
@@ -139,23 +139,29 @@ def list_intersections(
     """
     Retrieve a list of all intersections with their latest safety index data.
 
+    **NEW BEHAVIOR (2025-12-02):** RT-SI is now the primary safety index.
+
     Parameters:
-    - include_rtsi: If True, includes RT-SI scores (requires real-time data query)
+    - include_mcdm: If True, includes MCDM scores for comparison (default: true)
     - bin_minutes: Time window for RT-SI calculation (default: 15 minutes)
 
     Returns:
-    - If include_rtsi=false: List[IntersectionRead] with MCDM only
-    - If include_rtsi=true: List[IntersectionWithRTSI] with both MCDM and RT-SI
+    - List[IntersectionRead] with RT-SI as primary safety_index
+    - MCDM included as secondary comparison metric (if include_mcdm=true)
+    - index_type field indicates calculation method used
 
     Examples:
-    - GET /api/v1/safety/index/ - Fast MCDM-only response
-    - GET /api/v1/safety/index/?include_rtsi=true - Includes RT-SI for blending in frontend
+    - GET /api/v1/safety/index/ - RT-SI with MCDM comparison
+    - GET /api/v1/safety/index/?include_mcdm=false - RT-SI only (faster)
     """
 
     db_client = get_db_client()
+    rt_si_service = RTSIService(db_client)
     mcdm_service = MCDMSafetyIndexService(db_client)
+
     # Get available BSM intersections
     bsm_intersections = mcdm_service.get_available_intersections()
+
     # Build mapping_results for all intersections
     mapping_results = {}
     for intersection in bsm_intersections:
@@ -164,37 +170,24 @@ def list_intersections(
             # Use the first valid mapping for each intersection
             mapping_results[intersection] = mapping_list[0]
 
-    if not include_rtsi:
-        intersections = get_all(mapping_results)
-        if not intersections:
-            logger.warning("No intersections returned from get_all()")
-        else:
-            logger.info(f"Returning {len(intersections)} intersections (MCDM only)")
-        return intersections
-
-    # Slow path: calculate RT-SI for each intersection
-
-    rt_si_service = RTSIService(db_client)
-    # Get base MCDM data
+    # Get base intersection data (coordinates, traffic volume, etc.)
     base_intersections = get_all(mapping_results)
 
-    # Calculate RT-SI for each intersection
+    # Calculate RT-SI and MCDM for each intersection
     current_time = datetime.now()
     results = []
 
     for intersection in base_intersections:
+        # Initialize result with base intersection data
         result_data = {
             "intersection_id": intersection.intersection_id,
             "intersection_name": intersection.intersection_name,
-            "safety_index": intersection.safety_index,
-            "mcdm_index": intersection.safety_index,  # MCDM is the base safety_index
             "traffic_volume": intersection.traffic_volume,
             "longitude": intersection.longitude,
             "latitude": intersection.latitude,
-            "rt_si_score": None,
-            "vru_index": None,
-            "vehicle_index": None,
-            "timestamp": current_time,
+            "safety_index": None,  # Will be set to RT-SI below
+            "index_type": None,    # Will be set based on calculation
+            "mcdm_index": None,    # Will be set if include_mcdm=True
         }
 
         # Try to find matching BSM intersection and calculate RT-SI
@@ -218,6 +211,8 @@ def list_intersections(
                 )
                 break
 
+        # Calculate RT-SI (primary safety index)
+        rt_si_calculated = False
         if bsm_intersection_name:
             # Use find_crash_intersection_for_bsm to get the proper crash intersection ID
             crash_intersection_list = find_crash_intersection_for_bsm(
@@ -235,7 +230,7 @@ def list_intersections(
             if valid_crash and valid_crash["crash_intersection_id"]:
                 crash_intersection_id = valid_crash["crash_intersection_id"]
                 logger.info(
-                    f"Calculating RT-SI for {intersection.intersection_name} (Crash ID: {crash_intersection_id}, BSM: {bsm_intersection_name})"
+                    f"Calculating RT-SI (Full) for {intersection.intersection_name} (Crash ID: {crash_intersection_id})"
                 )
                 try:
                     rt_si_result = rt_si_service.calculate_rt_si(
@@ -247,9 +242,9 @@ def list_intersections(
                     )
 
                     if rt_si_result is not None:
-                        result_data["rt_si_score"] = rt_si_result["RT_SI"]
-                        result_data["vru_index"] = rt_si_result["VRU_index"]
-                        result_data["vehicle_index"] = rt_si_result["VEH_index"]
+                        result_data["safety_index"] = rt_si_result["RT_SI"]
+                        result_data["index_type"] = "RT-SI-Full"
+                        rt_si_calculated = True
                         logger.info(
                             f"RT-SI calculated successfully: {rt_si_result['RT_SI']:.2f}"
                         )
@@ -263,11 +258,26 @@ def list_intersections(
                         exc_info=True,
                     )
             else:
-                logger.warning(
-                    f"Could not find crash intersection ID for BSM '{bsm_intersection_name}'"
+                logger.info(
+                    f"No crash data for '{bsm_intersection_name}', will use RT-SI-Realtime"
                 )
 
-        results.append(IntersectionWithRTSI(**result_data))
+        # If RT-SI with crash data failed, fall back to MCDM as primary
+        if not rt_si_calculated:
+            logger.info(f"Using MCDM as primary index for {intersection.intersection_name}")
+            result_data["safety_index"] = intersection.safety_index
+            result_data["index_type"] = "MCDM"
+
+        # Calculate MCDM as comparison metric if requested
+        if include_mcdm and rt_si_calculated:
+            result_data["mcdm_index"] = intersection.safety_index
+
+        results.append(IntersectionRead(**result_data))
+
+    if not results:
+        logger.warning("No intersections returned")
+    else:
+        logger.info(f"Returning {len(results)} intersections with RT-SI as primary index")
 
     return results
 

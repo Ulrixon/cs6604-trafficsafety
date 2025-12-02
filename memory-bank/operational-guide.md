@@ -1,12 +1,28 @@
 # Operational Guide - Traffic Safety Index System
 
-## System Status: ✅ FULLY OPERATIONAL
+## System Status: ✅ FULLY OPERATIONAL - CLOUD & LOCAL
 
-Last Updated: 2025-11-20
+Last Updated: 2025-12-02
 
 ---
 
 ## Architecture Overview
+
+### Cloud Production (GCP)
+
+```
+VCC API (https://vcc.vtti.vt.edu)
+    ↓
+Google Cloud Run: cs6604-trafficsafety-collector
+    ├─→ GCS: cs6604-trafficsafety-parquet (Parquet files)
+    └─→ Cloud SQL: vtsi-postgres (PostgreSQL + PostGIS)
+    ↓
+Google Cloud Run: cs6604-trafficsafety (Backend API)
+    ↓
+Google Cloud Run: safety-index-frontend (Streamlit Dashboard)
+```
+
+### Local Development (Docker)
 
 ```
 VCC API (https://vcc.vtti.vt.edu)
@@ -21,10 +37,6 @@ Parquet Storage (/app/data/parquet/)
     ├── indices/        - Computed safety indices
     └── constants/      - Normalization constants
     ↓
-Historical Processing (batch)
-    ↓
-Real-time Processing (1-min intervals)
-    ↓
 FastAPI (http://localhost:8001)
     └── /api/v1/safety/index/
 ```
@@ -33,7 +45,58 @@ FastAPI (http://localhost:8001)
 
 ## Quick Commands
 
-### Monitoring
+### GCP Cloud Operations
+
+**View Data Collector Logs:**
+```bash
+gcloud run services logs read cs6604-trafficsafety-collector \
+  --region=europe-west1 --project=symbolic-cinema-305010 --limit=50
+```
+
+**View Backend API Logs:**
+```bash
+gcloud run services logs read cs6604-trafficsafety \
+  --region=europe-west1 --project=symbolic-cinema-305010 --limit=50
+```
+
+**List Cloud Run Services:**
+```bash
+gcloud run services list \
+  --region=europe-west1 --project=symbolic-cinema-305010
+```
+
+**Deploy Data Collector:**
+```bash
+cd backend
+bash deploy-collector-gcp.sh
+```
+
+**Check GCS Files:**
+```bash
+gcloud storage ls gs://cs6604-trafficsafety-parquet/raw/ --recursive
+```
+
+**Check Cloud SQL Status:**
+```bash
+gcloud sql instances describe vtsi-postgres \
+  --project=symbolic-cinema-305010
+```
+
+**Connect to Cloud SQL:**
+```bash
+gcloud sql connect vtsi-postgres \
+  --user=jason --database=vtsi --project=symbolic-cinema-305010
+```
+
+**Import Data to Cloud SQL:**
+```bash
+cd backend
+bash import-to-gcp-db.sh
+```
+
+---
+
+### Local Development - Monitoring
 
 **View Data Collection Logs:**
 

@@ -1,11 +1,61 @@
 # Active Context
 
-**Last Updated**: 2025-11-21 (Morning)
-**Status**: ✅ PRODUCTION SYSTEM OPERATIONAL | 🔬 SENSITIVITY ANALYSIS COMPLETE | 📋 POSTGRESQL MIGRATION PLANNED
+**Last Updated**: 2025-12-02
+**Status**: ✅ GCP CLOUD RUN DEPLOYED | 📦 DATA MIGRATED TO GCS | 🗄️ CLOUD SQL OPERATIONAL
 
 ---
 
-## Current Sprint: Sensitivity Analysis & Optimization ✅
+## Current Sprint: GCP Cloud Deployment ✅
+
+### Just Completed (2025-12-02)
+
+**Cloud Run Deployment & Data Migration:**
+
+1. ✅ **Data Collector on Google Cloud Run (COMPLETE)**
+   - **HTTP Wrapper**: Created `collector_http_wrapper.py` to provide health check endpoint
+   - **Threading Fix**: Moved HTTP server to background thread, collector in main thread for signal handler support
+   - **Deployment Script**: `deploy-collector-gcp.sh` automates Cloud Run deployment
+   - **Service URL**: `https://cs6604-trafficsafety-collector-180117512369.europe-west1.run.app`
+   - **Status**: Collecting data successfully (638 BSM, 76 MapData messages)
+
+2. ✅ **Secret Manager Integration (COMPLETE)**
+   - **VCC Credentials**: Stored in Secret Manager (`vcc_client_id`, `vcc_client_secret`)
+   - **Secret Scripts**:
+     - `create-vcc-secrets.sh` - Initial secret creation
+     - `update-vcc-secret.sh` - Update to correct credentials
+   - **Authentication**: Fixed 401 errors by updating to correct VCC client secret
+
+3. ✅ **GCS Data Storage (COMPLETE)**
+   - **Bucket**: `gs://cs6604-trafficsafety-parquet`
+   - **Structure**:
+     - `raw/bsm/` - Basic Safety Messages
+     - `raw/mapdata/` - Map Data
+     - `processed/indices/` - Computed safety indices
+   - **Status**: 57 files uploaded successfully
+
+4. ✅ **Cloud SQL Migration (98% COMPLETE)**
+   - **Instance**: `vtsi-postgres` (PostgreSQL 17.6 + PostGIS)
+   - **Location**: europe-west1
+   - **Data Migrated**:
+     - 3 intersections
+     - 1,450 of 1,483 safety indices (98%)
+     - Schema fully imported with spatial support
+   - **Script**: `import-to-gcp-db.sh` for database imports
+
+5. ✅ **Local Data Migration (COMPLETE)**
+   - **Parquet Files**: 3,171 files copied to `gs://cs6604-trafficsafety-parquet/raw-backup/`
+   - **Source**: Local Docker volume
+   - **Directories**: bsm/, mapdata/, psm/
+
+**Key Fixes:**
+- Signal handler threading error (ValueError: signal only works in main thread)
+- VCC authentication error (401 Unauthorized - wrong secret)
+- Cloud SQL firewall (added authorized network for public IP access)
+- PostGIS extension (CREATE EXTENSION postgis)
+
+---
+
+## Previous Sprint: Sensitivity Analysis & Optimization ✅
 
 ### Just Completed (2025-11-21 Morning)
 
@@ -97,25 +147,54 @@
 
 ## System Architecture
 
+### Cloud Production (GCP)
+
+```
+VCC API (https://vcc.vtti.vt.edu)
+    ↓
+┌────────────────────────────────────────────────────────────┐
+│ Google Cloud Run: cs6604-trafficsafety-collector          │
+│ - HTTP health check (port 8080)                           │
+│ - Data collection (60s interval)                          │
+│ - Secrets from Secret Manager (VCC credentials)           │
+└────────────────────────────────────────────────────────────┘
+    ↓
+┌────────────────────────────────┬───────────────────────────┐
+│ GCS: cs6604-trafficsafety-parquet │ Cloud SQL: vtsi-postgres │
+│ - raw/bsm/                       │ - PostgreSQL 17.6        │
+│ - raw/mapdata/                   │ - PostGIS enabled        │
+│ - raw/psm/                       │ - 3 intersections        │
+│ - processed/indices/             │ - 1,450 safety indices   │
+│ - raw-backup/ (3,171 files)      │                          │
+└────────────────────────────────┴───────────────────────────┘
+    ↓
+┌────────────────────────────────────────────────────────────┐
+│ Google Cloud Run: cs6604-trafficsafety (Backend API)      │
+│ - FastAPI REST endpoints                                   │
+│ - Reads from GCS + Cloud SQL                               │
+└────────────────────────────────────────────────────────────┘
+    ↓
+┌────────────────────────────────────────────────────────────┐
+│ Google Cloud Run: safety-index-frontend                    │
+│ - Streamlit dashboard                                      │
+│ - Real-time visualization                                  │
+└────────────────────────────────────────────────────────────┘
+```
+
+### Local Development (Docker)
+
 ```
 VCC API (https://vcc.vtti.vt.edu)
     ↓
 Data Collector (60s interval)
     ↓
 Parquet Storage (/app/data/parquet/)
-    ├── raw/bsm/        - 1,678+ messages
-    ├── raw/psm/        - 21 messages
-    ├── raw/mapdata/    - 4 intersections
+    ├── raw/bsm/        - Basic Safety Messages
+    ├── raw/psm/        - Personal Safety Messages
+    ├── raw/mapdata/    - Map Data
     ├── features/       - Extracted features
-    ├── indices/        - Safety indices (4 intervals)
+    ├── indices/        - Safety indices
     └── constants/      - Normalization constants
-    ↓
-┌─────────────────────────────────┬─────────────────────────┐
-│   Historical Processing         │  Real-time Processing   │
-│   (15-min intervals)            │  (1-min intervals)      │
-│   - Batch computation           │  - Live computation     │
-│   - Normalization constants     │  - Uses constants       │
-└─────────────────────────────────┴─────────────────────────┘
     ↓
 FastAPI (http://localhost:8001)
     ├── GET /health
@@ -124,75 +203,111 @@ FastAPI (http://localhost:8001)
     ├── POST /api/v1/analysis/sensitivity
     └── POST /api/v1/analysis/correlation
     ↓
-External Clients (Streamlit Dashboards, Apps, etc.)
+Streamlit Dashboard (http://localhost:8501)
+```
+
+---
+
+## GCP Deployment Information
+
+### Cloud Run Services
+
+| Service | URL | Status |
+|---------|-----|--------|
+| **Data Collector** | https://cs6604-trafficsafety-collector-180117512369.europe-west1.run.app | ✅ Running |
+| **Backend API** | https://cs6604-trafficsafety-180117512369.europe-west1.run.app | ✅ Running |
+| **Frontend Dashboard** | https://safety-index-frontend-180117512369.europe-west1.run.app | ✅ Running |
+
+### GCP Resources
+
+**Project**: `symbolic-cinema-305010` (Project Number: 180117512369)
+**Region**: `europe-west1`
+
+**Secret Manager:**
+- `vcc_client_id` - VCC API client ID
+- `vcc_client_secret` - VCC API client secret
+
+**Cloud Storage:**
+- Bucket: `gs://cs6604-trafficsafety-parquet`
+- Raw data: `raw/bsm/`, `raw/mapdata/`, `raw/psm/`
+- Processed data: `processed/indices/`
+- Backup: `raw-backup/` (3,171 files from local migration)
+
+**Cloud SQL:**
+- Instance: `vtsi-postgres`
+- Type: PostgreSQL 17.6 + PostGIS
+- Connection: `symbolic-cinema-305010:europe-west1:vtsi-postgres`
+- Database: `vtsi`
+- Public IP: `34.140.49.230` (authorized networks required)
+
+### Deployment Scripts
+
+- `backend/deploy-collector-gcp.sh` - Deploy data collector to Cloud Run
+- `backend/create-vcc-secrets.sh` - Create VCC API secrets
+- `backend/update-vcc-secret.sh` - Update VCC client secret
+- `backend/import-to-gcp-db.sh` - Import database to Cloud SQL
+
+### Monitoring
+
+**View Collector Logs:**
+```bash
+gcloud run services logs read cs6604-trafficsafety-collector \
+  --region=europe-west1 --limit=50
+```
+
+**View Backend API Logs:**
+```bash
+gcloud run services logs read cs6604-trafficsafety \
+  --region=europe-west1 --limit=50
+```
+
+**Check GCS Files:**
+```bash
+gcloud storage ls gs://cs6604-trafficsafety-parquet/raw/ --recursive
 ```
 
 ---
 
 ## What We're Working On Next
 
-**Documentation & Handoff**
-
-### Current Focus: Documentation Updates
+**Current Focus: Backend API GCS Integration** 🔥 URGENT
 
 - 📋 **Status**: In Progress
-- 🎯 **Goal**: Ensure `memory-bank` reflects the latest features (Sensitivity Analysis, Optimization).
-- 📄 **Documents**:
-  - `memory-bank/active-context.md` (Updating now)
-  - `memory-bank/architectural-decisions.md` (Adding In-Memory Calculation ADR)
-  - `memory-bank/operational-guide.md` (Adding Sensitivity Analysis usage)
+- 🎯 **Goal**: Configure backend API to read from GCS bucket
+- 📄 **Issue**: Backend deployed before collector, not configured for GCS
+- 🔧 **Solution**: Update backend env vars to enable GCS reads
 
-### Future Focus: PostgreSQL + GCP Migration (Planned)
+### Next Steps (Immediate)
 
-- 📋 **Status**: Planning complete, ready to implement
-- 🎯 **Goal**: Migrate from Parquet-only to PostgreSQL + GCP Cloud Storage
+1. **Update Backend API Configuration**
+   - Enable GCS_BUCKET_NAME in backend deployment
+   - Set USE_POSTGRESQL=false initially
+   - Test API with GCS data source
+
+2. **Verify Data Pipeline**
+   - Check if safety indices are readable from GCS
+   - Test frontend with cloud-hosted backend
+   - Validate end-to-end data flow
+
+### Future Focus: Full PostgreSQL Integration (Planned)
+
+- 📋 **Status**: Cloud SQL operational, backend integration pending
+- 🎯 **Goal**: Switch backend to use Cloud SQL + GCS hybrid storage
 - 📄 **Documents**:
   - Requirements: `construction/requirements/postgresql-migration-requirements.md`
   - Design: `construction/design/postgresql-migration-design.md`
-  - Sprint Plan: `construction/sprints/sprint-postgresql-migration.md`
-  - ADRs: `memory-bank/architectural-decisions.md`
 
-**Why This Migration:**
+**Already Complete:**
+- ✅ Cloud SQL instance with PostGIS
+- ✅ Database schema migrated
+- ✅ 98% of historical data imported
+- ✅ GCS bucket with raw data
 
-1. **Performance**: 10-100x faster API queries with indexed database
-2. **Scalability**: Support 100+ intersections and concurrent users
-3. **Spatial Features**: PostGIS enables proximity, routing, heatmaps
-4. **Production Ready**: Cloud storage (GCS) instead of local Docker volumes
-5. **Data Management**: Automated aggregation, retention, lifecycle policies
-
-**Architecture:**
-
-```
-VCC API → Data Collector → Dual Write
-                             ├─→ GCS (raw Parquet archives)
-                             └─→ PostgreSQL + PostGIS (operational queries)
-                                      ↓
-                                  FastAPI (10-100x faster)
-                                      ↓
-                                  Frontend (no changes)
-```
-
-**Key Technologies:**
-
-- PostgreSQL 15 + PostGIS 3.3 for operational database
-- GCP Cloud Storage for raw data archival (Parquet)
-- Dual-write during migration for zero downtime
-- Time partitioning for performance
-- Automated aggregation jobs (hourly, daily)
-
-**Timeline:** 4 weeks (80-100 hours)
-**Cost:** ~$35/month for GCS (PostgreSQL free in Docker)
-
-**Next Steps:**
-
-1. Review and approve migration plan
-2. Begin Phase 1: Database setup (Days 1-3)
-3. Phase 2: GCP Cloud Storage setup (Days 4-5)
-4. Phase 3: Dual-write implementation (Days 6-8)
-5. Phase 4: API migration (Days 9-12)
-6. Phase 5: Batch jobs (Days 13-15)
-7. Phase 6: Historical backfill (Days 16-18)
-8. Phase 7: Cutover (Days 19-20)
+**Remaining Work:**
+1. Update backend DATABASE_URL to use Cloud SQL Unix socket
+2. Enable USE_POSTGRESQL=true in backend
+3. Test hybrid GCS + PostgreSQL queries
+4. Performance validation
 
 ---
 

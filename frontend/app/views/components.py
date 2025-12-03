@@ -4,7 +4,7 @@ Reusable UI components for the Streamlit app.
 
 import streamlit as st
 import pandas as pd
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from app.models.intersection import Intersection
 from app.utils.scaling import format_number
@@ -189,6 +189,10 @@ def render_details_card(row: Optional[pd.Series]):
     st.divider()
     st.caption(f"**Intersection ID:** {row['intersection_id']}")
 
+    # Camera buttons (if camera_urls available)
+    if "camera_urls" in row and row["camera_urls"] is not None and len(row["camera_urls"]) > 0:
+        render_camera_buttons(row["camera_urls"], max_buttons=3)
+
     # Historical data toggle button
     st.markdown("")  # Add spacing
 
@@ -211,6 +215,68 @@ def render_details_card(row: Optional[pd.Series]):
     # Render historical section if toggled on
     if st.session_state.show_history:
         render_historical_section(str(row["intersection_id"]))
+
+
+def render_camera_buttons(camera_urls: List[Dict[str, Any]], max_buttons: int = 3):
+    """
+    Render camera access buttons for intersection.
+
+    Args:
+        camera_urls: List of camera link dictionaries with keys:
+                    - source: Camera provider (e.g., "VDOT", "511")
+                    - url: Full URL to camera feed or map
+                    - label: User-friendly display name
+        max_buttons: Maximum number of camera buttons to display (default: 3)
+    """
+    if not camera_urls or len(camera_urls) == 0:
+        return  # No cameras available
+
+    st.markdown("")  # Add spacing
+    st.caption("**📹 Traffic Cameras:**")
+
+    # Display up to max_buttons cameras
+    for idx, camera in enumerate(camera_urls[:max_buttons]):
+        # Validate required fields
+        if not all(k in camera for k in ['source', 'url', 'label']):
+            continue
+
+        # Icon selection based on source
+        icon_map = {
+            'VDOT': '📹',
+            '511': '🗺️',
+            'TrafficLand': '📹',
+        }
+        icon = icon_map.get(camera['source'], '🔗')
+
+        # Styled link button with hover effect
+        button_html = f"""
+        <a href="{camera['url']}"
+           target="_blank"
+           rel="noopener noreferrer"
+           style="
+               display: inline-block;
+               width: 100%;
+               padding: 10px 20px;
+               margin: 5px 0;
+               background-color: #0066cc;
+               color: white;
+               border-radius: 5px;
+               text-decoration: none;
+               font-weight: 500;
+               text-align: center;
+               transition: background-color 0.2s;
+               box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+           "
+           onmouseover="this.style.backgroundColor='#0052a3'"
+           onmouseout="this.style.backgroundColor='#0066cc'">
+            {icon} {camera['label']}
+        </a>
+        """
+        st.markdown(button_html, unsafe_allow_html=True)
+
+    # Show count if more cameras available
+    if len(camera_urls) > max_buttons:
+        st.caption(f"*+ {len(camera_urls) - max_buttons} more camera(s) available*")
 
 
 def render_legend():

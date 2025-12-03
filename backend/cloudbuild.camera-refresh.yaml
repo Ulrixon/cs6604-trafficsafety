@@ -1,0 +1,45 @@
+# Cloud Build configuration for Camera Refresh Cloud Run Job
+# Usage: gcloud builds submit --config=cloudbuild.camera-refresh.yaml
+
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/camera-refresh:$SHORT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/camera-refresh:latest'
+      - '-f'
+      - 'Dockerfile.camera-refresh'
+      - '.'
+    dir: 'backend'
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/camera-refresh:$SHORT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/camera-refresh:latest'
+
+  # Deploy to Cloud Run Jobs
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'jobs'
+      - 'update'
+      - 'camera-refresh'
+      - '--image=gcr.io/$PROJECT_ID/camera-refresh:$SHORT_SHA'
+      - '--region=us-central1'
+
+images:
+  - 'gcr.io/$PROJECT_ID/camera-refresh:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/camera-refresh:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

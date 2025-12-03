@@ -57,7 +57,7 @@ def compute_bounds(df: pd.DataFrame) -> Optional[list]:
 
 def create_popup_html(row: pd.Series) -> str:
     """
-    Create HTML content for marker popup.
+    Create HTML content for marker popup with camera links.
 
     Args:
         row: DataFrame row with intersection data
@@ -76,6 +76,37 @@ def create_popup_html(row: pd.Series) -> str:
     else:
         risk_level = "High"
         risk_color = "#E74C3C"
+
+    # Build camera links section (if available)
+    camera_html = ""
+    if "camera_urls" in row and row["camera_urls"] is not None:
+        try:
+            # Handle both list and string representations
+            camera_urls = row["camera_urls"]
+            if isinstance(camera_urls, str):
+                import json
+                camera_urls = json.loads(camera_urls)
+
+            if camera_urls and len(camera_urls) > 0:
+                camera_html = '<div style="margin-top: 10px; border-top: 1px solid #ddd; padding-top: 8px;">'
+                camera_html += '<strong style="font-size: 11px;">📹 Cameras:</strong><br>'
+
+                # Show max 2 cameras in popup (space constraint)
+                for cam in camera_urls[:2]:
+                    icon = '📹' if cam.get('source') == 'VDOT' else '🗺️'
+                    camera_html += f'''
+                    <a href="{cam.get('url', '')}"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       style="color: #0066cc; text-decoration: none; display: block;
+                              margin: 3px 0; font-size: 11px;">
+                        {icon} {cam.get('label', 'Camera')}
+                    </a>
+                    '''
+                camera_html += '</div>'
+        except Exception:
+            # Silently skip camera section if parsing fails
+            pass
 
     html = f"""
     <div style="font-family: Arial, sans-serif; width: 250px;">
@@ -125,6 +156,7 @@ def create_popup_html(row: pd.Series) -> str:
                 </td>
             </tr>
         </table>
+        {camera_html}
     </div>
     """
     return html
@@ -183,9 +215,13 @@ def build_map(
         radius = scale_radius(row["traffic_volume"], min_volume, max_volume)
         color = get_color_for_safety_index(row["safety_index"])
 
-        # Create popup
+        # Create popup (draggable and larger to accommodate cameras)
         popup_html = create_popup_html(row)
-        popup = folium.Popup(IFrame(popup_html, width=270, height=200))
+        popup = folium.Popup(
+            IFrame(popup_html, width=270, height=250),
+            max_width=300,
+            draggable=True  # Enable draggable popups
+        )
 
         # Create tooltip (hover text)
         tooltip = f"{row['intersection_name']}"

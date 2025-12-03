@@ -232,6 +232,14 @@ if __name__ == '__main__':
 
 ## Part 2: Periodic Batch Job
 
+The periodic job refreshes ALL cameras to catch:
+- Cameras that have moved or been replaced
+- New cameras added near existing intersections
+- Broken/outdated camera links
+- Changes in VDOT camera inventory
+
+**Strategy:** Use `--auto-all` to refresh ALL cameras (not just new ones)
+
 ### Setup Cron Job (Linux/Mac)
 
 Add to crontab:
@@ -241,14 +249,14 @@ Add to crontab:
 crontab -e
 
 # Add this line (runs daily at 2:00 AM)
-0 2 * * * cd /path/to/cs6604-trafficsafety && /usr/bin/python3 backend/scripts/populate_camera_urls.py --auto-new-only >> /var/log/camera-refresh.log 2>&1
+0 2 * * * cd /path/to/cs6604-trafficsafety && /usr/bin/python3 backend/scripts/populate_camera_urls.py --auto-all >> /var/log/camera-refresh.log 2>&1
 ```
 
 With environment variables:
 
 ```bash
 # Add to crontab with env vars
-0 2 * * * export DATABASE_URL="postgresql://..." && export VDOT_API_KEY="..." && cd /path/to/project && python backend/scripts/populate_camera_urls.py --auto-new-only
+0 2 * * * export DATABASE_URL="postgresql://..." && export VDOT_API_KEY="..." && cd /path/to/project && python backend/scripts/populate_camera_urls.py --auto-all
 ```
 
 ### Windows Task Scheduler
@@ -260,7 +268,7 @@ Create a batch file `refresh_cameras.bat`:
 cd C:\Code\Git\cs6604-trafficsafety
 set DATABASE_URL=postgresql://user:pass@host/db
 set VDOT_API_KEY=your-key-here
-python backend\scripts\populate_camera_urls.py --auto-new-only
+python backend\scripts\populate_camera_urls.py --auto-all
 ```
 
 Schedule via Task Scheduler:
@@ -271,7 +279,7 @@ Schedule via Task Scheduler:
 5. Action: Start a program
 6. Program: `C:\Code\Git\cs6604-trafficsafety\refresh_cameras.bat`
 
-### Docker Compose (Recommended)
+### Docker Compose (Recommended for Local/Dev)
 
 Add a cron service to `docker-compose.yml`:
 
@@ -288,15 +296,161 @@ services:
     command: >
       sh -c "
         apt-get update && apt-get install -y cron &&
-        echo '0 2 * * * cd /app && python backend/scripts/populate_camera_urls.py --auto-new-only >> /var/log/cron.log 2>&1' > /etc/cron.d/camera-refresh &&
+        echo '0 2 * * * cd /app && python backend/scripts/populate_camera_urls.py --auto-all >> /var/log/cron.log 2>&1' > /etc/cron.d/camera-refresh &&
         chmod 0644 /etc/cron.d/camera-refresh &&
         crontab /etc/cron.d/camera-refresh &&
         cron -f
       "
     restart: unless-stopped
+    depends_on:
+      - db
 ```
 
-### Kubernetes CronJob
+**Note:** For production, use GCP Cloud Scheduler instead (see below - much cheaper and more reliable).
+
+### GCP Cloud Scheduler + Cloud Run Jobs (Recommended for Production - CHEAPEST)
+
+**Cost:** ~$0.30/month (3 free Cloud Scheduler jobs, Cloud Run Jobs pay-per-execution)
+
+This is the most cost-effective option for GCP deployments.
+
+#### Step 1: Create Cloud Run Job
+
+```bash
+# Build and push container image
+cd backend
+gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/camera-refresh:latest
+
+# Create Cloud Run Job
+gcloud run jobs create camera-refresh \
+  --image gcr.io/YOUR_PROJECT_ID/camera-refresh:latest \
+  --region us-central1 \
+  --set-env-vars DATABASE_URL="postgresql://..." \
+  --set-secrets VDOT_API_KEY=vdot-api-key:latest \
+  --max-retries 2 \
+  --task-timeout 30m \
+  --memory 512Mi \
+  --cpu 1
+```
+
+#### Step 2: Create Dockerfile for Job
+
+Create `backend/Dockerfile.camera-refresh`:
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Run camera refresh script
+CMD ["python", "scripts/populate_camera_urls.py", "--auto-all"]
+```
+
+#### Step 3: Set Up Cloud Scheduler
+
+```bash
+# Create Cloud Scheduler job (runs daily at 2 AM)
+gcloud scheduler jobs create http camera-refresh-daily \
+  --location us-central1 \
+  --schedule "0 2 * * *" \
+  --uri "https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/YOUR_PROJECT_ID/jobs/camera-refresh:run" \
+  --http-method POST \
+  --oauth-service-account-email YOUR_SERVICE_ACCOUNT@YOUR_PROJECT_ID.iam.gserviceaccount.com
+```
+
+#### Step 4: Store Secrets in Secret Manager
+
+```bash
+# Store VDOT API key in Secret Manager
+echo -n "your-vdot-api-key" | gcloud secrets create vdot-api-key \
+  --data-file=- \
+  --replication-policy="automatic"
+
+# Grant Cloud Run access to secret
+gcloud secrets add-iam-policy-binding vdot-api-key \
+  --member="serviceAccount:YOUR_SERVICE_ACCOUNT@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+#### Step 5: Test the Job
+
+```bash
+# Manually trigger the job to test
+gcloud run jobs execute camera-refresh --region us-central1
+
+# View logs
+gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=camera-refresh" \
+  --limit 50 \
+  --format json
+```
+
+**Pricing Breakdown:**
+- Cloud Scheduler: Free (first 3 jobs)
+- Cloud Run Jobs: ~$0.00002 per execution (512MB, 1 CPU, ~5 min runtime)
+- Monthly cost: ~$0.001 for daily executions
+- Secret Manager: $0.06 per secret per month
+- **Total: ~$0.06/month**
+
+---
+
+### GCP Cloud Functions (Alternative - Slightly More Expensive)
+
+**Cost:** ~$0.50/month
+
+```bash
+# Deploy Cloud Function
+gcloud functions deploy camera-refresh \
+  --runtime python311 \
+  --trigger-http \
+  --entry-point refresh_cameras \
+  --set-env-vars DATABASE_URL="postgresql://..." \
+  --set-secrets VDOT_API_KEY=vdot-api-key:latest \
+  --timeout 540s \
+  --memory 512MB \
+  --region us-central1
+```
+
+Create `backend/functions/main.py`:
+
+```python
+import os
+import sys
+
+# Add parent to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from scripts.populate_camera_urls import CameraURLPopulator
+
+def refresh_cameras(request):
+    """HTTP Cloud Function to refresh cameras"""
+    try:
+        populator = CameraURLPopulator()
+        populator.auto_populate_all(radius_miles=0.5, max_cameras=3)
+        return {"status": "success", "message": "Cameras refreshed"}, 200
+    except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
+```
+
+Schedule with Cloud Scheduler:
+
+```bash
+gcloud scheduler jobs create http camera-refresh-function \
+  --location us-central1 \
+  --schedule "0 2 * * *" \
+  --uri "https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/camera-refresh" \
+  --http-method GET
+```
+
+---
+
+### Kubernetes CronJob (For K8s Deployments)
 
 Create `camera-refresh-cronjob.yaml`:
 
@@ -317,7 +471,7 @@ spec:
             command:
             - python
             - backend/scripts/populate_camera_urls.py
-            - --auto-new-only
+            - --auto-all
             env:
             - name: DATABASE_URL
               valueFrom:
@@ -396,14 +550,12 @@ Add to your collector's configuration file:
 
 1. **Run manually**:
    ```bash
-   python backend/scripts/populate_camera_urls.py --auto-new-only
+   python backend/scripts/populate_camera_urls.py --auto-all
    ```
 
 2. **Expected output**:
    ```
-   🔄 Auto-populating NEW intersections only
-      Total intersections: 15
-      Without cameras: 3
+   🔄 Auto-populating cameras for 15 intersections
       Radius: 0.5 miles
       Max cameras: 3
 
@@ -413,11 +565,17 @@ Add to your collector's configuration file:
       - VDOT: VDOT Camera - I-95 @ Broad St
       - 511: View on 511 Map
 
+   ... (processes all intersections)
+
    =============================================================
-   ✅ Successfully populated: 3
+   ✅ Successfully populated: 15
    ❌ Failed: 0
-   📊 Coverage: 15/15 intersections have cameras
    ```
+
+**Note:** This refreshes ALL cameras, not just new ones. This ensures:
+- Cameras that moved get updated coordinates
+- New cameras near existing intersections are discovered
+- Outdated/broken camera links are replaced
 
 ### Integration Test
 
@@ -634,21 +792,50 @@ python backend/scripts/populate_camera_urls.py --add \
 
 **Hybrid Approach Benefits**:
 - ✅ Immediate camera availability for new intersections
+- ✅ Daily refresh catches camera changes and new cameras
 - ✅ No user-facing latency
-- ✅ Resilient to failures
-- ✅ Automatic maintenance
+- ✅ Resilient to collector failures
+- ✅ Automatic maintenance and link updates
 - ✅ Easy to monitor and debug
 
+**Recommended Setup**:
+1. **Collector Integration**: Populate cameras immediately when inserting new intersection
+2. **GCP Cloud Scheduler + Cloud Run Jobs**: Daily refresh of ALL cameras (~$0.06/month)
+3. **Monitoring**: Track coverage percentage and broken links
+
 **Implementation Checklist**:
-- [ ] Add camera population to collector code
-- [ ] Configure environment variables
-- [ ] Set up periodic cron job
-- [ ] Test with sample intersection
-- [ ] Monitor coverage metrics
-- [ ] Set up alerting
+- [ ] Add camera population to collector code (subprocess or direct import)
+- [ ] Deploy Cloud Run Job with `--auto-all` command
+- [ ] Set up Cloud Scheduler for daily execution (2 AM)
+- [ ] Configure environment variables (DATABASE_URL, VDOT_API_KEY)
+- [ ] Store VDOT_API_KEY in Secret Manager
+- [ ] Test manual job execution
+- [ ] Monitor coverage metrics and logs
+- [ ] Set up alerting for failures
+
+**Cost Comparison**:
+- **GCP Cloud Scheduler + Cloud Run Jobs: ~$0.06/month** ← RECOMMENDED
+- GCP Cloud Functions: ~$0.50/month
+- Docker container on VM: $5-10/month
+- Kubernetes CronJob: Varies (depends on cluster size)
+
+**Deployment Files**:
+- `backend/Dockerfile.camera-refresh` - Container image definition
+- `backend/cloudbuild.camera-refresh.yaml` - Cloud Build configuration
+- `backend/deploy-camera-refresh-gcp.sh` - Automated deployment script
+
+**Quick Deploy (GCP)**:
+```bash
+cd backend
+./deploy-camera-refresh-gcp.sh \
+  YOUR_PROJECT_ID \
+  camera-refresh@YOUR_PROJECT_ID.iam.gserviceaccount.com \
+  "postgresql://..." \
+  "your-vdot-api-key"
+```
 
 ---
 
 **Last Updated:** 2025-12-03
-**Version:** 1.0
-**Status:** Ready for Production
+**Version:** 2.0
+**Status:** Production Ready with GCP Support

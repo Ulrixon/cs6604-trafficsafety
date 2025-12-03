@@ -310,16 +310,16 @@ def render_filters(
         # Handle edge case where all values are the same
         if min_vol == max_vol:
             # Add a small buffer to allow the slider to work
-            min_vol = max(0, min_vol - 1)
-            max_vol = max_vol + 1
+            min_vol = max(0.0, min_vol - 1.0)
+            max_vol = max_vol + 1.0
     else:
         min_vol, max_vol = 0.0, 10000.0
 
     volume_range = st.slider(
         "Traffic Volume Range",
-        min_value=min_vol,
-        max_value=max_vol,
-        value=(min_vol, max_vol if max_vol > min_vol else min_vol),
+        min_value=float(min_vol),
+        max_value=float(max_vol),
+        value=(float(min_vol), float(max_vol) if max_vol > min_vol else float(min_vol)),
         format="%.0f",
         help="Filter by traffic volume",
     )
@@ -389,20 +389,28 @@ def render_data_table(df: pd.DataFrame):
 
     # Round numeric columns
     display_df["safety_index"] = display_df["safety_index"].round(1)
+    if "rt_si_index" in display_df.columns:
+        display_df["rt_si_index"] = display_df["rt_si_index"].round(1)
+    if "mcdm_index" in display_df.columns:
+        display_df["mcdm_index"] = display_df["mcdm_index"].round(1)
     display_df["traffic_volume"] = display_df["traffic_volume"].round(0)
     display_df["latitude"] = display_df["latitude"].round(4)
     display_df["longitude"] = display_df["longitude"].round(4)
 
     # Rename columns for better display
+    column_renames = {
+        "intersection_id": "ID",
+        "intersection_name": "Intersection Name",
+        "safety_index": "Safety Index (Blended)",
+        "rt_si_index": "RT-SI Score",
+        "mcdm_index": "MCDM Score",
+        "traffic_volume": "Traffic Volume",
+        "latitude": "Latitude",
+        "longitude": "Longitude",
+    }
+    # Only rename columns that exist
     display_df = display_df.rename(
-        columns={
-            "intersection_id": "ID",
-            "intersection_name": "Intersection Name",
-            "safety_index": "Safety Index",
-            "traffic_volume": "Traffic Volume",
-            "latitude": "Latitude",
-            "longitude": "Longitude",
-        }
+        columns={k: v for k, v in column_renames.items() if k in display_df.columns}
     )
 
     st.dataframe(

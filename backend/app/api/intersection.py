@@ -128,6 +128,12 @@ def _find_nearest_crash_intersection(short_name: str, db_client) -> Optional[int
 
 @router.get("/")
 def list_intersections(
+    alpha: float = Query(
+        0.7,
+        description="Blending coefficient: α×RT-SI + (1-α)×MCDM",
+        ge=0.0,
+        le=1.0,
+    ),
     include_mcdm: bool = Query(
         True,
         description="Include MCDM scores for comparison (default: true)",
@@ -137,22 +143,26 @@ def list_intersections(
     ),
 ):
     """
-    Retrieve a list of all intersections with their latest safety index data.
+    Retrieve a list of all intersections with blended safety index.
 
-    **NEW BEHAVIOR (2025-12-02):** RT-SI is now the primary safety index.
+    **BEHAVIOR:** Returns blended safety index combining RT-SI and MCDM.
 
     Parameters:
-    - include_mcdm: If True, includes MCDM scores for comparison (default: true)
+    - alpha: Blending coefficient (default: 0.7) - higher values favor RT-SI
+    - include_mcdm: If True, includes MCDM scores (default: true)
     - bin_minutes: Time window for RT-SI calculation (default: 15 minutes)
 
     Returns:
-    - List[IntersectionRead] with RT-SI as primary safety_index
-    - MCDM included as secondary comparison metric (if include_mcdm=true)
-    - index_type field indicates calculation method used
+    - List[IntersectionRead] with:
+      - safety_index: Blended score (α×RT-SI + (1-α)×MCDM)
+      - rt_si_index: Raw RT-SI score
+      - mcdm_index: Raw MCDM score
+      - index_type: Calculation method used
 
     Examples:
-    - GET /api/v1/safety/index/ - RT-SI with MCDM comparison
-    - GET /api/v1/safety/index/?include_mcdm=false - RT-SI only (faster)
+    - GET /api/v1/safety/index/ - Blended with α=0.7
+    - GET /api/v1/safety/index/?alpha=1.0 - Pure RT-SI
+    - GET /api/v1/safety/index/?alpha=0.0 - Pure MCDM
     """
 
     db_client = get_db_client()
@@ -185,9 +195,10 @@ def list_intersections(
             "traffic_volume": intersection.traffic_volume,
             "longitude": intersection.longitude,
             "latitude": intersection.latitude,
-            "safety_index": None,  # Will be set to RT-SI below
+            "safety_index": None,  # Will be blended score
+            "rt_si_index": None,   # Raw RT-SI score
+            "mcdm_index": None,    # Raw MCDM score
             "index_type": None,    # Will be set based on calculation
-            "mcdm_index": None,    # Will be set if include_mcdm=True
         }
 
         # Try to find matching BSM intersection and calculate RT-SI
@@ -242,7 +253,7 @@ def list_intersections(
                     )
 
                     if rt_si_result is not None:
-                        result_data["safety_index"] = rt_si_result["RT_SI"]
+                        result_data["rt_si_index"] = rt_si_result["RT_SI"]
                         result_data["index_type"] = "RT-SI-Full"
                         rt_si_calculated = True
                         logger.info(
@@ -262,15 +273,26 @@ def list_intersections(
                     f"No crash data for '{bsm_intersection_name}', will use RT-SI-Realtime"
                 )
 
-        # If RT-SI with crash data failed, fall back to MCDM as primary
-        if not rt_si_calculated:
-            logger.info(f"Using MCDM as primary index for {intersection.intersection_name}")
-            result_data["safety_index"] = intersection.safety_index
-            result_data["index_type"] = "MCDM"
-
-        # Calculate MCDM as comparison metric if requested
-        if include_mcdm and rt_si_calculated:
-            result_data["mcdm_index"] = intersection.safety_index
+        # Set MCDM index from base intersection data
+        mcdm_value = intersection.safety_index if intersection.safety_index is not None else 0.0
+        if include_mcdm:
+            result_data["mcdm_index"] = mcdm_value
+        
+        # Get RT-SI value (0 if not calculated)
+        rt_si_value = result_data["rt_si_index"] if result_data["rt_si_index"] is not None else 0.0
+        
+        # Calculate blended safety index: α×RT-SI + (1-α)×MCDM
+        # Always apply blending formula if we have data
+        if mcdm_value > 0 or rt_si_value > 0:
+            result_data["safety_index"] = alpha * rt_si_value + (1 - alpha) * mcdm_value
+            # Always show "Blended" when using the alpha blending formula
+            result_data["index_type"] = "Blended"
+            logger.debug(f"Blended: {alpha:.2f}×{rt_si_value:.2f} + {1-alpha:.2f}×{mcdm_value:.2f} = {result_data['safety_index']:.2f}")
+        else:
+            # No data at all
+            result_data["safety_index"] = 0.0
+            result_data["index_type"] = "No Data"
+            logger.debug(f"No data available for blending")
 
         results.append(IntersectionRead(**result_data))
 
@@ -506,21 +528,27 @@ def get_safety_score_at_time(
     ),
     time: datetime = Query(..., description="Target datetime (ISO 8601 format)"),
     bin_minutes: int = Query(15, description="Time bin size in minutes", ge=1, le=60),
+    alpha: float = Query(
+        0.7,
+        description="Blending coefficient: α×RT-SI + (1-α)×MCDM",
+        ge=0.0,
+        le=1.0,
+    ),
 ):
     """
     Get safety score for a specific intersection at a specific time.
 
-    Returns both MCDM and RT-SI scores separately for client-side blending:
-    - mcdm_index: Long-term prioritization score (0-100)
-    - rt_si_score: Real-time safety index (0-100)
+    Returns blended safety score combining RT-SI and MCDM:
+    - safety_index: Blended score (α×RT-SI + (1-α)×MCDM)
+    - rt_si_score: Raw RT-SI score (0-100)
+    - mcdm_index: Raw MCDM score (0-100)
     - vru_index: VRU sub-index (0-100)
     - vehicle_index: Vehicle sub-index (0-100)
-
-    Frontend should blend: Final = α*RT-SI + (1-α)*MCDM
+    - index_type: "Hybrid" when blending both, "RT-SI-Full", or "MCDM"
 
     Example:
     ```
-    GET /api/v1/safety/index/time/specific?intersection=glebe-potomac&time=2025-11-09T10:00:00&bin_minutes=15
+    GET /api/v1/safety/index/time/specific?intersection=glebe-potomac&time=2025-11-09T10:00:00&bin_minutes=15&alpha=0.7
     ```
     """
     db_client = get_db_client()
@@ -602,7 +630,7 @@ def get_safety_score_at_time(
                     logger.info(
                         f"Safety scores for {intersection} at {time}: "
                         f"RT-SI={rt_si_result['RT_SI']:.2f}, MCDM={result['mcdm_index']:.2f} "
-                        f"(Source: {valid_intersection['source']}, blending to be done in frontend)"
+                        f"(Source: {valid_intersection['source']})"
                     )
                 else:
                     logger.warning(f"No RT-SI data for {intersection} at {time}")
@@ -612,6 +640,24 @@ def get_safety_score_at_time(
             logger.warning(f"No valid crash intersection found for '{intersection}'")
     else:
         logger.warning(f"No intersections found for '{intersection}'")
+
+    # Calculate blended safety index using alpha parameter
+    rt_si_value = result.get("rt_si_score", 0.0) or 0.0
+    mcdm_value = result.get("mcdm_index", 0.0) or 0.0
+    
+    # Blend: α×RT-SI + (1-α)×MCDM
+    if rt_si_value > 0 and mcdm_value > 0:
+        result["safety_index"] = alpha * rt_si_value + (1 - alpha) * mcdm_value
+        result["index_type"] = "Hybrid"
+        logger.info(f"Blended score: {alpha:.2f}×{rt_si_value:.2f} + {1-alpha:.2f}×{mcdm_value:.2f} = {result['safety_index']:.2f}")
+    elif rt_si_value > 0:
+        result["safety_index"] = rt_si_value
+        result["index_type"] = "RT-SI-Full"
+        logger.info(f"Using RT-SI only: {rt_si_value:.2f}")
+    else:
+        result["safety_index"] = mcdm_value
+        result["index_type"] = "MCDM"
+        logger.info(f"Using MCDM only: {mcdm_value:.2f}")
 
     return result
 
@@ -624,6 +670,12 @@ def get_safety_score_trend(
     start_time: datetime = Query(..., description="Start datetime (ISO 8601 format)"),
     end_time: datetime = Query(..., description="End datetime (ISO 8601 format)"),
     bin_minutes: int = Query(15, description="Time bin size in minutes", ge=1, le=60),
+    alpha: float = Query(
+        0.7,
+        description="Blending coefficient: α×RT-SI + (1-α)×MCDM",
+        ge=0.0,
+        le=1.0,
+    ),
     include_correlations: bool = Query(
         True, description="Include correlation analysis in response"
     ),
@@ -721,19 +773,38 @@ def get_safety_score_trend(
                     datetime.fromisoformat(r["timestamp"]): r for r in rt_si_results
                 }
 
-                # Add RT-SI data to matching MCDM time points
+                # Add RT-SI data to matching MCDM time points and calculate blended scores
                 for result in results:
                     time_bin = result["time_bin"]
+                    rt_si_value = 0.0
+                    mcdm_value = result.get("mcdm_index", 0.0) or 0.0
+                    
                     if time_bin in rt_si_map:
                         rt_si_data = rt_si_map[time_bin]
-                        result["rt_si_score"] = rt_si_data["RT_SI"]
+                        rt_si_value = rt_si_data["RT_SI"]
+                        result["rt_si_score"] = rt_si_value
                         result["vru_index"] = rt_si_data["VRU_index"]
                         result["vehicle_index"] = rt_si_data["VEH_index"]
                         result["raw_crash_rate"] = rt_si_data["raw_crash_rate"]
                         result["eb_crash_rate"] = rt_si_data["eb_crash_rate"]
                     else:
                         # No RT-SI data for this time bin - leave as None
+                        result["rt_si_score"] = None
                         logger.debug(f"No RT-SI data for time bin {time_bin}")
+                    
+                    # Calculate blended safety index
+                    if rt_si_value > 0 and mcdm_value > 0:
+                        result["safety_index"] = alpha * rt_si_value + (1 - alpha) * mcdm_value
+                        result["index_type"] = "Hybrid"
+                    elif rt_si_value > 0:
+                        result["safety_index"] = rt_si_value
+                        result["index_type"] = "RT-SI-Full"
+                    elif mcdm_value > 0:
+                        result["safety_index"] = mcdm_value
+                        result["index_type"] = "Blended"  # Still using blending formula
+                    else:
+                        result["safety_index"] = 0.0
+                        result["index_type"] = "No Data"
 
                 # Add RT-SI component data for correlation analysis
                 for result in results:
@@ -748,15 +819,31 @@ def get_safety_score_trend(
 
                 logger.info(
                     f"Successfully calculated safety scores: {len(results)} MCDM points, "
-                    f"{len(rt_si_results)} RT-SI points (blending to be done in frontend)"
+                    f"{len(rt_si_results)} RT-SI points, blended with alpha={alpha}"
                 )
 
             except Exception as e:
                 logger.error(f"Error calculating RT-SI trend: {e}", exc_info=True)
+                # Ensure all results have safety_index and index_type even if RT-SI fails
+                for result in results:
+                    if "safety_index" not in result:
+                        mcdm_value = result.get("mcdm_index", 0.0) or 0.0
+                        result["safety_index"] = mcdm_value
+                        result["index_type"] = "Blended" if mcdm_value > 0 else "No Data"
         else:
             logger.warning(f"No valid crash intersection found for '{intersection}'")
+            # Ensure all results have safety_index and index_type
+            for result in results:
+                mcdm_value = result.get("mcdm_index", 0.0) or 0.0
+                result["safety_index"] = mcdm_value
+                result["index_type"] = "Blended" if mcdm_value > 0 else "No Data"
     else:
         logger.warning(f"No crash intersection found for '{intersection}'")
+        # Ensure all results have safety_index and index_type
+        for result in results:
+            mcdm_value = result.get("mcdm_index", 0.0) or 0.0
+            result["safety_index"] = mcdm_value
+            result["index_type"] = "Blended" if mcdm_value > 0 else "No Data"
 
     # Compute correlation analysis if requested and we have enough data
     correlation_analysis = None

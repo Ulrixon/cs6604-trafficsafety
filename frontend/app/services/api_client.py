@@ -184,9 +184,9 @@ def fetch_latest_blended_scores(alpha: float = 0.7) -> tuple[List[dict], Optiona
     Fetch latest safety scores with RT-SI blending for all intersections.
 
     Strategy:
-    1. Call /safety/index/?include_rtsi=true to get both MCDM and RT-SI in one call
-    2. Blend the scores in the frontend based on alpha parameter
-    3. Much faster than calling /time/specific for each intersection
+    1. Call /safety/index/?alpha=X to get blended data from backend
+    2. API returns safety_index (blended), rt_si_index, and mcdm_index
+    3. Frontend can recalculate blend with different alpha if needed
 
     Args:
         alpha: Blending coefficient (0.0 = MCDM only, 1.0 = RT-SI only)
@@ -198,17 +198,14 @@ def fetch_latest_blended_scores(alpha: float = 0.7) -> tuple[List[dict], Optiona
         api_base = API_URL.rstrip("/")
         session = _get_session_with_retries()
 
-        # Determine whether we need RT-SI data
-        include_rtsi = alpha > 0.0
-
-        # Call the optimized endpoint
-        params = {}
-        if include_rtsi:
-            params["include_rtsi"] = "true"
-            params["bin_minutes"] = 15
+        # Call the endpoint with alpha parameter
+        params = {
+            "alpha": alpha,
+            "include_mcdm": "true",
+            "bin_minutes": 15
+        }
 
         # Use configured timeout for this heavy calculation endpoint
-        # The RT-SI calculation for all intersections can take time
         response = session.get(
             f"{api_base}/safety/index/", params=params, timeout=API_TIMEOUT
         )
@@ -219,32 +216,44 @@ def fetch_latest_blended_scores(alpha: float = 0.7) -> tuple[List[dict], Optiona
         if not intersections:
             return _load_fallback_data(), "No intersections available"
 
-        # Transform to expected format and blend scores in frontend
+        # Transform to expected format
         results = []
         for item in intersections:
-            mcdm = item.get("mcdm_index") or item.get("safety_index", 50.0)
-            rt_si = item.get("rt_si_score")
+            # New API structure:
+            # - safety_index: Blended score (already calculated by backend)
+            # - rt_si_index: Raw RT-SI score
+            # - mcdm_index: Raw MCDM score
+            
+            safety_index = item.get("safety_index", 0.0)
+            rt_si = item.get("rt_si_index", 0.0)
+            mcdm = item.get("mcdm_index", 0.0)
+            
+            # Handle None values - convert to 0
+            if safety_index is None:
+                safety_index = 0.0
+            if rt_si is None:
+                rt_si = 0.0
+            if mcdm is None:
+                mcdm = 0.0
 
-            # Calculate blended final safety index
-            # Formula: SI_Final = α * RT-SI + (1-α) * MCDM
-            if rt_si is not None and alpha > 0.0:
-                final_index = alpha * rt_si + (1 - alpha) * mcdm
-            else:
-                # No RT-SI data or alpha=0, use MCDM only
-                final_index = mcdm
+            # Frontend can recalculate blend if alpha changes dynamically
+            # For now, use the backend-calculated blend
+            final_index = safety_index
 
             intersection_data = {
                 "intersection_id": item.get("intersection_id"),
                 "intersection_name": item.get("intersection_name"),
-                "safety_index": final_index,  # Blended score
-                "mcdm_index": mcdm,
-                "rt_si_score": rt_si,
+                "safety_index": final_index,  # Blended score from backend
+                "mcdm_index": mcdm,  # Raw MCDM
+                "rt_si_score": rt_si,  # Raw RT-SI (from rt_si_index)
+                "rt_si_index": rt_si,  # Also store as rt_si_index
                 "final_safety_index": final_index,
                 "traffic_volume": float(item.get("traffic_volume", 0)),
-                "vru_index": item.get("vru_index"),
-                "vehicle_index": item.get("vehicle_index"),
+                "vru_index": item.get("vru_index"),  # Not in new API
+                "vehicle_index": item.get("vehicle_index"),  # Not in new API
                 "latitude": item.get("latitude"),
                 "longitude": item.get("longitude"),
+                "index_type": item.get("index_type", "MCDM"),
             }
             results.append(intersection_data)
 

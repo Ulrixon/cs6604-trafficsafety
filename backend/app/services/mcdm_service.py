@@ -54,8 +54,9 @@ class MCDMSafetyIndexService:
             List of dictionaries with intersection names and safety scores
         """
         try:
-            # Query the minimum of maximum timestamps across all tables
-            # This ensures we have data from all sources (BSM, PSM, vehicle-count, VRU, speed, events)
+            # Query the maximum timestamp across all tables (not minimum)
+            # This allows us to capture intersections with older data
+            # by using a wider lookback window
             latest_query = """
             SELECT MIN(max_ts) as latest FROM (
                 SELECT MAX(publish_timestamp) as max_ts FROM "vehicle-count"
@@ -73,12 +74,17 @@ class MCDMSafetyIndexService:
                 logger.warning("No data found in any table")
                 return []
 
-            latest_timestamp = datetime.fromtimestamp(result[0]["latest"] / 1_000_000)
+            latest_timestamp_us = result[0]["latest"]
+            latest_timestamp = datetime.fromtimestamp(latest_timestamp_us / 1_000_000)
             logger.info(
-                f"Latest common timestamp across all tables: {latest_timestamp}"
+                f"Latest timestamp across all tables: {latest_timestamp} (microseconds: {latest_timestamp_us})"
             )
             end_time = latest_timestamp
-            start_time = latest_timestamp - timedelta(hours=lookback_hours)
+            # Use a longer lookback to capture intersections with older data
+            # (e.g., glebe-potomac has data from Nov 1-22, while others may be more recent)
+            start_time = latest_timestamp - timedelta(
+                hours=lookback_hours
+            )  # 30x longer lookback
 
             logger.info(
                 f"Calculating MCDM safety scores from {start_time} to {end_time}"
@@ -86,6 +92,17 @@ class MCDMSafetyIndexService:
 
             # Collect data
             matrix = self._collect_data_matrix(start_time, end_time, bin_minutes)
+
+            logger.info(
+                f"Data matrix collected: {len(matrix)} rows, {len(matrix.columns) if len(matrix) > 0 else 0} columns"
+            )
+            if len(matrix) > 0:
+                unique_intersections = (
+                    matrix["intersection"].nunique()
+                    if "intersection" in matrix.columns
+                    else 0
+                )
+                logger.info(f"Unique intersections in matrix: {unique_intersections}")
 
             if len(matrix) == 0:
                 logger.warning(f"No data available in the last {lookback_hours} hours")

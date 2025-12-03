@@ -454,7 +454,7 @@ class RTSIService:
         intersection_id,
         timestamp: datetime,
         bin_minutes: int = 15,
-        lookback_hours: int = 168,
+        lookback_hours: int = 24,
     ) -> Dict:
         """
         Get real-time traffic data for the given time bin.
@@ -475,51 +475,33 @@ class RTSIService:
         - free_flow_speed: free-flow speed (85th percentile)
         """
 
-        # Start search from requested timestamp and look back if needed
-        current_timestamp = timestamp
-        lookback_limit = timestamp - timedelta(hours=lookback_hours)
-
         # Normalize to short-name for real-time tables
         intersection_identifier = self._to_short_name(intersection_id)
 
-        while current_timestamp >= lookback_limit:
-            end_time = current_timestamp + timedelta(minutes=bin_minutes)
-            start_time_us = int(current_timestamp.timestamp() * 1000000)
-            end_time_us = int(end_time.timestamp() * 1000000)
+        # OPTIMIZATION: Find the latest available data timestamp within lookback window
+        # in a single query instead of checking each bin sequentially
+        lookback_limit = timestamp - timedelta(hours=lookback_hours)
+        lookback_limit_us = int(lookback_limit.timestamp() * 1000000)
+        timestamp_us = int(timestamp.timestamp() * 1000000)
 
-            # Check if data exists for this time bin
-            check_query = """
-            SELECT COUNT(*) as count
-            FROM "vehicle-count"
-            WHERE intersection = %(intersection_id)s::text
-              AND publish_timestamp >= %(start_time)s
-              AND publish_timestamp < %(end_time)s;
-            """
+        latest_data_query = """
+        SELECT MAX(publish_timestamp) as latest_ts
+        FROM "vehicle-count"
+        WHERE intersection = %(intersection_id)s::text
+          AND publish_timestamp >= %(lookback_limit)s
+          AND publish_timestamp <= %(timestamp)s;
+        """
 
-            check_result = self.db_client.execute_query(
-                check_query,
-                {
-                    "intersection_id": intersection_identifier,
-                    "start_time": start_time_us,
-                    "end_time": end_time_us,
-                },
-            )
+        latest_result = self.db_client.execute_query(
+            latest_data_query,
+            {
+                "intersection_id": intersection_identifier,
+                "lookback_limit": lookback_limit_us,
+                "timestamp": timestamp_us,
+            },
+        )
 
-            has_data = check_result and check_result[0]["count"] > 0
-
-            if has_data:
-                # Found a bin with data
-                if current_timestamp != timestamp:
-                    hours_back = (timestamp - current_timestamp).total_seconds() / 3600
-                    logger.info(
-                        f"No data at {timestamp}, using data from time bin {current_timestamp} to {end_time} "
-                        f"({hours_back:.1f} hours earlier)"
-                    )
-                break
-
-            # Move back one bin
-            current_timestamp -= timedelta(minutes=bin_minutes)
-        else:
+        if not latest_result or not latest_result[0]["latest_ts"]:
             # No data found within lookback window
             logger.warning(
                 f"No data found for intersection {intersection_id} within {lookback_hours} hours of {timestamp}. "
@@ -533,6 +515,27 @@ class RTSIService:
                 "speed_variance": 0.0,
                 "free_flow_speed": 30.0,
             }
+
+        # Find the time bin that contains the latest data
+        latest_ts_us = latest_result[0]["latest_ts"]
+        latest_ts = datetime.fromtimestamp(latest_ts_us / 1000000)
+
+        # Align to bin boundaries
+        bin_microseconds = bin_minutes * 60 * 1000000
+        bin_start_us = (latest_ts_us // bin_microseconds) * bin_microseconds
+        current_timestamp = datetime.fromtimestamp(bin_start_us / 1000000)
+
+        if current_timestamp != timestamp:
+            hours_back = (timestamp - current_timestamp).total_seconds() / 3600
+            logger.info(
+                f"No data at {timestamp}, using data from time bin starting at {current_timestamp} "
+                f"({hours_back:.1f} hours earlier)"
+            )
+
+        # Calculate bin time range for queries
+        end_time = current_timestamp + timedelta(minutes=bin_minutes)
+        start_time_us = int(current_timestamp.timestamp() * 1000000)
+        end_time_us = int(end_time.timestamp() * 1000000)
 
         # Query vehicle count and turning movements
         vehicle_query = """
@@ -764,7 +767,7 @@ class RTSIService:
         timestamp: datetime,
         bin_minutes: int = 15,
         realtime_intersection: Optional[str] = None,
-        lookback_hours: int = 168,
+        lookback_hours: int = 24,
     ) -> Optional[Dict]:
         """
         Calculate Real-Time Safety Index for an intersection at a given time.

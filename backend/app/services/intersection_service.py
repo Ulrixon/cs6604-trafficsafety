@@ -129,23 +129,62 @@ def compute_current_indices(
         mcdm_service = MCDMSafetyIndexService(db_client)
 
         # Calculate latest safety scores
+        # Use extended lookback to capture older data (30 days = 720 hours)
         safety_scores = mcdm_service.calculate_latest_safety_scores(
             bin_minutes=settings.MCDM_BIN_MINUTES,
-            lookback_hours=settings.MCDM_LOOKBACK_HOURS,
+            lookback_hours=720,  # 30 days lookback for older datasets
         )
 
-        if not safety_scores:
+        # Build a dict mapping intersection names to their safety scores
+        # Key by both original and normalized names for flexible lookup
+        from ..core.intersection_mapping import normalize_intersection_name
+
+        safety_scores_dict = {}
+        if safety_scores:
+            for score_data in safety_scores:
+                intersection_name = score_data["intersection"]
+                # Store by original name
+                safety_scores_dict[intersection_name] = score_data
+                # Also store by normalized version for flexible lookup
+                normalized = normalize_intersection_name(intersection_name)
+                if normalized != intersection_name:
+                    safety_scores_dict[normalized] = score_data
+        else:
             logger.warning("No safety scores computed - no data available")
-            return []
 
         intersections = []
         db_client = get_db_client()
         from ..api.intersection import find_crash_intersection_for_bsm
 
-        for idx, score_data in enumerate(safety_scores):
-            intersection_name = score_data["intersection"]
+        # Process all intersections from mapping_results, not just those with safety scores
+        intersections_to_process = []
+        if mapping_results:
+            # Use all mapped intersections
+            intersections_to_process = list(mapping_results.keys())
+            logger.info(
+                f"Processing {len(intersections_to_process)} mapped intersections"
+            )
+        elif safety_scores:
+            # Fallback to only intersections with safety scores
+            intersections_to_process = [s["intersection"] for s in safety_scores]
+            logger.info(
+                f"Processing {len(intersections_to_process)} intersections with safety scores"
+            )
+
+        for idx, intersection_name in enumerate(intersections_to_process):
+            score_data = safety_scores_dict.get(intersection_name)
+            # Try normalized name if direct lookup fails
+            if score_data is None:
+                normalized = normalize_intersection_name(intersection_name)
+                score_data = safety_scores_dict.get(normalized)
+                if score_data:
+                    logger.debug(
+                        f"Found safety data for '{intersection_name}' using normalized name '{normalized}'"
+                    )
             # Debug: log intersection being processed
-            logger.debug(f"Processing MCDM intersection: {intersection_name}")
+            logger.debug(
+                f"Processing intersection: {intersection_name}, has_safety_data={score_data is not None}"
+            )
             # Always use mapping_results if provided and has lat/lon
             mapping = None
             normalized = None
@@ -224,12 +263,25 @@ def compute_current_indices(
                     continue
                 longitude = mapping.get("lon", 0.0)
                 latitude = mapping.get("lat", 0.0)
+
+            # Use safety score data if available, otherwise use default/null values
+            if score_data:
+                safety_index = score_data["safety_score"]
+                traffic_volume = score_data["vehicle_count"]
+            else:
+                # No safety data available, use null/default values
+                safety_index = None
+                traffic_volume = 0
+                logger.info(
+                    f"Including intersection '{intersection_name}' without safety data"
+                )
+
             intersections.append(
                 Intersection(
                     intersection_id=100 + idx + 1,  # Generate sequential IDs
                     intersection_name=intersection_name,
-                    safety_index=score_data["safety_score"],
-                    traffic_volume=score_data["vehicle_count"],
+                    safety_index=safety_index,
+                    traffic_volume=traffic_volume,
                     longitude=longitude,
                     latitude=latitude,
                 )

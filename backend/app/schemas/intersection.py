@@ -10,20 +10,29 @@ class IntersectionBase(BaseModel):
     """
 
     intersection_name: str = Field(..., example="Glebe & Potomac")
-    safety_index: float = Field(..., ge=0, le=100, example=63.0, description="Primary safety index (RT-SI)")
-    index_type: str = Field(..., example="RT-SI-Full", description="Index calculation method")
-    traffic_volume: int = Field(..., ge=0, example=253)
+    safety_index: Optional[float] = Field(
+        None, ge=0, le=100, example=63.0, description="Primary safety index (null if no data)"
+    )
+    index_type: str = Field(
+        default="RT-SI-Full", example="RT-SI-Full", description="Index calculation method"
+    )
+    traffic_volume: int = Field(default=0, ge=0, example=253)
     longitude: float = Field(..., example=-77.053)
     latitude: float = Field(..., example=38.856)
 
 
 class IntersectionRead(IntersectionBase):
     """
-    Schema returned to the client with primary safety index (RT-SI).
+    Schema returned to the client with blended safety index and components.
     """
 
     intersection_id: int = Field(..., example=101)
-    mcdm_index: Optional[float] = Field(None, ge=0, le=100, example=58.5, description="MCDM comparison metric")
+    mcdm_index: Optional[float] = Field(
+        None, ge=0, le=100, example=58.5, description="MCDM safety score"
+    )
+    rt_si_index: Optional[float] = Field(
+        None, ge=0, le=100, example=45.0, description="RT-SI safety score"
+    )
 
 
 class IntersectionWithRTSI(IntersectionBase):
@@ -32,8 +41,12 @@ class IntersectionWithRTSI(IntersectionBase):
     """
 
     intersection_id: int = Field(..., example=101)
-    mcdm_index: float = Field(
-        ..., ge=0, le=100, example=63.0, description="MCDM-based safety index"
+    mcdm_index: Optional[float] = Field(
+        None,
+        ge=0,
+        le=100,
+        example=63.0,
+        description="MCDM-based safety index (null if no data available)",
     )
     rt_si_score: Optional[float] = Field(
         None, ge=0, le=100, example=45.0, description="Real-Time Safety Index"
@@ -204,6 +217,7 @@ class IntersectionAggregateStats(BaseModel):
 # Database Record Schemas (Dataclasses)
 # ============================================================================
 
+
 @dataclass
 class IntersectionSafetyIndex:
     """
@@ -211,6 +225,7 @@ class IntersectionSafetyIndex:
 
     Used for inserting/querying safety indices in PostgreSQL.
     """
+
     intersection_id: str
     timestamp: datetime
     safety_index: float

@@ -23,12 +23,13 @@ class Intersection(BaseModel):
 
     intersection_id: int = Field(..., description="Unique intersection identifier")
     intersection_name: str = Field(..., description="Intersection name or location")
-    safety_index: float = Field(..., ge=0, le=100, description="Primary safety index (0-100)")
+    safety_index: float = Field(..., ge=0, le=100, description="Blended safety index (0-100)")
     index_type: str = Field(default="MCDM", description="Index calculation method")
     traffic_volume: float = Field(..., ge=0, description="Traffic volume metric")
     latitude: float = Field(..., ge=-90, le=90, description="Latitude coordinate")
     longitude: float = Field(..., ge=-180, le=180, description="Longitude coordinate")
-    mcdm_index: Optional[float] = Field(None, ge=0, le=100, description="MCDM comparison metric")
+    mcdm_index: Optional[float] = Field(None, ge=0, le=100, description="MCDM score")
+    rt_si_index: Optional[float] = Field(None, ge=0, le=100, description="RT-SI score")
 
     @field_validator("safety_index")
     @classmethod
@@ -58,11 +59,12 @@ class Intersection(BaseModel):
             "intersection_id": self.intersection_id,
             "intersection_name": self.intersection_name,
             "safety_index": self.safety_index,
+            "rt_si_index": self.rt_si_index,
+            "mcdm_index": self.mcdm_index,
             "index_type": self.index_type,
             "traffic_volume": self.traffic_volume,
             "latitude": self.latitude,
             "longitude": self.longitude,
-            "mcdm_index": self.mcdm_index,
         }
 
     def get_risk_level(self) -> str:

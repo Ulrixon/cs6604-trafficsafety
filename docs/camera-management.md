@@ -117,6 +117,28 @@ Parameters:
 - `--radius`: Search radius in miles (default: 0.5)
 - `--max-cameras`: Maximum cameras to add per intersection (default: 3)
 
+#### 3b. Auto-Populate ONLY New Intersections
+
+Populate cameras ONLY for intersections that don't have cameras yet. This is ideal for:
+- Initializing cameras for newly added intersections
+- Periodic cron jobs to catch missed intersections
+- Avoiding re-processing of existing cameras
+
+```bash
+python scripts/populate_camera_urls.py --auto-new-only
+```
+
+With custom parameters:
+```bash
+python scripts/populate_camera_urls.py --auto-new-only \
+    --radius 1.0 \
+    --max-cameras 5
+```
+
+**Use Case**: Add this to a daily cron job to automatically populate cameras for any new intersections added by the data collector.
+
+**See Also**: [Camera Auto-Initialization Guide](camera-auto-initialization-guide.md) for complete setup instructions including collector integration and periodic jobs.
+
 #### 4. Auto-Populate Specific Intersection
 
 ```bash

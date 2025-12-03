@@ -116,14 +116,23 @@ This document summarizes the complete implementation of traffic camera integrati
 **Deliverables:**
 - ✓ Admin script: `backend/scripts/populate_camera_urls.py`
 - ✓ Camera management guide: `docs/camera-management.md`
+- ✓ Auto-initialization guide: `docs/camera-auto-initialization-guide.md` (NEW)
 
 **Admin Script Features:**
 - Auto-populate all intersections
+- Auto-populate ONLY new intersections (NEW: `--auto-new-only`)
 - Auto-populate specific intersections
 - Manually add cameras
 - Clear cameras
 - List intersections with status
 - Batch operations with progress reporting
+
+**Auto-Initialization (NEW):**
+- Hybrid approach: collector integration + periodic refresh
+- `--auto-new-only` flag for efficient new intersection handling
+- Cron job setup instructions
+- Integration examples for data collector
+- Monitoring and alerting guidance
 
 **Documentation:**
 - Complete usage guide
@@ -131,6 +140,7 @@ This document summarizes the complete implementation of traffic camera integrati
 - Troubleshooting guide
 - Best practices
 - API reference
+- Collector integration guide (NEW)
 
 ---
 
@@ -169,8 +179,10 @@ frontend/
 
 ```
 docs/
-├── vdot-api-access-request.md         # API access guide
-├── camera-management.md               # Admin guide
+├── vdot-api-access-request.md                    # API access guide
+├── camera-management.md                          # Admin guide
+├── camera-auto-initialization-guide.md           # Collector integration guide (NEW)
+├── camera-integration-test-plan.md               # Test plan
 └── camera-integration-implementation-summary.md  # This file
 ```
 
@@ -593,6 +605,15 @@ See separate file: `docs/camera-integration-test-plan.md` (to be generated)
 ---
 
 ## Changelog
+
+### v1.1.0 (2025-12-03)
+
+**Auto-Initialization Update:**
+- ✓ Added `--auto-new-only` flag to populate only new intersections
+- ✓ Created comprehensive auto-initialization guide
+- ✓ Documented hybrid approach (collector + periodic refresh)
+- ✓ Added cron job setup examples
+- ✓ Provided collector integration code samples
 
 ### v1.0.0 (2025-12-03)
 

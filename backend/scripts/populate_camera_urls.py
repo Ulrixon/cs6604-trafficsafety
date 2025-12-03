@@ -12,6 +12,9 @@ Usage:
     # Auto-populate all intersections
     python populate_camera_urls.py --auto-all
 
+    # Auto-populate ONLY new intersections (without cameras)
+    python populate_camera_urls.py --auto-new-only
+
     # Auto-populate specific intersection
     python populate_camera_urls.py --auto --intersection-id 0
 
@@ -312,6 +315,55 @@ class CameraURLPopulator:
         print(f"✅ Successfully populated: {success_count}")
         print(f"❌ Failed: {failed_count}")
 
+    def auto_populate_new_only(self, radius_miles: float = 0.5, max_cameras: int = 3):
+        """
+        Auto-populate camera URLs ONLY for intersections without cameras
+
+        This is useful for populating newly added intersections without
+        re-processing existing ones.
+
+        Args:
+            radius_miles: Search radius in miles
+            max_cameras: Maximum cameras per intersection
+        """
+        intersections = self.list_intersections()
+
+        # Filter to only intersections without cameras
+        new_intersections = [i for i in intersections if i['camera_count'] == 0]
+
+        print(f"🔄 Auto-populating NEW intersections only")
+        print(f"   Total intersections: {len(intersections)}")
+        print(f"   Without cameras: {len(new_intersections)}")
+        print(f"   Radius: {radius_miles} miles")
+        print(f"   Max cameras: {max_cameras}")
+        print()
+
+        if len(new_intersections) == 0:
+            print("✅ All intersections already have cameras!")
+            return
+
+        success_count = 0
+        failed_count = 0
+
+        for intersection in new_intersections:
+            success = self.auto_populate_intersection(
+                intersection['id'],
+                radius_miles=radius_miles,
+                max_cameras=max_cameras
+            )
+
+            if success:
+                success_count += 1
+            else:
+                failed_count += 1
+
+            print()  # Spacing
+
+        print("=" * 60)
+        print(f"✅ Successfully populated: {success_count}")
+        print(f"❌ Failed: {failed_count}")
+        print(f"📊 Coverage: {len(intersections) - len(new_intersections) + success_count}/{len(intersections)} intersections have cameras")
+
     def display_intersections(self, with_cameras_only: bool = False):
         """
         Display all intersections with their camera status
@@ -357,6 +409,9 @@ Examples:
   # Auto-populate all intersections
   python populate_camera_urls.py --auto-all
 
+  # Auto-populate ONLY new intersections (without cameras)
+  python populate_camera_urls.py --auto-new-only
+
   # Auto-populate specific intersection
   python populate_camera_urls.py --auto --intersection-id 0
 
@@ -377,6 +432,8 @@ Examples:
                         help='List only intersections with cameras')
     parser.add_argument('--auto-all', action='store_true',
                         help='Auto-populate all intersections')
+    parser.add_argument('--auto-new-only', action='store_true',
+                        help='Auto-populate ONLY intersections without cameras (for new intersections)')
     parser.add_argument('--auto', action='store_true',
                         help='Auto-populate specific intersection (requires --intersection-id)')
     parser.add_argument('--add', action='store_true',
@@ -412,6 +469,12 @@ Examples:
 
     elif args.auto_all:
         populator.auto_populate_all(
+            radius_miles=args.radius,
+            max_cameras=args.max_cameras
+        )
+
+    elif args.auto_new_only:
+        populator.auto_populate_new_only(
             radius_miles=args.radius,
             max_cameras=args.max_cameras
         )

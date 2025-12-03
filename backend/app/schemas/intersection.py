@@ -1,7 +1,15 @@
-from pydantic import BaseModel, Field, RootModel
+from pydantic import BaseModel, Field, RootModel, validator
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
+
+
+# Camera link schema for validation
+class CameraLink(BaseModel):
+    """Individual camera link definition"""
+    source: str = Field(..., min_length=1, max_length=50, description="Camera provider (e.g., VDOT, 511)")
+    url: str = Field(..., pattern=r'^https?://', description="Full URL to camera feed or map")
+    label: str = Field(..., min_length=1, max_length=100, description="User-friendly display name")
 
 
 class IntersectionBase(BaseModel):
@@ -24,6 +32,26 @@ class IntersectionRead(IntersectionBase):
 
     intersection_id: int = Field(..., example=101)
     mcdm_index: Optional[float] = Field(None, ge=0, le=100, example=58.5, description="MCDM comparison metric")
+    camera_urls: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Array of camera links for this intersection",
+        example=[
+            {"source": "VDOT", "url": "https://511virginia.org/camera/CAM123", "label": "VDOT Camera - Main St"},
+            {"source": "511", "url": "https://511.vdot.virginia.gov/map?lat=37.5&lon=-77.4", "label": "View on 511 Map"}
+        ]
+    )
+
+    @validator('camera_urls')
+    def validate_camera_structure(cls, v):
+        """Ensure camera_urls conform to CameraLink schema if present"""
+        if v is None:
+            return v
+        try:
+            return [CameraLink(**cam).dict() for cam in v]
+        except Exception as e:
+            # If validation fails, return None rather than raising error
+            # This ensures backward compatibility with existing data
+            return None
 
 
 class IntersectionWithRTSI(IntersectionBase):
@@ -44,7 +72,21 @@ class IntersectionWithRTSI(IntersectionBase):
     vehicle_index: Optional[float] = Field(
         None, ge=0, le=100, example=42.0, description="Vehicle sub-index"
     )
+    camera_urls: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Array of camera links for this intersection"
+    )
     timestamp: datetime = Field(..., description="Timestamp of the data")
+
+    @validator('camera_urls')
+    def validate_camera_structure(cls, v):
+        """Ensure camera_urls conform to CameraLink schema if present"""
+        if v is None:
+            return v
+        try:
+            return [CameraLink(**cam).dict() for cam in v]
+        except Exception as e:
+            return None
 
 
 # Optional: list wrapper (FastAPI can also use List[IntersectionRead] directly)

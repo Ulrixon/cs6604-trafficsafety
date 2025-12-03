@@ -22,6 +22,12 @@ init(autoreset=True)
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
+# Import psycopg2 for database testing
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
 class CameraIntegrationTester:
     """Automated test suite for camera integration"""
 
@@ -43,26 +49,26 @@ class CameraIntegrationTester:
 
     def print_test(self, name: str):
         """Print test name"""
-        print(f"{Fore.YELLOW}▶ {name}...{Style.RESET_ALL}", end=" ", flush=True)
+        print(f"{Fore.YELLOW}> {name}...{Style.RESET_ALL}", end=" ", flush=True)
 
     def print_pass(self, message: str = ""):
         """Print test pass"""
         self.passed += 1
         msg = f" ({message})" if message else ""
-        print(f"{Fore.GREEN}✓ PASS{msg}{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}[PASS]{msg}{Style.RESET_ALL}")
 
     def print_fail(self, message: str):
         """Print test failure"""
         self.failed += 1
-        print(f"{Fore.RED}✗ FAIL: {message}{Style.RESET_ALL}")
+        print(f"{Fore.RED}[FAIL]: {message}{Style.RESET_ALL}")
 
     def print_warning(self, message: str):
         """Print warning"""
-        print(f"{Fore.YELLOW}⚠ WARNING: {message}{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}[WARNING]: {message}{Style.RESET_ALL}")
 
     def print_info(self, message: str):
         """Print info"""
-        print(f"{Fore.BLUE}ℹ {message}{Style.RESET_ALL}")
+        print(f"{Fore.BLUE}[INFO] {message}{Style.RESET_ALL}")
 
     def run_command(self, cmd: List[str], check: bool = True) -> Tuple[int, str, str]:
         """Run shell command and return (returncode, stdout, stderr)"""
@@ -114,43 +120,66 @@ class CameraIntegrationTester:
         """Test database migration and setup"""
         self.print_header("Test Suite 2: Database Migration")
 
+        if psycopg2 is None:
+            self.print_fail("psycopg2 not installed")
+            self.print_info("Run: pip install psycopg2-binary")
+            return False
+
         # Test database connection
         self.print_test("Database connection")
-        code, stdout, stderr = self.run_command([
-            'psql', self.db_url, '-c', 'SELECT version();'
-        ], check=False)
-
-        if code == 0:
+        try:
+            conn = psycopg2.connect(self.db_url)
+            cursor = conn.cursor()
+            cursor.execute("SELECT version();")
+            version = cursor.fetchone()
+            cursor.close()
+            conn.close()
             self.print_pass("Connected successfully")
-        else:
-            self.print_fail(f"Cannot connect: {stderr}")
+        except Exception as e:
+            self.print_fail(f"Cannot connect: {str(e)}")
             return False
 
         # Test camera_urls column exists
         self.print_test("camera_urls column exists")
-        code, stdout, stderr = self.run_command([
-            'psql', self.db_url, '-t', '-c',
-            "SELECT column_name FROM information_schema.columns WHERE table_name='intersections' AND column_name='camera_urls';"
-        ], check=False)
+        try:
+            conn = psycopg2.connect(self.db_url)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='intersections' AND column_name='camera_urls';"
+            )
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
 
-        if 'camera_urls' in stdout:
-            self.print_pass("Column exists")
-        else:
-            self.print_fail("Column not found - run migration first")
-            self.print_info("Run: psql $DATABASE_URL -f backend/db/init/03_add_camera_urls.sql")
+            if result and 'camera_urls' in result:
+                self.print_pass("Column exists")
+            else:
+                self.print_fail("Column not found - run migration first")
+                self.print_info("Run migration: backend/db/init/03_add_camera_urls.sql")
+                return False
+        except Exception as e:
+            self.print_fail(f"Query failed: {str(e)}")
             return False
 
         # Test validation function exists
         self.print_test("validate_camera_url_structure function exists")
-        code, stdout, stderr = self.run_command([
-            'psql', self.db_url, '-t', '-c',
-            "SELECT proname FROM pg_proc WHERE proname='validate_camera_url_structure';"
-        ], check=False)
+        try:
+            conn = psycopg2.connect(self.db_url)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT proname FROM pg_proc WHERE proname='validate_camera_url_structure';"
+            )
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
 
-        if 'validate_camera_url_structure' in stdout:
-            self.print_pass("Function exists")
-        else:
-            self.print_fail("Function not found")
+            if result and 'validate_camera_url_structure' in result:
+                self.print_pass("Function exists")
+            else:
+                self.print_fail("Function not found")
+        except Exception as e:
+            self.print_fail(f"Query failed: {str(e)}")
 
         return True
 
@@ -173,10 +202,10 @@ class CameraIntegrationTester:
             return False
 
         # Test clear command (cleanup)
-        self.print_test("Clear test intersection (ID 0)")
+        self.print_test("Clear test intersection (ID 1)")
         code, stdout, stderr = self.run_command([
             'python', 'scripts/populate_camera_urls.py',
-            '--clear', '--intersection-id', '0'
+            '--clear', '--intersection-id', '1'
         ], check=False)
 
         if code == 0:
@@ -185,17 +214,17 @@ class CameraIntegrationTester:
             self.print_warning(f"Clear failed: {stderr}")
 
         # Test add command
-        self.print_test("Add test camera to intersection 0")
+        self.print_test("Add test camera to intersection 1")
         code, stdout, stderr = self.run_command([
             'python', 'scripts/populate_camera_urls.py',
             '--add',
-            '--intersection-id', '0',
+            '--intersection-id', '1',
             '--source', 'TEST',
             '--url', 'https://511.vdot.virginia.gov/map?lat=37.2&lon=-80.4',
             '--label', 'Automated Test Camera'
         ], check=False)
 
-        if code == 0 and 'Updated' in stdout:
+        if code == 0 and ('[SUCCESS]' in stdout or 'Updated' in stdout):
             self.print_pass("Camera added successfully")
         else:
             self.print_fail(f"Add failed: {stderr}")
@@ -203,15 +232,22 @@ class CameraIntegrationTester:
 
         # Verify camera was added
         self.print_test("Verify camera in database")
-        code, stdout, stderr = self.run_command([
-            'psql', self.db_url, '-t', '-c',
-            "SELECT jsonb_array_length(camera_urls) FROM intersections WHERE id=0;"
-        ], check=False)
+        try:
+            conn = psycopg2.connect(self.db_url)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT jsonb_array_length(camera_urls) FROM intersections WHERE id=1;"
+            )
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
 
-        if '1' in stdout:
-            self.print_pass("Camera verified in database")
-        else:
-            self.print_fail("Camera not found in database")
+            if result and result[0] == 1:
+                self.print_pass("Camera verified in database")
+            else:
+                self.print_fail(f"Camera not found in database (got {result})")
+        except Exception as e:
+            self.print_fail(f"Verification failed: {str(e)}")
 
         return True
 
@@ -387,14 +423,14 @@ class CameraIntegrationTester:
             self.print_fail(f"Field check failed: {e}")
 
         # Test specific intersection
-        self.print_test("GET /api/v1/safety/index/0")
+        self.print_test("GET /api/v1/safety/index/1")
         try:
-            response = requests.get('http://localhost:8000/api/v1/safety/index/0', timeout=5)
+            response = requests.get('http://localhost:8000/api/v1/safety/index/1', timeout=5)
 
             if response.status_code == 200:
                 data = response.json()
                 cameras = data.get('camera_urls', [])
-                self.print_pass(f"{len(cameras)} camera(s) for intersection 0")
+                self.print_pass(f"{len(cameras)} camera(s) for intersection 1")
             else:
                 self.print_warning(f"Status code: {response.status_code}")
         except Exception as e:
@@ -408,50 +444,70 @@ class CameraIntegrationTester:
         """Test database query functions"""
         self.print_header("Test Suite 7: Database Queries")
 
+        if psycopg2 is None:
+            self.print_warning("psycopg2 not installed - skipping database query tests")
+            return True
+
         # Test validation function
         self.print_test("validate_camera_url_structure(valid)")
-        code, stdout, stderr = self.run_command([
-            'psql', self.db_url, '-t', '-c',
-            "SELECT validate_camera_url_structure('[{\"source\": \"VDOT\", \"url\": \"https://test.com\", \"label\": \"Test\"}]'::jsonb);"
-        ], check=False)
+        try:
+            conn = psycopg2.connect(self.db_url)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT validate_camera_url_structure('[{\"source\": \"VDOT\", \"url\": \"https://test.com\", \"label\": \"Test\"}]'::jsonb);"
+            )
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
 
-        if 't' in stdout:
-            self.print_pass("Valid structure accepted")
-        else:
-            self.print_fail("Validation function failed")
+            if result and result[0] is True:
+                self.print_pass("Valid structure accepted")
+            else:
+                self.print_fail("Validation function failed")
+        except Exception as e:
+            self.print_fail(f"Query failed: {str(e)}")
 
         # Test invalid structure
         self.print_test("validate_camera_url_structure(invalid)")
-        code, stdout, stderr = self.run_command([
-            'psql', self.db_url, '-t', '-c',
-            "SELECT validate_camera_url_structure('[{\"source\": \"VDOT\"}]'::jsonb);"
-        ], check=False)
+        try:
+            conn = psycopg2.connect(self.db_url)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT validate_camera_url_structure('[{\"source\": \"VDOT\"}]'::jsonb);"
+            )
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
 
-        if 'f' in stdout:
-            self.print_pass("Invalid structure rejected")
-        else:
-            self.print_fail("Validation function accepted invalid data")
+            if result and result[0] is False:
+                self.print_pass("Invalid structure rejected")
+            else:
+                self.print_fail("Validation function accepted invalid data")
+        except Exception as e:
+            self.print_fail(f"Query failed: {str(e)}")
 
         # Test coverage statistics
         self.print_test("Coverage statistics query")
-        code, stdout, stderr = self.run_command([
-            'psql', self.db_url, '-t', '-c',
-            """SELECT
-                COUNT(*) as total,
-                COUNT(*) FILTER (WHERE camera_urls IS NOT NULL) as with_cameras
-            FROM intersections;"""
-        ], check=False)
+        try:
+            conn = psycopg2.connect(self.db_url)
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT
+                    COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE camera_urls IS NOT NULL) as with_cameras
+                FROM intersections;"""
+            )
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
 
-        if code == 0:
-            parts = stdout.strip().split('|')
-            if len(parts) == 2:
-                total = parts[0].strip()
-                with_cameras = parts[1].strip()
+            if result:
+                total, with_cameras = result
                 self.print_pass(f"{with_cameras}/{total} intersections have cameras")
             else:
                 self.print_pass("Query executed")
-        else:
-            self.print_fail("Query failed")
+        except Exception as e:
+            self.print_fail(f"Query failed: {str(e)}")
 
         return True
 
@@ -525,10 +581,10 @@ class CameraIntegrationTester:
             print(f"Success Rate: {success_rate:.1f}%")
 
         if self.failed == 0:
-            print(f"\n{Fore.GREEN}✓ All tests passed!{Style.RESET_ALL}\n")
+            print(f"\n{Fore.GREEN}[SUCCESS] All tests passed!{Style.RESET_ALL}\n")
             return 0
         else:
-            print(f"\n{Fore.RED}✗ Some tests failed{Style.RESET_ALL}\n")
+            print(f"\n{Fore.RED}[FAILURE] Some tests failed{Style.RESET_ALL}\n")
             return 1
 
 
@@ -549,6 +605,14 @@ def main():
         print("Installing requests for API testing...")
         subprocess.run(['pip', 'install', 'requests'], check=True)
         import requests
+
+    # Check if psycopg2 is installed
+    try:
+        import psycopg2
+    except ImportError:
+        print("Installing psycopg2-binary for database testing...")
+        subprocess.run(['pip', 'install', 'psycopg2-binary'], check=True)
+        import psycopg2
 
     tester = CameraIntegrationTester()
     return tester.run_all_tests()

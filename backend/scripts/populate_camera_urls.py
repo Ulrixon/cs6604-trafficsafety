@@ -39,7 +39,7 @@ from typing import List, Dict, Optional
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app.services.vdot_camera_service import VDOTCameraService
-from app.db.connection import get_db_session
+from app.db.connection import get_db_session, init_db
 from sqlalchemy import text
 
 
@@ -51,10 +51,21 @@ class CameraURLPopulator:
         self.db = None
         self.camera_service = VDOTCameraService()
 
+        # Initialize database if not already initialized
+        database_url = os.getenv('DATABASE_URL')
+        if not database_url:
+            raise ValueError("DATABASE_URL environment variable not set")
+
+        try:
+            init_db(database_url)
+        except Exception:
+            # Database may already be initialized, which is fine
+            pass
+
     def get_db_connection(self):
         """Get database connection"""
         if self.db is None:
-            self.db = next(get_db_session())
+            self.db = get_db_session()
         return self.db
 
     def list_intersections(self) -> List[Dict]:
@@ -146,10 +157,10 @@ class CameraURLPopulator:
         # Get intersection details
         intersection = self.get_intersection(intersection_id)
         if not intersection:
-            print(f"❌ Intersection {intersection_id} not found")
+            print(f"[ERROR] Intersection {intersection_id} not found")
             return False
 
-        print(f"📍 Processing: {intersection['name']} (ID: {intersection_id})")
+        print(f"* Processing: {intersection['name']} (ID: {intersection_id})")
         print(f"   Location: ({intersection['latitude']:.4f}, {intersection['longitude']:.4f})")
 
         # Find nearby cameras
@@ -186,7 +197,7 @@ class CameraURLPopulator:
 
             query = text("""
                 UPDATE intersections
-                SET camera_urls = :camera_urls::jsonb,
+                SET camera_urls = CAST(:camera_urls AS jsonb),
                     updated_at = NOW()
                 WHERE id = :id
             """)
@@ -194,7 +205,7 @@ class CameraURLPopulator:
             db.execute(query, {'id': intersection_id, 'camera_urls': camera_json})
             db.commit()
 
-            print(f"✅ Updated intersection {intersection_id} with {len(camera_urls)} camera(s)")
+            print(f"[SUCCESS] Updated intersection {intersection_id} with {len(camera_urls)} camera(s)")
             for cam in camera_urls:
                 print(f"   - {cam['source']}: {cam['label']}")
 
@@ -202,7 +213,7 @@ class CameraURLPopulator:
 
         except Exception as e:
             db.rollback()
-            print(f"❌ Error updating intersection {intersection_id}: {e}")
+            print(f"[ERROR] Error updating intersection {intersection_id}: {e}")
             return False
 
     def add_camera_url(
@@ -227,7 +238,7 @@ class CameraURLPopulator:
         # Get existing cameras
         intersection = self.get_intersection(intersection_id)
         if not intersection:
-            print(f"❌ Intersection {intersection_id} not found")
+            print(f"[ERROR] Intersection {intersection_id} not found")
             return False
 
         # Get current camera URLs
@@ -271,12 +282,12 @@ class CameraURLPopulator:
             db.execute(query, {'id': intersection_id})
             db.commit()
 
-            print(f"✅ Cleared camera URLs for intersection {intersection_id}")
+            print(f"[SUCCESS] Cleared camera URLs for intersection {intersection_id}")
             return True
 
         except Exception as e:
             db.rollback()
-            print(f"❌ Error clearing cameras for intersection {intersection_id}: {e}")
+            print(f"[ERROR] Error clearing cameras for intersection {intersection_id}: {e}")
             return False
 
     def auto_populate_all(self, radius_miles: float = 0.5, max_cameras: int = 3):
@@ -312,8 +323,8 @@ class CameraURLPopulator:
             print()  # Spacing
 
         print("=" * 60)
-        print(f"✅ Successfully populated: {success_count}")
-        print(f"❌ Failed: {failed_count}")
+        print(f"[SUCCESS] Successfully populated: {success_count}")
+        print(f"[ERROR] Failed: {failed_count}")
 
     def auto_populate_new_only(self, radius_miles: float = 0.5, max_cameras: int = 3):
         """
@@ -339,7 +350,7 @@ class CameraURLPopulator:
         print()
 
         if len(new_intersections) == 0:
-            print("✅ All intersections already have cameras!")
+            print("[SUCCESS] All intersections already have cameras!")
             return
 
         success_count = 0
@@ -360,8 +371,8 @@ class CameraURLPopulator:
             print()  # Spacing
 
         print("=" * 60)
-        print(f"✅ Successfully populated: {success_count}")
-        print(f"❌ Failed: {failed_count}")
+        print(f"[SUCCESS] Successfully populated: {success_count}")
+        print(f"[ERROR] Failed: {failed_count}")
         print(f"📊 Coverage: {len(intersections) - len(new_intersections) + success_count}/{len(intersections)} intersections have cameras")
 
     def display_intersections(self, with_cameras_only: bool = False):
@@ -376,11 +387,11 @@ class CameraURLPopulator:
         if with_cameras_only:
             intersections = [i for i in intersections if i['camera_count'] > 0]
 
-        print(f"📍 Intersections ({len(intersections)} total)")
+        print(f"* Intersections ({len(intersections)} total)")
         print("=" * 80)
 
         for intersection in intersections:
-            camera_indicator = "📹" if intersection['camera_count'] > 0 else "⚫"
+            camera_indicator = "[CAM]" if intersection['camera_count'] > 0 else "[ - ]"
             print(f"{camera_indicator} ID {intersection['id']}: {intersection['name']}")
             print(f"   Location: ({intersection['latitude']:.4f}, {intersection['longitude']:.4f})")
             print(f"   Cameras: {intersection['camera_count']}")
@@ -480,8 +491,8 @@ Examples:
         )
 
     elif args.auto:
-        if not args.intersection_id:
-            print("❌ Error: --intersection-id required for --auto")
+        if args.intersection_id is None:
+            print("[ERROR] Error: --intersection-id required for --auto")
             return 1
 
         populator.auto_populate_intersection(
@@ -491,8 +502,8 @@ Examples:
         )
 
     elif args.add:
-        if not all([args.intersection_id, args.source, args.url, args.label]):
-            print("❌ Error: --intersection-id, --source, --url, and --label required for --add")
+        if args.intersection_id is None or not args.source or not args.url or not args.label:
+            print("[ERROR] Error: --intersection-id, --source, --url, and --label required for --add")
             return 1
 
         populator.add_camera_url(
@@ -503,8 +514,8 @@ Examples:
         )
 
     elif args.clear:
-        if not args.intersection_id:
-            print("❌ Error: --intersection-id required for --clear")
+        if args.intersection_id is None:
+            print("[ERROR] Error: --intersection-id required for --clear")
             return 1
 
         populator.clear_camera_urls(args.intersection_id)

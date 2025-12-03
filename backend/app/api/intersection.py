@@ -14,6 +14,7 @@ from ..services.intersection_service import get_all, get_by_id
 from ..services.db_client import get_db_client
 from ..services.mcdm_service import MCDMSafetyIndexService
 from ..services.rt_si_service import RTSIService
+from ..services.camera_service import CameraService
 from ..core.config import settings
 from ..core.intersection_mapping import (
     normalize_intersection_name,
@@ -168,6 +169,7 @@ def list_intersections(
     db_client = get_db_client()
     rt_si_service = RTSIService(db_client)
     mcdm_service = MCDMSafetyIndexService(db_client)
+    camera_service = CameraService(db_client)
 
     # Get available BSM intersections
     bsm_intersections = mcdm_service.get_available_intersections()
@@ -293,6 +295,10 @@ def list_intersections(
             result_data["safety_index"] = 0.0
             result_data["index_type"] = "No Data"
             logger.debug(f"No data available for blending")
+
+        # Look up camera URLs for this intersection
+        camera_urls = camera_service.get_cameras_by_name(intersection.intersection_name)
+        result_data["camera_urls"] = camera_urls
 
         results.append(IntersectionRead(**result_data))
 

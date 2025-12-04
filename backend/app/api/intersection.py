@@ -14,7 +14,6 @@ from ..services.intersection_service import get_all, get_by_id
 from ..services.db_client import get_db_client
 from ..services.mcdm_service import MCDMSafetyIndexService
 from ..services.rt_si_service import RTSIService
-from ..services.camera_service import CameraService
 from ..core.config import settings
 from ..core.intersection_mapping import (
     normalize_intersection_name,
@@ -169,7 +168,6 @@ def list_intersections(
     db_client = get_db_client()
     rt_si_service = RTSIService(db_client)
     mcdm_service = MCDMSafetyIndexService(db_client)
-    camera_service = CameraService(db_client)
 
     # Get available BSM intersections
     bsm_intersections = mcdm_service.get_available_intersections()
@@ -198,9 +196,9 @@ def list_intersections(
             "longitude": intersection.longitude,
             "latitude": intersection.latitude,
             "safety_index": None,  # Will be blended score
-            "rt_si_index": None,   # Raw RT-SI score
-            "mcdm_index": None,    # Raw MCDM score
-            "index_type": None,    # Will be set based on calculation
+            "rt_si_index": None,  # Raw RT-SI score
+            "mcdm_index": None,  # Raw MCDM score
+            "index_type": None,  # Will be set based on calculation
         }
 
         # Try to find matching BSM intersection and calculate RT-SI
@@ -276,36 +274,51 @@ def list_intersections(
                 )
 
         # Set MCDM index from base intersection data
-        mcdm_value = intersection.safety_index if intersection.safety_index is not None else 0.0
+        mcdm_value = (
+            intersection.safety_index if intersection.safety_index is not None else 0.0
+        )
+        # Clamp MCDM to [0, 100]
+        mcdm_value = max(0.0, min(100.0, mcdm_value))
         if include_mcdm:
             result_data["mcdm_index"] = mcdm_value
-        
+
         # Get RT-SI value (0 if not calculated)
-        rt_si_value = result_data["rt_si_index"] if result_data["rt_si_index"] is not None else 0.0
-        
+        rt_si_value = (
+            result_data["rt_si_index"]
+            if result_data["rt_si_index"] is not None
+            else 0.0
+        )
+        # Clamp RT-SI to [0, 100]
+        rt_si_value = max(0.0, min(100.0, rt_si_value))
+        result_data["rt_si_index"] = rt_si_value
+
         # Calculate blended safety index: α×RT-SI + (1-α)×MCDM
         # Always apply blending formula if we have data
         if mcdm_value > 0 or rt_si_value > 0:
             result_data["safety_index"] = alpha * rt_si_value + (1 - alpha) * mcdm_value
+            # Clamp final result to [0, 100]
+            result_data["safety_index"] = max(
+                0.0, min(100.0, result_data["safety_index"])
+            )
             # Always show "Blended" when using the alpha blending formula
             result_data["index_type"] = "Blended"
-            logger.debug(f"Blended: {alpha:.2f}×{rt_si_value:.2f} + {1-alpha:.2f}×{mcdm_value:.2f} = {result_data['safety_index']:.2f}")
+            logger.debug(
+                f"Blended: {alpha:.2f}×{rt_si_value:.2f} + {1-alpha:.2f}×{mcdm_value:.2f} = {result_data['safety_index']:.2f}"
+            )
         else:
             # No data at all
             result_data["safety_index"] = 0.0
             result_data["index_type"] = "No Data"
             logger.debug(f"No data available for blending")
 
-        # Look up camera URLs for this intersection
-        camera_urls = camera_service.get_cameras_by_name(intersection.intersection_name)
-        result_data["camera_urls"] = camera_urls
-
         results.append(IntersectionRead(**result_data))
 
     if not results:
         logger.warning("No intersections returned")
     else:
-        logger.info(f"Returning {len(results)} intersections with RT-SI as primary index")
+        logger.info(
+            f"Returning {len(results)} intersections with RT-SI as primary index"
+        )
 
     return results
 
@@ -650,12 +663,22 @@ def get_safety_score_at_time(
     # Calculate blended safety index using alpha parameter
     rt_si_value = result.get("rt_si_score", 0.0) or 0.0
     mcdm_value = result.get("mcdm_index", 0.0) or 0.0
-    
+
+    # Clamp values to [0, 100] to handle floating-point errors
+    rt_si_value = max(0.0, min(100.0, rt_si_value))
+    mcdm_value = max(0.0, min(100.0, mcdm_value))
+    result["rt_si_score"] = (
+        rt_si_value if result.get("rt_si_score") is not None else None
+    )
+    result["mcdm_index"] = mcdm_value
+
     # Blend: α×RT-SI + (1-α)×MCDM
     if rt_si_value > 0 and mcdm_value > 0:
         result["safety_index"] = alpha * rt_si_value + (1 - alpha) * mcdm_value
         result["index_type"] = "Hybrid"
-        logger.info(f"Blended score: {alpha:.2f}×{rt_si_value:.2f} + {1-alpha:.2f}×{mcdm_value:.2f} = {result['safety_index']:.2f}")
+        logger.info(
+            f"Blended score: {alpha:.2f}×{rt_si_value:.2f} + {1-alpha:.2f}×{mcdm_value:.2f} = {result['safety_index']:.2f}"
+        )
     elif rt_si_value > 0:
         result["safety_index"] = rt_si_value
         result["index_type"] = "RT-SI-Full"
@@ -664,6 +687,9 @@ def get_safety_score_at_time(
         result["safety_index"] = mcdm_value
         result["index_type"] = "MCDM"
         logger.info(f"Using MCDM only: {mcdm_value:.2f}")
+
+    # Final clamp on safety_index
+    result["safety_index"] = max(0.0, min(100.0, result["safety_index"]))
 
     return result
 
@@ -728,6 +754,18 @@ def get_safety_score_trend(
             end_time=end_time,
             bin_minutes=bin_minutes,
         )
+
+        # Clamp all MCDM values immediately to handle floating-point errors
+        for result in results:
+            if "mcdm_index" in result and result["mcdm_index"] is not None:
+                result["mcdm_index"] = max(0.0, min(100.0, result["mcdm_index"]))
+            if "saw_score" in result and result["saw_score"] is not None:
+                result["saw_score"] = max(0.0, min(100.0, result["saw_score"]))
+            if "edas_score" in result and result["edas_score"] is not None:
+                result["edas_score"] = max(0.0, min(100.0, result["edas_score"]))
+            if "codas_score" in result and result["codas_score"] is not None:
+                result["codas_score"] = max(0.0, min(100.0, result["codas_score"]))
+
     except Exception as e:
         logger.error(f"Error calculating MCDM trend: {e}", exc_info=True)
         raise HTTPException(
@@ -774,6 +812,12 @@ def get_safety_score_trend(
                     realtime_intersection=realtime_name,
                 )
 
+                if not rt_si_results:
+                    logger.warning(
+                        f"No RT-SI results returned for {intersection} from {start_time} to {end_time}. "
+                        f"This may indicate no BSM data available for this time range."
+                    )
+
                 # Create a map of timestamp -> RT-SI result for quick lookup
                 rt_si_map = {
                     datetime.fromisoformat(r["timestamp"]): r for r in rt_si_results
@@ -784,23 +828,35 @@ def get_safety_score_trend(
                     time_bin = result["time_bin"]
                     rt_si_value = 0.0
                     mcdm_value = result.get("mcdm_index", 0.0) or 0.0
-                    
+
+                    # Clamp MCDM value to [0, 100] to handle floating-point errors
+                    mcdm_value = max(0.0, min(100.0, mcdm_value))
+                    result["mcdm_index"] = mcdm_value
+
                     if time_bin in rt_si_map:
                         rt_si_data = rt_si_map[time_bin]
                         rt_si_value = rt_si_data["RT_SI"]
+                        # Clamp RT-SI to [0, 100]
+                        rt_si_value = max(0.0, min(100.0, rt_si_value))
                         result["rt_si_score"] = rt_si_value
-                        result["vru_index"] = rt_si_data["VRU_index"]
-                        result["vehicle_index"] = rt_si_data["VEH_index"]
+                        result["vru_index"] = max(
+                            0.0, min(100.0, rt_si_data["VRU_index"])
+                        )
+                        result["vehicle_index"] = max(
+                            0.0, min(100.0, rt_si_data["VEH_index"])
+                        )
                         result["raw_crash_rate"] = rt_si_data["raw_crash_rate"]
                         result["eb_crash_rate"] = rt_si_data["eb_crash_rate"]
                     else:
                         # No RT-SI data for this time bin - leave as None
                         result["rt_si_score"] = None
                         logger.debug(f"No RT-SI data for time bin {time_bin}")
-                    
+
                     # Calculate blended safety index
                     if rt_si_value > 0 and mcdm_value > 0:
-                        result["safety_index"] = alpha * rt_si_value + (1 - alpha) * mcdm_value
+                        result["safety_index"] = (
+                            alpha * rt_si_value + (1 - alpha) * mcdm_value
+                        )
                         result["index_type"] = "Hybrid"
                     elif rt_si_value > 0:
                         result["safety_index"] = rt_si_value
@@ -811,6 +867,11 @@ def get_safety_score_trend(
                     else:
                         result["safety_index"] = 0.0
                         result["index_type"] = "No Data"
+
+                    # Final clamp on safety_index to ensure it's within [0, 100]
+                    result["safety_index"] = max(
+                        0.0, min(100.0, result["safety_index"])
+                    )
 
                 # Add RT-SI component data for correlation analysis
                 for result in results:
@@ -835,7 +896,9 @@ def get_safety_score_trend(
                     if "safety_index" not in result:
                         mcdm_value = result.get("mcdm_index", 0.0) or 0.0
                         result["safety_index"] = mcdm_value
-                        result["index_type"] = "Blended" if mcdm_value > 0 else "No Data"
+                        result["index_type"] = (
+                            "Blended" if mcdm_value > 0 else "No Data"
+                        )
         else:
             logger.warning(f"No valid crash intersection found for '{intersection}'")
             # Ensure all results have safety_index and index_type

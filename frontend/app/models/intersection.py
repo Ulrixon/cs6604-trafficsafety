@@ -23,7 +23,9 @@ class Intersection(BaseModel):
 
     intersection_id: int = Field(..., description="Unique intersection identifier")
     intersection_name: str = Field(..., description="Intersection name or location")
-    safety_index: float = Field(..., ge=0, le=100, description="Blended safety index (0-100)")
+    safety_index: float = Field(
+        ..., ge=0, le=100, description="Blended safety index (0-100)"
+    )
     index_type: str = Field(default="MCDM", description="Index calculation method")
     traffic_volume: float = Field(..., ge=0, description="Traffic volume metric")
     latitude: float = Field(..., ge=-90, le=90, description="Latitude coordinate")

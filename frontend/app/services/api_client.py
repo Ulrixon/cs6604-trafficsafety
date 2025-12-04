@@ -199,11 +199,7 @@ def fetch_latest_blended_scores(alpha: float = 0.7) -> tuple[List[dict], Optiona
         session = _get_session_with_retries()
 
         # Call the endpoint with alpha parameter
-        params = {
-            "alpha": alpha,
-            "include_mcdm": "true",
-            "bin_minutes": 15
-        }
+        params = {"alpha": alpha, "include_mcdm": "true", "bin_minutes": 15}
 
         # Use configured timeout for this heavy calculation endpoint
         response = session.get(
@@ -223,11 +219,11 @@ def fetch_latest_blended_scores(alpha: float = 0.7) -> tuple[List[dict], Optiona
             # - safety_index: Blended score (already calculated by backend)
             # - rt_si_index: Raw RT-SI score
             # - mcdm_index: Raw MCDM score
-            
+
             safety_index = item.get("safety_index", 0.0)
             rt_si = item.get("rt_si_index", 0.0)
             mcdm = item.get("mcdm_index", 0.0)
-            
+
             # Handle None values - convert to 0
             if safety_index is None:
                 safety_index = 0.0

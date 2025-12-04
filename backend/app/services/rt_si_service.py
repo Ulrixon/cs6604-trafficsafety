@@ -934,12 +934,23 @@ class RTSIService:
         """
 
         # Single query for all speed data, grouped by time bin
+        # Handle both "X-Y mph" ranges and "X+" format (e.g., "91+")
         speed_query = """
         WITH binned_speed AS (
             SELECT 
                 ((publish_timestamp - %(start_time)s) / %(bin_us)s) * %(bin_us)s + %(start_time)s as time_bin,
                 speed_interval,
-                SUM(count) as bin_count
+                SUM(count) as bin_count,
+                -- Parse speed value handling both "X-Y" and "X+" formats
+                CASE 
+                    WHEN speed_interval LIKE '%%+%%' THEN 
+                        -- For "91+" format, use the number as midpoint (treat as 91-100)
+                        CAST(REGEXP_REPLACE(speed_interval, '[^0-9]', '', 'g') AS FLOAT) + 5.0
+                    ELSE
+                        -- For "X-Y mph" format, calculate midpoint
+                        (CAST(SPLIT_PART(SPLIT_PART(speed_interval, '-', 1), ' ', 1) AS FLOAT) + 
+                         CAST(SPLIT_PART(SPLIT_PART(speed_interval, '-', 2), ' ', 1) AS FLOAT)) / 2.0
+                END as speed_midpoint
             FROM "speed-distribution"
             WHERE intersection = %(intersection_id)s::text
               AND publish_timestamp >= %(start_time)s
@@ -949,14 +960,8 @@ class RTSIService:
         SELECT 
             time_bin,
             SUM(bin_count) as total_count,
-            SUM(
-                (CAST(SPLIT_PART(SPLIT_PART(speed_interval, '-', 1), ' ', 1) AS FLOAT) + 
-                 CAST(SPLIT_PART(SPLIT_PART(speed_interval, '-', 2), ' ', 1) AS FLOAT)) / 2.0 * bin_count
-            ) / NULLIF(SUM(bin_count), 0) as avg_speed,
-            PERCENTILE_CONT(0.85) WITHIN GROUP (
-                ORDER BY (CAST(SPLIT_PART(SPLIT_PART(speed_interval, '-', 1), ' ', 1) AS FLOAT) + 
-                         CAST(SPLIT_PART(SPLIT_PART(speed_interval, '-', 2), ' ', 1) AS FLOAT)) / 2.0
-            ) as free_flow_speed
+            SUM(speed_midpoint * bin_count) / NULLIF(SUM(bin_count), 0) as avg_speed,
+            PERCENTILE_CONT(0.85) WITHIN GROUP (ORDER BY speed_midpoint) as free_flow_speed
         FROM binned_speed
         GROUP BY time_bin
         ORDER BY time_bin;
@@ -984,6 +989,7 @@ class RTSIService:
                 "bin_us": bin_microseconds,
             },
         )
+        logger.info(f"Vehicle data: {len(vehicle_results)} time bins")
 
         speed_results = self.db_client.execute_query(
             speed_query,
@@ -994,6 +1000,7 @@ class RTSIService:
                 "bin_us": bin_microseconds,
             },
         )
+        logger.info(f"Speed data: {len(speed_results)} time bins")
 
         vru_results = self.db_client.execute_query(
             vru_query,
@@ -1004,6 +1011,7 @@ class RTSIService:
                 "bin_us": bin_microseconds,
             },
         )
+        logger.info(f"VRU data: {len(vru_results)} time bins")
 
         # Build lookup maps
         vehicle_map = {}
@@ -1171,6 +1179,18 @@ class RTSIService:
         )
         logger.info(f"Retrieved data for {len(traffic_data_map)} time bins")
 
+        # Count bins with actual traffic data
+        bins_with_data = sum(
+            1
+            for v in traffic_data_map.values()
+            if v.get("vehicle_count", 0) > 0
+            or v.get("vru_count", 0) > 0
+            or v.get("avg_speed", 0) > 0
+        )
+        logger.info(
+            f"Time bins with actual traffic data: {bins_with_data}/{len(traffic_data_map)}"
+        )
+
         # Use year-only historical crash rate (same for all bins)
         hist_data = self.get_historical_crash_rate(intersection_id)
         raw_rate = hist_data["raw_rate"]
@@ -1237,13 +1257,14 @@ class RTSIService:
                 results.append(result)
 
             except Exception as e:
-                logger.warning(
-                    f"Error calculating RT-SI for time bin {current_time}: {e}"
+                logger.error(
+                    f"Error calculating RT-SI for time bin {current_time}: {e}",
+                    exc_info=True,
                 )
 
         logger.info(
             f"Calculated RT-SI trend for intersection {intersection_id}: "
-            f"{len(results)} time bins with data from {start_time} to {end_time}"
+            f"{len(results)} time bins processed, {len(results)} results from {start_time} to {end_time}"
         )
 
         return results

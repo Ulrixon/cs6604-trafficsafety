@@ -40,13 +40,16 @@ def get_available_intersections():
         return []
 
 
-def get_safety_score_at_time(intersection: str, time: datetime, bin_minutes: int = 15):
+def get_safety_score_at_time(
+    intersection: str, time: datetime, bin_minutes: int = 15, alpha: float = 0.7
+):
     """Fetch safety score for specific time (returns MCDM and RT-SI separately)."""
     try:
         params = {
             "intersection": intersection,
             "time": time.isoformat(),
             "bin_minutes": bin_minutes,
+            "alpha": alpha,
         }
         response = requests.get(
             f"{API_BASE_URL}/time/specific", params=params, timeout=API_TIMEOUT
@@ -67,6 +70,7 @@ def get_safety_score_trend(
     start_time: datetime,
     end_time: datetime,
     bin_minutes: int = 15,
+    alpha: float = 0.7,
     include_correlations: bool = True,
 ):
     """Fetch safety score trend over time range with optional correlation analysis."""
@@ -76,6 +80,7 @@ def get_safety_score_trend(
             "start_time": start_time.isoformat(),
             "end_time": end_time.isoformat(),
             "bin_minutes": bin_minutes,
+            "alpha": alpha,
             "include_correlations": include_correlations,
         }
         response = requests.get(
@@ -110,7 +115,7 @@ def render_single_time_view(
     st.subheader("📍 Single Time Point Analysis")
 
     with st.spinner("Fetching safety score..."):
-        data = get_safety_score_at_time(intersection, selected_time, bin_minutes)
+        data = get_safety_score_at_time(intersection, selected_time, bin_minutes, alpha)
 
     if not data:
         st.warning(
@@ -548,7 +553,7 @@ def render_trend_view(
 
     with st.spinner("Fetching trend data..."):
         response = get_safety_score_trend(
-            intersection, start_time, end_time, bin_minutes
+            intersection, start_time, end_time, bin_minutes, alpha
         )
 
     # Handle new response structure with time_series and correlation_analysis
@@ -573,6 +578,33 @@ def render_trend_view(
     # Convert to DataFrame
     df = pd.DataFrame(data)
     df["time_bin"] = pd.to_datetime(df["time_bin"])
+
+    # Convert numeric columns to float (handles None -> NaN conversion)
+    numeric_columns = [
+        "mcdm_index",
+        "rt_si_score",
+        "safety_index",
+        "vehicle_count",
+        "incident_count",
+        "near_miss_count",
+        "vru_count",
+        "avg_speed",
+        "speed_variance",
+        "vru_index",
+        "vehicle_index",
+        "raw_crash_rate",
+        "eb_crash_rate",
+        "F_speed",
+        "F_variance",
+        "F_conflict",
+        "uplift_factor",
+        "saw_score",
+        "edas_score",
+        "codas_score",
+    ]
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
     # Blend scores in frontend for each row
     df["final_safety_index"] = df.apply(
@@ -914,6 +946,11 @@ def render_trend_view(
     # Add traces for each variable
     for col, label in variables_to_normalize:
         if col in df.columns and f"{col}_normalized" in df_normalized.columns:
+            # Format original values, handling NaN
+            original_values = df[col].apply(
+                lambda x: f"{x:.2f}" if pd.notna(x) else "N/A"
+            )
+
             fig_combined.add_trace(
                 go.Scatter(
                     x=df_normalized["time_bin"],
@@ -922,7 +959,8 @@ def render_trend_view(
                     name=label,
                     line=dict(color=colors.get(col, "#000000"), width=2),
                     marker=dict(size=4),
-                    hovertemplate=f"<b>{label}</b><br>Normalized: %{{y:.2f}}<br>Original: {df[col].round(2).astype(str)}<extra></extra>",
+                    customdata=original_values,
+                    hovertemplate=f"<b>{label}</b><br>Normalized: %{{y:.2f}}<br>Original: %{{customdata}}<extra></extra>",
                 )
             )
 

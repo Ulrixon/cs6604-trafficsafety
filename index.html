@@ -37,6 +37,8 @@
     <div class="d-flex gap-2 justify-content-center flex-wrap">
       <a href="files/proposal.pdf" class="btn btn-light btn-lg">📄 View Project Proposal</a>
       <a href="files/checkpoint.pdf" class="btn btn-outline-light btn-lg">✅ View Checkpoint Report</a>
+      <a href="files/Final_Leader-Cusati-Member1-Chuang-Member2-Uhunmwangho.pdf" class="btn btn-light btn-lg">🏁 View Final Report</a>
+      <a href="files/Summary_Leader-Cusati-Member1-Chuang-Member2-Uhunmwangho.pdf.pdf" class="btn btn-outline-light btn-lg">🧾 View Project Summary</a>
     </div>
   </header>
 
@@ -47,8 +49,28 @@
         <div class="card card-soft p-4 p-md-5">
           <div class="mb-3"><span class="pill">🚦 Project Overview</span></div>
           <p class="mb-3">
-            The Virginia Transportation Safety Index (VTSI) project develops a dynamic, data-driven safety scoring system for intersections and roadway segments across Virginia.
-            We combine crash data, traffic volumes, and severity weighting to provide real-time, actionable insights for improving roadway safety.
+            The Virginia Tech Transportation Safety Index (VTTSI) is a real-time, cloud-native
+framework for quantifying intersection safety using multimodal connected-vehicle
+telemetry and multi-year VDOT crash history. Traditional crash-based methods rely on
+lagged, aggregated data and cannot reflect rapidly changing operational conditions.
+VTTSI addresses this gap through a hybrid modeling approach that fuses Empirical Bayes
+(EB) crash stabilization, uplift factors derived from speed and conflict behavior, and a
+CRITIC-weighted multi-criteria decision-making (MCDM) module combining SAW, EDAS, and
+CODAS. The system produces interpretable, exposure-adjusted safety scores on a 0--100
+scale every 15 minutes.
+
+A cloud-deployed architecture built on FastAPI, PostgreSQL, PostGIS, and Streamlit
+supports interactive visualization of traffic volumes, VRU exposure, speed variance, and
+real-time incident activity. Validation across intersections demonstrates coherent
+diurnal patterns, consistency among MCDM methods, and sensitivity to observable
+operational turbulence. Sensitivity analysis further shows that the RT--SI is robust to
+parameter perturbations, with deviations typically remaining below one point on the
+0--100 scale.
+
+By integrating long-term crash risk with short-term behavioral dynamics, VTTSI provides a
+transparent, adaptive, and proactive safety-monitoring framework suitable for
+transportation agencies, traffic management centers, fleet operators, and autonomous
+vehicle systems.
           </p>
           <div class="row g-4 mt-2">
             <div class="col-md-6">
@@ -69,6 +91,7 @@
               </div>
             </div>
           </div>
+
           <!-- Key Data Sources -->
           <hr class="my-4"/>
           <h4 class="section-title mb-3">📊 Key Data Sources</h4>
@@ -97,6 +120,7 @@
           </div>
         </div>
       </div>
+
       <div class="col-md-5">
         <div class="card card-soft h-100">
           <div class="card-body">
@@ -106,6 +130,27 @@
           </div>
         </div>
       </div>
+
+      <div class="col-md-5">
+        <div class="card card-soft h-100">
+          <div class="card-body">
+            <h5 class="card-title">🏁 Final Report</h5>
+            <p class="card-text">Complete methodology, results, and conclusions for the VTSI project.</p>
+            <a class="btn btn-primary" href="files/Final_Leader-Cusati-Member1-Chuang-Member2-Uhunmwangho.pdf">Open Final Report</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-5">
+        <div class="card card-soft h-100">
+          <div class="card-body">
+            <h5 class="card-title">🧾 Project Summary</h5>
+            <p class="card-text">One-page overview of goals, approach, and key outcomes.</p>
+            <a class="btn btn-primary" href="files/Summary_Leader-Cusati-Member1-Chuang-Member2-Uhunmwangho.pdf.pdf">Open Summary</a>
+          </div>
+        </div>
+      </div>
+
     </div>
   </section>
 
@@ -150,4 +195,3 @@
 
 </body>
 </html>
-

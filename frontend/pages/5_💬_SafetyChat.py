@@ -18,8 +18,9 @@ import streamlit as st
 from app.utils.config import API_URL, API_TIMEOUT, APP_ICON
 
 # Derive the chat base URL from the shared API_URL config.
-# API_URL ends with /api/v1/safety/index  →  strip the last segment.
-_api_base = "/".join(API_URL.rstrip("/").split("/")[:-2])  # .../api/v1
+# API_URL may be "http://host/api/v1" or "http://host/api/v1/safety/index".
+# Either way, split on "/api/v1" to get the base, then append the chat path.
+_api_base = API_URL.split("/api/v1")[0] + "/api/v1"
 CHAT_URL = f"{_api_base}/chat/"
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -38,6 +39,9 @@ if "chat_history" not in st.session_state:
 
 if "chat_error" not in st.session_state:
     st.session_state.chat_error = None
+
+if "pending_chat" not in st.session_state:
+    st.session_state.pending_chat = None
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
@@ -73,9 +77,7 @@ with st.sidebar:
     ]
     for example in examples:
         if st.button(example, use_container_width=True, key=f"ex_{example[:20]}"):
-            st.session_state.chat_history.append(
-                {"role": "user", "content": example}
-            )
+            st.session_state.pending_chat = example
             st.session_state.chat_error = None
             st.rerun()
 
@@ -125,8 +127,12 @@ with chat_container:
 
 user_input = st.chat_input("Ask about intersection safety…")
 
-if user_input:
-    st.session_state.chat_history.append({"role": "user", "content": user_input})
+# Accept input from either the chat box or an example button click
+prompt = user_input or st.session_state.get("pending_chat")
+st.session_state.pending_chat = None  # always clear after reading
+
+if prompt:
+    st.session_state.chat_history.append({"role": "user", "content": prompt})
     st.session_state.chat_error = None
 
     # Append alpha context as a hidden system hint appended to the last user message
@@ -135,7 +141,7 @@ if user_input:
     messages_to_send[-1] = {
         "role": "user",
         "content": (
-            f"{user_input}\n"
+            f"{prompt}\n"
             f"[User preference: use alpha={alpha} for blended score calculations.]"
         ),
     }

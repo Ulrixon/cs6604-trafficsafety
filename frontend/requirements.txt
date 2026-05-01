@@ -6,3 +6,4 @@ folium>=0.17
 streamlit-folium>=0.21
 plotly>=5.18
 python-dotenv>=1.0.0
+openai>=1.30.0

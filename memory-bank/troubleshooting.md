@@ -702,5 +702,50 @@ cat backend/.env (redact secrets!)
 
 ---
 
-**Last Updated**: 2025-11-20
+## SafetyChat / LLM Issues
+
+### Problem: Safety score returns empty results for "current time"
+
+**Symptom:** `get_safety_score` returns nothing or zeros even though data exists.
+
+**Cause:** Server clock (2026) is ahead of latest data (2025-11-21). Defaulting to `now()` finds no rows.
+
+**Fix (already applied in rev 00130):** All time-anchored executors in `chat_service.py` query
+```sql
+SELECT MAX(publish_timestamp) AS max_ts FROM "vehicle-count"
+```
+and anchor to that value when no `target_time` is given. If data gaps reappear, check whether the `"vehicle-count"` table has rows.
+
+---
+
+### Problem: System prompt injection crashes with `KeyError`
+
+**Symptom:** `KeyError: 'some_formula_variable'` during `/api/v1/chat/message` request.
+
+**Cause:** `SYSTEM_PROMPT.format(current_datetime=...)` — Python `str.format()` treats every `{...}` in the string as a placeholder. The formula section contains many `{...}` math expressions.
+
+**Fix (already applied):** Replace `.format(...)` with `.replace("{current_datetime}", current_datetime_str)` in `chat_service.py`.
+
+---
+
+### Problem: LLM interprets "yesterday" as 2026-04-30
+
+**Symptom:** When user asks about "yesterday at 5 PM", SafetyChat queries 2026-04-30 which has no data.
+
+**Cause:** LLM defaults to server calendar date.
+
+**Fix (already applied):** System prompt contains explicit instruction: *"Interpret relative time expressions (today, yesterday) relative to the latest data timestamp shown above, not the current server date."*
+The `current_datetime_str` injected into the prompt shows the DB max timestamp with a "(latest data)" label.
+
+---
+
+### Problem: LLM hallucinates formula details (wrong coefficients, wrong equation structure)
+
+**Cause:** System prompt did not include formula definitions.
+
+**Fix (already applied):** Full Eqs 1-42 from the paper are embedded verbatim in `SYSTEM_PROMPT` in `chat_service.py`. If formulas change, update that constant.
+
+---
+
+**Last Updated**: 2026-05-01
 **For More Help**: See `operational-guide.md` or check project documentation

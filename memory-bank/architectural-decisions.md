@@ -641,5 +641,98 @@ These decisions will be reviewed:
 
 ---
 
+## ADR-010: Tool-Augmented LLM for SafetyChat
+
+**Date:** 2026-05-01
+**Status:** Implemented & Deployed (rev 00130)
+**Decision Makers:** Traffic Safety Index Team
+
+### Context
+
+VTTSI produces accurate numerical safety scores, but TMC operators, planners, and emergency responders need causal narratives—not just numbers. Adding a chat interface risks hallucination if the LLM has no access to live data.
+
+### Decision
+
+Implement SafetyChat using **OpenAI function-calling (tool-augmented LLM)**:
+- GPT-4o receives 6 typed tool definitions and calls them against the live VTTSI FastAPI backend
+- An **agentic loop** (up to 6 iterations) lets the model chain tool calls (e.g., rank all sites, then drill into the top two)
+- All numerical claims in LLM output are grounded in live API data
+
+### Architecture
+
+```
+User → Streamlit (SafetyChat page)
+         ↓
+    chat_service.py (FastAPI route)
+         ↓ system prompt + 6 tools
+    GPT-4o (OpenAI)
+         ↓ function_call
+    _TOOL_HANDLERS dict → mcdm_service / rtsi_service
+         ↓
+    Cloud SQL PostgreSQL (vtsi-postgres)
+         ↑
+    tool result → GPT-4o → final text response
+```
+
+### 6 Tools
+
+| Tool | Purpose |
+|---|---|
+| `get_safety_score` | RT-SI + MCDM + blended score, optional `target_time` |
+| `get_component_breakdown` | CRITIC-weighted criteria for a 15-min bin |
+| `get_historical_baseline` | EB prior + 7-year crash history + λ* |
+| `compare_intersections` | Rank all intersections by any metric |
+| `get_trend_data` | 7-30 day MCDM trend, direction, 20 snapshots |
+| `run_sql_query` | Read-only SELECT; guards against writes |
+
+### Key Implementation Details
+
+- **Clock-drift fix**: server time 2026 ≠ data end 2025-11-21. All time-anchored executors run `SELECT MAX(publish_timestamp) FROM "vehicle-count"` and anchor to that.
+- **System prompt injection**: uses `.replace("{current_datetime}", ...)` not `.format()` — formula text contains `{}` which would cause `KeyError`.
+- **Formula grounding**: full Eqs 1-42 from the paper are embedded verbatim in the system prompt to prevent hallucination.
+- **Relative time**: system prompt instructs LLM to interpret "yesterday" relative to latest data timestamp, not server clock.
+
+### Rationale
+
+- **Hallucination prevention**: tool calls ground all numbers in live data
+- **Causal narratives**: LLM synthesizes multi-tool outputs into explanations operators understand
+- **Minimal latency**: agentic loop typically resolves in 2-3 iterations (~5 seconds)
+- **No new infrastructure**: runs inside the existing FastAPI Cloud Run service
+
+### Consequences
+
+**Positive:**
+- First system to combine hybrid EB+MCDM scoring with LLM causal explanation for infrastructure operators
+- Operators need no training—use natural language
+- All 4 demo paper use cases verified working end-to-end
+
+**Negative:**
+- Costs ~0.01 USD per complex query (GPT-4o tokens)
+- `run_sql_query` is powerful; requires robust write-guard logic
+- System prompt must be updated manually if formulas change
+
+---
+
+## ADR-011: MAX(publish_timestamp) Anchoring for Clock-Drift Tolerance
+
+**Date:** 2026-05-01
+**Status:** Implemented
+
+### Context
+
+The Cloud Run server clock shows 2026-05-01 but the latest data in `"vehicle-count"` ends at 2025-11-21. Defaulting to `now()` for "current" safety score queries returned empty results.
+
+### Decision
+
+All "current time" lookups in `chat_service.py` (and any future service) query `SELECT MAX(publish_timestamp) AS max_ts FROM "vehicle-count"` first, then use that as the effective "now". The `current_datetime_str` injected into the system prompt also uses this value (with a "(latest data)" suffix).
+
+### Consequences
+
+- Queries always resolve to the most recent bin with actual data, regardless of server clock
+- System prompt tells LLM the true latest timestamp, preventing "yesterday" from resolving to 2026-04-30
+
+---
+
 **Document Maintainers:** Traffic Safety Index Team
-**Last Updated:** 2025-11-21
+**Last Updated:** 2026-05-01
+

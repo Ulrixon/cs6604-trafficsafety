@@ -1,11 +1,54 @@
 # Active Context
 
-**Last Updated**: 2025-12-02
-**Status**: ✅ GCP CLOUD RUN DEPLOYED | 📦 DATA MIGRATED TO GCS | 🗄️ CLOUD SQL OPERATIONAL
+**Last Updated**: 2026-05-01
+**Status**: ✅ GCP CLOUD RUN DEPLOYED | 🤖 SAFETYCHAT LLM MODULE LIVE | 📄 DEMO PAPER DRAFT COMPLETE
 
 ---
 
-## Current Sprint: GCP Cloud Deployment ✅
+## Current Sprint: SafetyChat LLM Module + Demo Paper ✅
+
+### Just Completed (2026-05-01)
+
+**SafetyChat Tool-Augmented LLM Module:**
+
+1. ✅ **`backend/app/services/chat_service.py` — Fully Implemented & Deployed (rev 00130)**
+   - **6 typed tools** exposed to GPT-4o via OpenAI function-calling:
+     1. `get_safety_score(intersection, target_time)` — RT-SI + MCDM + blended scores with top uplift factors
+     2. `get_component_breakdown(intersection, target_time)` — CRITIC-weighted criterion values for a 15-min bin
+     3. `get_historical_baseline(intersection)` — EB prior, 7-year VDOT crash severity breakdown, λ*
+     4. `compare_intersections(metric, alpha)` — ranks all monitored intersections by any index component
+     5. `get_trend_data(intersection, days_back)` — 7-30 day MCDM score trend with direction + 20 sampled snapshots
+     6. `run_sql_query(query)` — read-only SELECT against live Cloud SQL (guarded against writes)
+   - **`target_time` support**: optional ISO-8601 param on tools 1 & 2 for historical point-in-time queries
+   - **Clock-drift fix**: server time is 2026-05-01 but data ends 2025-11-21; all three time-anchored executors query `SELECT MAX(publish_timestamp) FROM "vehicle-count"` and anchor to that when no `target_time` is given
+   - **Agentic loop**: up to 6 LLM iterations to allow multi-tool chaining
+   - **System prompt**: embeds complete formula reference (Eqs 1-42 from the full paper), DB schema, 6-tool list, guidelines. Uses `.replace("{current_datetime}", ...)` — NOT `.format()` — because `{}` in formulas would cause a `KeyError`
+   - **Current datetime string**: computed from DB max timestamp with "(latest data)" suffix so LLM interprets relative time correctly
+
+2. ✅ **4 Demo Use Cases Verified Working (rev 00130)**
+   - UC1: TMC morning briefing → `compare_intersections` + `get_component_breakdown`
+   - UC2: Causal explanation for planners → `get_safety_score(target_time)` + `get_component_breakdown(target_time)`
+   - UC3: Emergency responder routing → `get_safety_score` × 2
+   - UC4: Public trend engagement → `get_trend_data(30d)`
+
+3. ✅ **Demo Paper Draft (`files/demo_paper_draft.tex`) — 4-page IEEE format**
+   - Compiled cleanly: exactly **4 pages**, no overfull hboxes
+   - Updated from proposal: 6-tool list, EB stabilization formulas (Eqs 1-3) + blended index, condensed related work, live URL in abstract, demo-paper tone throughout
+   - Key figures: `system-architecture.png` (Fig 1), TikZ SafetyChat data-flow (Fig 2)
+   - Bibliography: `reference.bib` + `demo_refs.bib` via biber
+   - Build command: `cd files && pdflatex -interaction=batchmode demo_paper_draft.tex && biber demo_paper_draft && pdflatex ... && pdflatex ...`
+
+**Key Bug Fixes (this sprint):**
+- **Clock drift** (`server=2026, data=2025-11`): anchored all time queries to `MAX(publish_timestamp)`
+- **Formula hallucination**: embedded Eqs 1-42 verbatim in system prompt
+- **`.format()` crash on `{}`** in formula text: switched to `.replace()`
+- **"Yesterday" resolving to 2026**: system prompt now instructs LLM to interpret relative time vs. latest data timestamp, not server clock
+
+---
+
+## Previous Sprint: GCP Cloud Deployment ✅
+
+### Just Completed (2025-12-02)
 
 ### Just Completed (2025-12-02)
 

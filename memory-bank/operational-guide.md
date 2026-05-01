@@ -1,8 +1,8 @@
 # Operational Guide - Traffic Safety Index System
 
-## System Status: ✅ FULLY OPERATIONAL - CLOUD & LOCAL
+## System Status: ✅ FULLY OPERATIONAL - CLOUD & LOCAL | 🤖 SAFETYCHAT LIVE
 
-Last Updated: 2025-12-02
+Last Updated: 2026-05-01
 
 ---
 
@@ -65,10 +65,27 @@ gcloud run services list \
   --region=europe-west1 --project=symbolic-cinema-305010
 ```
 
+**Deploy Backend (incl. SafetyChat):**
+```bash
+source ~/google-cloud-sdk/path.bash.inc
+gcloud run deploy cs6604-trafficsafety \
+  --source backend \
+  --region europe-west1 \
+  --project symbolic-cinema-305010 \
+  --allow-unauthenticated
+```
+Latest deployed revision: `cs6604-trafficsafety-00130-kf8`
+
 **Deploy Data Collector:**
 ```bash
 cd backend
 bash deploy-collector-gcp.sh
+```
+
+**View SafetyChat (LLM) Logs:**
+```bash
+gcloud run services logs read cs6604-trafficsafety \
+  --region=europe-west1 --project=symbolic-cinema-305010 --limit=50
 ```
 
 **Check GCS Files:**
@@ -559,6 +576,32 @@ MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector ls -lh /app/
 
 ---
 
-**Last Updated**: 2025-11-20
-**System Version**: 0.1.0
-**Status**: Production-Ready ✅
+## SafetyChat Module — Key Facts
+
+| Item | Value |
+|---|---|
+| Service | `cs6604-trafficsafety` (Cloud Run, europe-west1) |
+| Live revision | `cs6604-trafficsafety-00130-kf8` |
+| Backend URL | `https://cs6604-trafficsafety-180117512369.europe-west1.run.app` |
+| Frontend URL | `https://safety-index-frontend-180117512369.europe-west1.run.app` |
+| LLM model | GPT-4o (`openai>=1.30.0`) |
+| OpenAI key | Secret Manager: `openai-api-key` |
+| Data range | `glebe-potomac` and others: 2025-07-22 → 2025-11-21 |
+| Clock note | Server time 2026; data ends 2025-11. All time queries anchor to `MAX(publish_timestamp)` |
+| Agentic loop | Max 6 LLM iterations per query |
+| Tools | 6: `get_safety_score`, `get_component_breakdown`, `get_historical_baseline`, `compare_intersections`, `get_trend_data`, `run_sql_query` |
+| Source | `backend/app/services/chat_service.py` |
+
+### Test SafetyChat via cURL
+```bash
+curl -s -X POST \
+  https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/chat/message \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "What is the current safety score for Glebe-Potomac?", "conversation_id": "test-1"}'
+```
+
+---
+
+**Last Updated**: 2026-05-01
+**System Version**: 0.2.0
+**Status**: Production-Ready ✅ | SafetyChat Live 🤖

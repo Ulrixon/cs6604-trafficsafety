@@ -34,10 +34,10 @@ st.set_page_config(
 # ── Session state ─────────────────────────────────────────────────────────────
 
 if "chat_history" not in st.session_state:
-    st.session_state.chat_history: list[dict] = []
+    st.session_state.chat_history = []
 
 if "chat_error" not in st.session_state:
-    st.session_state.chat_error: str | None = None
+    st.session_state.chat_error = None
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 

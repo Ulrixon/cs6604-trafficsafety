@@ -55,7 +55,7 @@ ENABLE_GCS_UPLOAD=false,\
 PARQUET_STORAGE_PATH=/gcs/cs6604-trafficsafety-parquet,\
 USE_POSTGRESQL=false,\
 FALLBACK_TO_PARQUET=true" \
-  --set-secrets "VTTI_DB_USER=db_user:1,VTTI_DB_PASSWORD=db_password:1"
+  --set-secrets "VTTI_DB_USER=db_user:1,VTTI_DB_PASSWORD=db_password:1,OPENAI_API_KEY=openai-api-key:latest"
 
 echo ""
 echo "✅ Backend deployment complete!"

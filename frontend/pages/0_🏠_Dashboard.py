@@ -11,6 +11,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import requests
 import streamlit as st
 import pandas as pd
 from streamlit_folium import st_folium
@@ -26,7 +27,7 @@ from app.views.components import (
     apply_filters,
     render_data_table,
 )
-from app.utils.config import APP_TITLE, APP_ICON, LAYOUT, MAP_HEIGHT
+from app.utils.config import APP_TITLE, APP_ICON, LAYOUT, MAP_HEIGHT, API_URL, API_TIMEOUT
 
 
 def main():
@@ -236,6 +237,112 @@ def main():
     # Data table at the bottom
     st.divider()
     render_data_table(filtered_df)
+
+    # ── SafetyChat ─────────────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("💬 SafetyChat – AI Safety Assistant")
+    st.caption(
+        "Ask natural language questions about real-time intersection safety. "
+        "The assistant queries live VTTSI data to ground every answer."
+    )
+
+    # Derive chat API URL from the shared API_URL config
+    _chat_base = "/".join(API_URL.rstrip("/").split("/")[:-2])
+    _chat_url = f"{_chat_base}/chat/"
+
+    # Session state (no type annotations – compatible with Python 3.9)
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    if "chat_error" not in st.session_state:
+        st.session_state.chat_error = None
+
+    # Example question buttons
+    _examples = [
+        "Which intersection is the most dangerous right now?",
+        "Give me a morning safety briefing for all intersections.",
+        "Why is the Glebe–Potomac score elevated?",
+        "Compare all intersections by VRU count.",
+        "What is driving risk at E. Broad & N. Washington?",
+        "Which intersection has the lowest risk for emergency vehicle routing?",
+    ]
+    _ex_cols = st.columns(3)
+    for _i, _ex in enumerate(_examples):
+        if _ex_cols[_i % 3].button(_ex, key=f"dash_ex_{_i}", use_container_width=True):
+            st.session_state.chat_history.append({"role": "user", "content": _ex})
+            st.session_state.chat_error = None
+            st.rerun()
+
+    # Display chat history
+    if not st.session_state.chat_history:
+        st.info("👋 Type a question below or click an example above to get started.")
+    else:
+        for _msg in st.session_state.chat_history:
+            if _msg["role"] == "user":
+                with st.chat_message("user"):
+                    st.markdown(_msg["content"])
+            else:
+                with st.chat_message("assistant", avatar="🚦"):
+                    st.markdown(_msg["content"])
+
+        if st.button("🗑️ Clear Chat", key="dash_chat_clear"):
+            st.session_state.chat_history = []
+            st.session_state.chat_error = None
+            st.rerun()
+
+    if st.session_state.chat_error:
+        st.error(f"⚠️ {st.session_state.chat_error}")
+
+    # Chat input (pinned to bottom of page by Streamlit)
+    _user_input = st.chat_input("Ask about intersection safety…")
+    if _user_input:
+        st.session_state.chat_history.append({"role": "user", "content": _user_input})
+        st.session_state.chat_error = None
+        _messages = list(st.session_state.chat_history)
+        _messages[-1] = {
+            "role": "user",
+            "content": (
+                f"{_user_input}\n"
+                f"[User preference: use alpha={alpha} for blended score calculations.]"
+            ),
+        }
+        with st.spinner("SafetyChat is thinking…"):
+            try:
+                _resp = requests.post(
+                    _chat_url, json={"messages": _messages}, timeout=API_TIMEOUT
+                )
+                _resp.raise_for_status()
+                _reply = _resp.json().get("reply", "No response received.")
+                st.session_state.chat_history.append(
+                    {"role": "assistant", "content": _reply}
+                )
+            except requests.exceptions.ConnectionError:
+                st.session_state.chat_error = (
+                    "Cannot connect to the VTTSI backend. "
+                    "Make sure the backend server is running."
+                )
+            except requests.exceptions.Timeout:
+                st.session_state.chat_error = (
+                    "Request timed out. The backend may be computing a complex query."
+                )
+            except requests.exceptions.HTTPError as _exc:
+                _detail = ""
+                try:
+                    _detail = _exc.response.json().get("detail", "")
+                except Exception:
+                    pass
+                if _exc.response.status_code == 503:
+                    st.session_state.chat_error = (
+                        "SafetyChat is not configured: "
+                        + (_detail or "OPENAI_API_KEY missing on the backend.")
+                    )
+                else:
+                    st.session_state.chat_error = (
+                        f"Backend error ({_exc.response.status_code}): "
+                        f"{_detail or str(_exc)}"
+                    )
+            except Exception as _exc:
+                st.session_state.chat_error = f"Unexpected error: {_exc}"
+        st.rerun()
 
     # Footer
     st.divider()

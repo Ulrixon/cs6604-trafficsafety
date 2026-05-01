@@ -62,6 +62,23 @@ class Settings(BaseSettings):
         description="Hours of historical data to use for MCDM CRITIC weights",
     )
 
+    # OpenAI / SafetyChat configuration
+    OPENAI_API_KEY: str = Field(
+        "",
+        env="OPENAI_API_KEY",
+        description="OpenAI API key for the SafetyChat LLM module",
+    )
+    OPENAI_MODEL: str = Field(
+        "gpt-4o",
+        env="OPENAI_MODEL",
+        description="OpenAI model to use for SafetyChat (e.g. gpt-4o, gpt-4o-mini)",
+    )
+    OPENAI_MAX_TOKENS: int = Field(
+        1024,
+        env="OPENAI_MAX_TOKENS",
+        description="Maximum tokens in SafetyChat LLM response",
+    )
+
     # VCC API configuration (optional, for other services)
     VCC_BASE_URL: str = "https://api.vcc.vtti.vt.edu"
     VCC_CLIENT_ID: str = ""

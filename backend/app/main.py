@@ -64,6 +64,14 @@ except Exception as e:
     logger.warning(f"Analytics router not available: {e}")
     ANALYTICS_AVAILABLE = False
 
+try:
+    from .api.chat import router as chat_router
+
+    CHAT_AVAILABLE = True
+except Exception as e:
+    logger.warning(f"SafetyChat router not available: {e}")
+    CHAT_AVAILABLE = False
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -168,6 +176,10 @@ def create_app() -> FastAPI:
     if ANALYTICS_AVAILABLE:
         app.include_router(analytics_router, prefix="/api/v1")
         logger.info("✓ Analytics router registered")
+
+    if CHAT_AVAILABLE:
+        app.include_router(chat_router, prefix="/api/v1")
+        logger.info("✓ SafetyChat router registered")
 
     # Simple health‑check endpoint
     @app.get("/health", tags=["Health"])

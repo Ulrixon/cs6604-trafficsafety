@@ -1,0 +1,86 @@
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+    >=Latex,
+    node distance=1.5cm and 1.8cm,
+    font=\small,
+    block/.style={rectangle, draw, rounded corners,
+                  minimum width=4.5cm, minimum height=1.2cm,
+                  align=center},
+    service/.style={rectangle, draw, rounded corners,
+                    minimum width=4.2cm, minimum height=1.0cm,
+                    font=\scriptsize, align=center},
+    db/.style={cylinder, cylinder uses custom shape, draw,
+               aspect=0.35, minimum height=1.6cm, minimum width=2.0cm,
+               align=center},
+    cloudbox/.style={rectangle, draw, rounded corners,
+                     dashed, inner sep=0.35cm},
+    line/.style={->, thick}
+]
+
+% ---------------- USER ----------------
+\node[block] (user) {End Users\\(Web Browser)};
+
+% ---------------- FRONTEND ----------------
+\node[block, below=2cm of user] (frontend)
+    {Streamlit Frontend\\
+     \footnotesize Interactive Safety Dashboard};
+
+\node[service, below=0.4cm of frontend] (frontend_sub)
+    {Geospatial Maps (folium)\\
+     Charts + $\alpha$-Blending\\
+     API Polling (5 min)};
+
+% ---------------- BACKEND (FASTAPI) ----------------
+\node[block, below=2.4cm of frontend_sub] (backend)
+    {FastAPI Backend\\
+     \footnotesize REST API on Google Cloud Run};
+
+% Backend subservices (horizontal row)
+\node[service, below=0.5cm of backend, xshift=-3.5cm] (mcdm)
+    {Hybrid MCDM Service\\SAW + EDAS + CODAS + CRITIC};
+
+\node[service, below=0.5cm of backend, xshift=3.5cm] (rtsi)
+    {Real-Time Safety Index Service\\EB Rates + Uplift Factors};
+
+% ---------------- DATABASE ----------------
+\node[db, below=3.0cm of backend] (database)
+    {Cloud SQL\\PostgreSQL\\PostGIS};
+
+\node[font=\scriptsize, below=0.1cm of database]
+    {15-min Aggregated BSM/PSM\newline Vehicle \& VRU Counts\newline Speed Distribution\newline Crash Records};
+
+% ---------------- CLOUD RUN GROUP BOX ----------------
+\node[cloudbox, fit=(frontend) (frontend_sub) (backend) (mcdm) (rtsi),
+      label={[font=\small]above:Google Cloud Run Containerized Services}] (cloudrunbox) {};
+
+% ---------------- DATA FLOW ARROWS ----------------
+
+% User -> Frontend
+\draw[line] (user) -- node[right, font=\scriptsize]{HTTPS} (frontend);
+
+% Frontend -> Backend
+\draw[line] (frontend_sub) -- node[right, font=\scriptsize]{HTTPS / JSON} (backend);
+
+% Backend -> DB
+%\draw[line] (backend) -- node[right, font=\scriptsize]{SQL Queries} (database);
+
+% DB -> Backend submodules
+\draw[line] (database) -| node[left, font=\scriptsize]{15-min Data} (mcdm);
+\draw[line] (database) -| node[right, font=\scriptsize]{Historical Crashes} (rtsi);
+
+% Backend submodules -> Backend core
+\draw[line] (mcdm.north) |- node[left, font=\scriptsize]{MCDM Scores} (backend);
+\draw[line] (rtsi.north) |- node[right, font=\scriptsize]{RT-SI Scores} (backend);
+
+% Backend -> Frontend (returning scores)
+\draw[line] (backend) -- node[above, font=\scriptsize]{Raw Scores JSON} (frontend_sub);
+
+% Frontend blending
+\draw[line] (frontend_sub.north) -- ++(0,0.25)
+    node[above, font=\scriptsize]{Final Safety Index via $\alpha$-blend};
+
+\end{tikzpicture}
+\caption{Vertical cloud-native system architecture for the VTTSI platform showing Streamlit frontend, FastAPI backend, and Cloud SQL database integrated via Google Cloud Run.}
+\label{fig:VTTSI-system-design}
+\end{figure}

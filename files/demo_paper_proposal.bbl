@@ -1,0 +1,494 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.2 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{nty/global//global/global}
+    \entry{Amraji2025CombinedSafetyIndex}{article}{}
+      \name{author}{1}{}{%
+        {{hash=02316418eb422e7e510a7b7568555bca}{%
+           family={Amraji},
+           familyi={A\bibinitperiod},
+           given={A.},
+           giveni={A\bibinitperiod}}}%
+      }
+      \strng{namehash}{02316418eb422e7e510a7b7568555bca}
+      \strng{fullhash}{02316418eb422e7e510a7b7568555bca}
+      \strng{bibnamehash}{02316418eb422e7e510a7b7568555bca}
+      \strng{authorbibnamehash}{02316418eb422e7e510a7b7568555bca}
+      \strng{authornamehash}{02316418eb422e7e510a7b7568555bca}
+      \strng{authorfullhash}{02316418eb422e7e510a7b7568555bca}
+      \field{sortinit}{A}
+      \field{sortinithash}{2f401846e2029bad6b3ecc16d50031e2}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Journal of Transportation Research}
+      \field{number}{2}
+      \field{title}{Combined Safety Index Using CRITIC Weighting}
+      \field{volume}{15}
+      \field{year}{2025}
+      \field{pages}{200\bibrangedash 210}
+      \range{pages}{11}
+    \endentry
+    \entry{asadamraji2025combined}{article}{}
+      \name{author}{3}{}{%
+        {{hash=7990e2c91c2951905b74fc90bd78059e}{%
+           family={AsadAmraji},
+           familyi={A\bibinitperiod},
+           given={Morteza},
+           giveni={M\bibinitperiod}}}%
+        {{hash=b05af1ebacb85b1edeb7e6a734f18633}{%
+           family={Salem},
+           familyi={S\bibinitperiod},
+           given={Azarakhsh},
+           giveni={A\bibinitperiod}}}%
+        {{hash=8988f01f801989210ac14dfb7746ae2e}{%
+           family={Shirinbayan},
+           familyi={S\bibinitperiod},
+           given={Shila},
+           giveni={S\bibinitperiod}}}%
+      }
+      \strng{namehash}{151d36898e2e17cd221f2f5b8a3893af}
+      \strng{fullhash}{151d36898e2e17cd221f2f5b8a3893af}
+      \strng{bibnamehash}{151d36898e2e17cd221f2f5b8a3893af}
+      \strng{authorbibnamehash}{151d36898e2e17cd221f2f5b8a3893af}
+      \strng{authornamehash}{151d36898e2e17cd221f2f5b8a3893af}
+      \strng{authorfullhash}{151d36898e2e17cd221f2f5b8a3893af}
+      \field{sortinit}{A}
+      \field{sortinithash}{2f401846e2029bad6b3ecc16d50031e2}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Iranian Journal of Science and Technology -- Transactions of Civil Engineering}
+      \field{number}{1}
+      \field{title}{A Combined Index of Proactive and Reactive Data for Rating the Safety of Road Sections}
+      \field{volume}{49}
+      \field{year}{2025}
+      \field{pages}{985\bibrangedash 995}
+      \range{pages}{11}
+      \verb{doi}
+      \verb 10.1007/s40996-024-01552-0
+      \endverb
+    \endentry
+    \entry{Behboudi2024}{article}{}
+      \name{author}{3}{}{%
+        {{hash=3dacd21371fb0ba95a23b79c3ecfead4}{%
+           family={Behboudi},
+           familyi={B\bibinitperiod},
+           given={Noushin},
+           giveni={N\bibinitperiod}}}%
+        {{hash=f03fd77f5fd4576bcdddf4eb41c33b17}{%
+           family={Moosavi},
+           familyi={M\bibinitperiod},
+           given={Sobhan},
+           giveni={S\bibinitperiod}}}%
+        {{hash=d340c841a0d5b34b3706f115265c470e}{%
+           family={Ramnath},
+           familyi={R\bibinitperiod},
+           given={Rajiv},
+           giveni={R\bibinitperiod}}}%
+      }
+      \strng{namehash}{22d4b120289f1bae0560a87ebd1eab11}
+      \strng{fullhash}{22d4b120289f1bae0560a87ebd1eab11}
+      \strng{bibnamehash}{22d4b120289f1bae0560a87ebd1eab11}
+      \strng{authorbibnamehash}{22d4b120289f1bae0560a87ebd1eab11}
+      \strng{authornamehash}{22d4b120289f1bae0560a87ebd1eab11}
+      \strng{authorfullhash}{22d4b120289f1bae0560a87ebd1eab11}
+      \field{sortinit}{B}
+      \field{sortinithash}{d7095fff47cda75ca2589920aae98399}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{arXiv preprint arXiv:2406.13968}
+      \field{title}{Recent Advances in Traffic Accident Analysis and Prediction: A Comprehensive Review of Machine Learning Techniques}
+      \field{year}{2024}
+    \endentry
+    \entry{cusati2025agentickg}{report}{}
+      \name{author}{1}{}{%
+        {{hash=8113a3217b6b03602f0fd56cef795f8d}{%
+           family={Cusati},
+           familyi={C\bibinitperiod},
+           given={Jason},
+           giveni={J\bibinitperiod}}}%
+      }
+      \list{institution}{1}{%
+        {Virginia Tech}%
+      }
+      \strng{namehash}{8113a3217b6b03602f0fd56cef795f8d}
+      \strng{fullhash}{8113a3217b6b03602f0fd56cef795f8d}
+      \strng{bibnamehash}{8113a3217b6b03602f0fd56cef795f8d}
+      \strng{authorbibnamehash}{8113a3217b6b03602f0fd56cef795f8d}
+      \strng{authornamehash}{8113a3217b6b03602f0fd56cef795f8d}
+      \strng{authorfullhash}{8113a3217b6b03602f0fd56cef795f8d}
+      \field{sortinit}{C}
+      \field{sortinithash}{4d103a86280481745c9c897c925753c0}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Unpublished manuscript}
+      \field{title}{Agentic Knowledge Graphs for Traffic Safety}
+      \field{type}{techreport}
+      \field{year}{2025}
+    \endentry
+    \entry{gettman2003ssam}{report}{}
+      \name{author}{2}{}{%
+        {{hash=de018512ab867bed93b4e5406befb2ff}{%
+           family={Gettman},
+           familyi={G\bibinitperiod},
+           given={Douglas},
+           giveni={D\bibinitperiod}}}%
+        {{hash=1996fb64c9238bd998ce1e60ddba0e3e}{%
+           family={Head},
+           familyi={H\bibinitperiod},
+           given={Larry},
+           giveni={L\bibinitperiod}}}%
+      }
+      \list{institution}{1}{%
+        {FHWA}%
+      }
+      \strng{namehash}{8e555b2f4c32d4f0dec3ce8517d8cd7b}
+      \strng{fullhash}{8e555b2f4c32d4f0dec3ce8517d8cd7b}
+      \strng{bibnamehash}{8e555b2f4c32d4f0dec3ce8517d8cd7b}
+      \strng{authorbibnamehash}{8e555b2f4c32d4f0dec3ce8517d8cd7b}
+      \strng{authornamehash}{8e555b2f4c32d4f0dec3ce8517d8cd7b}
+      \strng{authorfullhash}{8e555b2f4c32d4f0dec3ce8517d8cd7b}
+      \field{sortinit}{G}
+      \field{sortinithash}{32d67eca0634bf53703493fb1090a2e8}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{Surrogate Safety Assessment Model and Validation: Final Report}
+      \field{type}{techreport}
+      \field{year}{2003}
+    \endentry
+    \entry{llmlight2024}{inproceedings}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{2}{}{%
+        {{hash=04d1d010e8638e01e88af234a436866f}{%
+           family={Lai},
+           familyi={L\bibinitperiod},
+           given={Siqi},
+           giveni={S\bibinitperiod}}}%
+        {{hash=76448b761ad64dd0746ba4b504382a50}{%
+           family={Chen},
+           familyi={C\bibinitperiod},
+           given={Zhao},
+           giveni={Z\bibinitperiod}}}%
+      }
+      \strng{namehash}{46c04af41804879e407d48833c4a5f4f}
+      \strng{fullhash}{46c04af41804879e407d48833c4a5f4f}
+      \strng{bibnamehash}{46c04af41804879e407d48833c4a5f4f}
+      \strng{authorbibnamehash}{46c04af41804879e407d48833c4a5f4f}
+      \strng{authornamehash}{46c04af41804879e407d48833c4a5f4f}
+      \strng{authorfullhash}{46c04af41804879e407d48833c4a5f4f}
+      \field{sortinit}{L}
+      \field{sortinithash}{7c47d417cecb1f4bd38d1825c427a61a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining}
+      \field{title}{{LLMLight}: Large Language Models as Traffic Signal Control Agents}
+      \field{year}{2024}
+      \verb{doi}
+      \verb 10.48550/arXiv.2312.16171
+      \endverb
+    \endentry
+    \entry{gptdriver2023}{inproceedings}{}
+      \name{author}{4}{}{%
+        {{hash=f75e0187fe262cc5bd18341002bf197a}{%
+           family={Mao},
+           familyi={M\bibinitperiod},
+           given={Jiageng},
+           giveni={J\bibinitperiod}}}%
+        {{hash=0513e41c4710c181b19a5e78eea9f8f6}{%
+           family={Qian},
+           familyi={Q\bibinitperiod},
+           given={Yuxi},
+           giveni={Y\bibinitperiod}}}%
+        {{hash=0db445256963546f26ac7dc0d929265b}{%
+           family={Zhao},
+           familyi={Z\bibinitperiod},
+           given={Hang},
+           giveni={H\bibinitperiod}}}%
+        {{hash=471e61c37bc3e62dbe8655e02a002343}{%
+           family={Wang},
+           familyi={W\bibinitperiod},
+           given={Yue},
+           giveni={Y\bibinitperiod}}}%
+      }
+      \strng{namehash}{109470d1679f7c09f59a0b41faf3d3d8}
+      \strng{fullhash}{30a498df7bdbb1e552d4e898818c55f2}
+      \strng{bibnamehash}{109470d1679f7c09f59a0b41faf3d3d8}
+      \strng{authorbibnamehash}{109470d1679f7c09f59a0b41faf3d3d8}
+      \strng{authornamehash}{109470d1679f7c09f59a0b41faf3d3d8}
+      \strng{authorfullhash}{30a498df7bdbb1e552d4e898818c55f2}
+      \field{sortinit}{M}
+      \field{sortinithash}{4625c616857f13d17ce56f7d4f97d451}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Advances in Neural Information Processing Systems (NeurIPS) Workshop}
+      \field{title}{{GPT-Driver}: Learning to Drive with {GPT}}
+      \field{year}{2023}
+      \verb{doi}
+      \verb 10.48550/arXiv.2310.01415
+      \endverb
+    \endentry
+    \entry{montella2020systemic}{article}{}
+      \name{author}{5}{}{%
+        {{hash=63b910fd4a8c6e7ba9f0a27860ef7d8f}{%
+           family={Montella},
+           familyi={M\bibinitperiod},
+           given={Alfonso},
+           giveni={A\bibinitperiod}}}%
+        {{hash=a91a9eb121458448622df50d7759e49e}{%
+           family={Guida},
+           familyi={G\bibinitperiod},
+           given={Carmen},
+           giveni={C\bibinitperiod}}}%
+        {{hash=ebdce301c35ab13d21f75a088cbb4e59}{%
+           family={Mosca},
+           familyi={M\bibinitperiod},
+           given={Jlenia},
+           giveni={J\bibinitperiod}}}%
+        {{hash=a9d27299f16d7baaf16502a4d7b27266}{%
+           family={Lee},
+           familyi={L\bibinitperiod},
+           given={Jaeyoung},
+           giveni={J\bibinitperiod}}}%
+        {{hash=1f13dd2f79f10cde9b4d4d55fc2aa404}{%
+           family={Abdel-Aty},
+           familyi={A\bibinithyphendelim A\bibinitperiod},
+           given={Mohamed},
+           giveni={M\bibinitperiod}}}%
+      }
+      \strng{namehash}{e0684e0ee2c31adf6a41c04173cc17df}
+      \strng{fullhash}{2744421ceb7de748f10c0200db954c04}
+      \strng{bibnamehash}{e0684e0ee2c31adf6a41c04173cc17df}
+      \strng{authorbibnamehash}{e0684e0ee2c31adf6a41c04173cc17df}
+      \strng{authornamehash}{e0684e0ee2c31adf6a41c04173cc17df}
+      \strng{authorfullhash}{2744421ceb7de748f10c0200db954c04}
+      \field{sortinit}{M}
+      \field{sortinithash}{4625c616857f13d17ce56f7d4f97d451}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Accident Analysis \& Prevention}
+      \field{title}{Systemic Approach to Improve Safety of Urban Unsignalized Intersections: Development and Validation of a Safety Index}
+      \field{volume}{141}
+      \field{year}{2020}
+      \field{pages}{105523}
+      \range{pages}{1}
+      \verb{doi}
+      \verb 10.1016/j.aap.2020.105523
+      \endverb
+    \endentry
+    \entry{openai_functioncalling}{misc}{}
+      \name{author}{1}{}{%
+        {{hash=0523b13262b12c215d8009938f5c14f1}{%
+           family={{OpenAI}},
+           familyi={O\bibinitperiod}}}%
+      }
+      \strng{namehash}{0523b13262b12c215d8009938f5c14f1}
+      \strng{fullhash}{0523b13262b12c215d8009938f5c14f1}
+      \strng{bibnamehash}{0523b13262b12c215d8009938f5c14f1}
+      \strng{authorbibnamehash}{0523b13262b12c215d8009938f5c14f1}
+      \strng{authornamehash}{0523b13262b12c215d8009938f5c14f1}
+      \strng{authorfullhash}{0523b13262b12c215d8009938f5c14f1}
+      \field{sortinit}{O}
+      \field{sortinithash}{2cd7140a07aea5341f9e2771efe90aae}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{OpenAI Platform Documentation}
+      \field{title}{Function Calling in the {OpenAI API}}
+      \field{year}{2024}
+      \verb{urlraw}
+      \verb https://platform.openai.com/docs/guides/function-calling
+      \endverb
+      \verb{url}
+      \verb https://platform.openai.com/docs/guides/function-calling
+      \endverb
+    \endentry
+    \entry{persaud2007}{article}{}
+      \name{author}{2}{}{%
+        {{hash=21fa3f0e6f00c0ec0b8a90b259b03f01}{%
+           family={Persaud},
+           familyi={P\bibinitperiod},
+           given={Bhagwant},
+           giveni={B\bibinitperiod}}}%
+        {{hash=3d12d62c938752642901842c374211c8}{%
+           family={Lyon},
+           familyi={L\bibinitperiod},
+           given={Craig},
+           giveni={C\bibinitperiod}}}%
+      }
+      \strng{namehash}{30594f0b2297c717322df328a1e9e6b2}
+      \strng{fullhash}{30594f0b2297c717322df328a1e9e6b2}
+      \strng{bibnamehash}{30594f0b2297c717322df328a1e9e6b2}
+      \strng{authorbibnamehash}{30594f0b2297c717322df328a1e9e6b2}
+      \strng{authornamehash}{30594f0b2297c717322df328a1e9e6b2}
+      \strng{authorfullhash}{30594f0b2297c717322df328a1e9e6b2}
+      \field{sortinit}{P}
+      \field{sortinithash}{ff3bcf24f47321b42cb156c2cc8a8422}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Accident Analysis \& Prevention}
+      \field{number}{3}
+      \field{title}{Empirical Bayes Before--After Safety Studies: Lessons Learned from Two Decades of Experience and Future Directions}
+      \field{volume}{39}
+      \field{year}{2007}
+      \field{pages}{546\bibrangedash 555}
+      \range{pages}{10}
+      \verb{doi}
+      \verb 10.1016/j.aap.2006.09.009
+      \endverb
+    \endentry
+    \entry{toolformer2023}{article}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{3}{}{%
+        {{hash=cc3adfa0ec8180459be4de68ba1b83cd}{%
+           family={Schick},
+           familyi={S\bibinitperiod},
+           given={Timo},
+           giveni={T\bibinitperiod}}}%
+        {{hash=0bb901d943bc0a6e21f09a9e49ff10b6}{%
+           family={Dwivedi-Yu},
+           familyi={D\bibinithyphendelim Y\bibinitperiod},
+           given={Jane},
+           giveni={J\bibinitperiod}}}%
+        {{hash=61d31fff88d8de87879feaec047cfa8f}{%
+           family={Dessì},
+           familyi={D\bibinitperiod},
+           given={Roberto},
+           giveni={R\bibinitperiod}}}%
+      }
+      \strng{namehash}{300dceb638d4635f5fb22cf5eab31236}
+      \strng{fullhash}{300dceb638d4635f5fb22cf5eab31236}
+      \strng{bibnamehash}{300dceb638d4635f5fb22cf5eab31236}
+      \strng{authorbibnamehash}{300dceb638d4635f5fb22cf5eab31236}
+      \strng{authornamehash}{300dceb638d4635f5fb22cf5eab31236}
+      \strng{authorfullhash}{300dceb638d4635f5fb22cf5eab31236}
+      \field{sortinit}{S}
+      \field{sortinithash}{b164b07b29984b41daf1e85279fbc5ab}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Advances in Neural Information Processing Systems}
+      \field{title}{Toolformer: Language Models Can Teach Themselves to Use Tools}
+      \field{volume}{36}
+      \field{year}{2023}
+      \verb{doi}
+      \verb 10.48550/arXiv.2302.04761
+      \endverb
+    \endentry
+    \entry{schultz2025_surrogate}{inproceedings}{}
+      \name{author}{1}{}{%
+        {{hash=b4a1ddb55ede2ca7d27c1940ee022d05}{%
+           family={Schultz},
+           familyi={S\bibinitperiod},
+           given={John},
+           giveni={J\bibinitperiod}}}%
+      }
+      \strng{namehash}{b4a1ddb55ede2ca7d27c1940ee022d05}
+      \strng{fullhash}{b4a1ddb55ede2ca7d27c1940ee022d05}
+      \strng{bibnamehash}{b4a1ddb55ede2ca7d27c1940ee022d05}
+      \strng{authorbibnamehash}{b4a1ddb55ede2ca7d27c1940ee022d05}
+      \strng{authornamehash}{b4a1ddb55ede2ca7d27c1940ee022d05}
+      \strng{authorfullhash}{b4a1ddb55ede2ca7d27c1940ee022d05}
+      \field{sortinit}{S}
+      \field{sortinithash}{b164b07b29984b41daf1e85279fbc5ab}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Journal of Transportation Safety}
+      \field{number}{3}
+      \field{title}{A Study on Surrogate Safety Indicators}
+      \field{volume}{12}
+      \field{year}{2025}
+      \field{pages}{123\bibrangedash 134}
+      \range{pages}{12}
+    \endentry
+    \entry{trafficgpt2023}{inproceedings}{}
+      \name{author}{3}{}{%
+        {{hash=195743f767a6ce1ba922e4819b23c8df}{%
+           family={Shi},
+           familyi={S\bibinitperiod},
+           given={Ning},
+           giveni={N\bibinitperiod}}}%
+        {{hash=f79215132dad5094a6a084f1445d13ef}{%
+           family={Zhao},
+           familyi={Z\bibinitperiod},
+           given={Xu},
+           giveni={X\bibinitperiod}}}%
+        {{hash=e82b346756840a1028797de95dcf32ef}{%
+           family={Zheng},
+           familyi={Z\bibinitperiod},
+           given={Junfeng},
+           giveni={J\bibinitperiod}}}%
+      }
+      \strng{namehash}{ac2b641471f5ef963a20b97ca714d938}
+      \strng{fullhash}{ac2b641471f5ef963a20b97ca714d938}
+      \strng{bibnamehash}{ac2b641471f5ef963a20b97ca714d938}
+      \strng{authorbibnamehash}{ac2b641471f5ef963a20b97ca714d938}
+      \strng{authornamehash}{ac2b641471f5ef963a20b97ca714d938}
+      \strng{authorfullhash}{ac2b641471f5ef963a20b97ca714d938}
+      \field{sortinit}{S}
+      \field{sortinithash}{b164b07b29984b41daf1e85279fbc5ab}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Proceedings of the 31st ACM SIGSPATIAL International Conference on Advances in Geographic Information Systems}
+      \field{title}{{TrafficGPT}: Viewing, Processing and Interacting with Traffic Foundation Models}
+      \field{year}{2023}
+      \verb{doi}
+      \verb 10.48550/arXiv.2309.06719
+      \endverb
+    \endentry
+    \entry{drivevlm2024}{inproceedings}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{3}{}{%
+        {{hash=cdf6cf72d56922b865e54db41f2b2d2b}{%
+           family={Tian},
+           familyi={T\bibinitperiod},
+           given={Xiaoyu},
+           giveni={X\bibinitperiod}}}%
+        {{hash=473a6ba524ac10e48578d6d20dcc76eb}{%
+           family={Gu},
+           familyi={G\bibinitperiod},
+           given={Junru},
+           giveni={J\bibinitperiod}}}%
+        {{hash=b917c5660ae82d6f4adc5a02e9489db2}{%
+           family={Li},
+           familyi={L\bibinitperiod},
+           given={Bailin},
+           giveni={B\bibinitperiod}}}%
+      }
+      \strng{namehash}{28af034838b0afd9b2f823d383d27382}
+      \strng{fullhash}{28af034838b0afd9b2f823d383d27382}
+      \strng{bibnamehash}{28af034838b0afd9b2f823d383d27382}
+      \strng{authorbibnamehash}{28af034838b0afd9b2f823d383d27382}
+      \strng{authornamehash}{28af034838b0afd9b2f823d383d27382}
+      \strng{authorfullhash}{28af034838b0afd9b2f823d383d27382}
+      \field{sortinit}{T}
+      \field{sortinithash}{9af77f0292593c26bde9a56e688eaee9}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Conference on Robot Learning (CoRL)}
+      \field{title}{{DriveVLM}: The Convergence of Autonomous Driving and Large Vision-Language Models}
+      \field{year}{2024}
+      \verb{doi}
+      \verb 10.48550/arXiv.2402.12289
+      \endverb
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+

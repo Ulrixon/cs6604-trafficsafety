@@ -5,6 +5,9 @@ pydantic==2.9.2
 pydantic-settings==2.6.0
 python-multipart==0.0.12
 
+# OpenAI (SafetyChat LLM module)
+openai>=1.30.0
+
 # Database
 psycopg2-binary==2.9.10
 sqlalchemy==2.0.35

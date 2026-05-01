@@ -3,10 +3,13 @@
 
 set -e
 
-PROJECT_ID="180117512369"
+PROJECT_ID="symbolic-cinema-305010"
 REGION="europe-west1"
-SERVICE_NAME="cs6604-trafficsafety-frontend"
+SERVICE_NAME="safety-index-frontend"
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
+
+# Backend Cloud Run service URL (no trailing slash, no path)
+BACKEND_URL="https://cs6604-trafficsafety-6mb53achqa-ew.a.run.app"
 
 echo "=== Deploying Traffic Safety Frontend to Cloud Run ==="
 echo "Project: ${PROJECT_ID}"
@@ -35,10 +38,11 @@ gcloud run deploy ${SERVICE_NAME} \
   --cpu 1 \
   --timeout 300 \
   --max-instances 5 \
-  --min-instances 0
+  --min-instances 0 \
+  --set-env-vars "API_URL=${BACKEND_URL}/api/v1/safety/index/"
 
 echo ""
 echo "✅ Frontend deployment complete!"
 echo ""
 echo "Get the service URL with:"
-echo "  gcloud run services describe ${SERVICE_NAME} --region ${REGION} --format 'value(status.url)'"
+echo "  gcloud run services describe ${SERVICE_NAME} --region ${REGION} --project ${PROJECT_ID} --format 'value(status.url)'"

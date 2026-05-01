@@ -246,8 +246,9 @@ def main():
         "The assistant queries live VTTSI data to ground every answer."
     )
 
-    # Derive chat API URL from the shared API_URL config
-    _chat_base = "/".join(API_URL.rstrip("/").split("/")[:-2])
+    # Derive chat API URL: split on /api/v1 to handle both
+    # "http://host/api/v1" and "http://host/api/v1/safety/index" forms.
+    _chat_base = API_URL.split("/api/v1")[0] + "/api/v1"
     _chat_url = f"{_chat_base}/chat/"
 
     # Session state (no type annotations – compatible with Python 3.9)
@@ -255,6 +256,8 @@ def main():
         st.session_state.chat_history = []
     if "chat_error" not in st.session_state:
         st.session_state.chat_error = None
+    if "dash_pending_chat" not in st.session_state:
+        st.session_state.dash_pending_chat = None
 
     # Example question buttons
     _examples = [
@@ -268,7 +271,7 @@ def main():
     _ex_cols = st.columns(3)
     for _i, _ex in enumerate(_examples):
         if _ex_cols[_i % 3].button(_ex, key=f"dash_ex_{_i}", use_container_width=True):
-            st.session_state.chat_history.append({"role": "user", "content": _ex})
+            st.session_state.dash_pending_chat = _ex
             st.session_state.chat_error = None
             st.rerun()
 
@@ -292,16 +295,18 @@ def main():
     if st.session_state.chat_error:
         st.error(f"⚠️ {st.session_state.chat_error}")
 
-    # Chat input (pinned to bottom of page by Streamlit)
+    # Chat input — accept typed input or a pending example-button click
     _user_input = st.chat_input("Ask about intersection safety…")
-    if _user_input:
-        st.session_state.chat_history.append({"role": "user", "content": _user_input})
+    _prompt = _user_input or st.session_state.get("dash_pending_chat")
+    st.session_state.dash_pending_chat = None  # always clear after reading
+    if _prompt:
+        st.session_state.chat_history.append({"role": "user", "content": _prompt})
         st.session_state.chat_error = None
         _messages = list(st.session_state.chat_history)
         _messages[-1] = {
             "role": "user",
             "content": (
-                f"{_user_input}\n"
+                f"{_prompt}\n"
                 f"[User preference: use alpha={alpha} for blended score calculations.]"
             ),
         }
@@ -334,6 +339,11 @@ def main():
                     st.session_state.chat_error = (
                         "SafetyChat is not configured: "
                         + (_detail or "OPENAI_API_KEY missing on the backend.")
+                    )
+                elif _exc.response.status_code == 402:
+                    st.session_state.chat_error = (
+                        "OpenAI quota exceeded — add billing at "
+                        "https://platform.openai.com/account/billing"
                     )
                 else:
                     st.session_state.chat_error = (

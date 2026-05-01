@@ -179,6 +179,11 @@ if prompt:
                     "SafetyChat is not configured: "
                     + (detail or "OPENAI_API_KEY missing on the backend.")
                 )
+            elif exc.response.status_code == 402:
+                st.session_state.chat_error = (
+                    "OpenAI quota exceeded — add billing at "
+                    "https://platform.openai.com/account/billing"
+                )
             else:
                 st.session_state.chat_error = (
                     f"Backend error ({exc.response.status_code}): {detail or str(exc)}"

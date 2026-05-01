@@ -76,6 +76,16 @@ def chat(request: ChatRequest) -> ChatResponse:
         # openai package missing or API failure
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:
+        # Surface quota/rate-limit errors as 402 with a clear message
+        exc_str = str(exc)
+        if "insufficient_quota" in exc_str or "RateLimitError" in type(exc).__name__:
+            raise HTTPException(
+                status_code=402,
+                detail=(
+                    "OpenAI quota exceeded. Add billing at "
+                    "https://platform.openai.com/account/billing"
+                ),
+            ) from exc
         logger.error(f"SafetyChat error: {exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="SafetyChat encountered an internal error.") from exc
 

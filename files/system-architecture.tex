@@ -1,86 +1,186 @@
-\begin{figure}[t]
-\centering
+% ============================================================
+%  VTTSI Refined System Architecture (with SafetyChat Module)
+%  Usage: \input{system-architecture} inside a figure* environment
+% ============================================================
 \begin{tikzpicture}[
     >=Latex,
-    node distance=1.5cm and 1.8cm,
     font=\small,
-    block/.style={rectangle, draw, rounded corners,
-                  minimum width=4.5cm, minimum height=1.2cm,
-                  align=center},
-    service/.style={rectangle, draw, rounded corners,
-                    minimum width=4.2cm, minimum height=1.0cm,
-                    font=\scriptsize, align=center},
-    db/.style={cylinder, cylinder uses custom shape, draw,
-               aspect=0.35, minimum height=1.6cm, minimum width=2.0cm,
-               align=center},
-    cloudbox/.style={rectangle, draw, rounded corners,
-                     dashed, inner sep=0.35cm},
-    line/.style={->, thick}
+    % ── node styles ──────────────────────────────────────────
+    user/.style    ={rectangle, draw, rounded corners=4pt, fill=gray!12,
+                     minimum width=15cm, minimum height=0.85cm, align=center},
+    page/.style    ={rectangle, draw, rounded corners=3pt, fill=blue!9,
+                     minimum width=2.5cm, minimum height=1.35cm,
+                     align=center, font=\scriptsize},
+    chatpage/.style={rectangle, draw, rounded corners=3pt, fill=orange!22,
+                     minimum width=2.5cm, minimum height=1.35cm,
+                     align=center, font=\scriptsize},
+    api/.style     ={rectangle, draw, rounded corners=3pt, fill=green!9,
+                     minimum width=7.8cm, minimum height=1.1cm,
+                     align=center, font=\scriptsize},
+    chatapi/.style ={rectangle, draw, rounded corners=3pt, fill=orange!14,
+                     minimum width=5.0cm, minimum height=1.1cm,
+                     align=center, font=\scriptsize},
+    svc/.style     ={rectangle, draw, rounded corners=3pt, fill=yellow!14,
+                     minimum width=4.0cm, minimum height=1.7cm,
+                     align=center, font=\scriptsize},
+    chatsvc/.style ={rectangle, draw, rounded corners=3pt, fill=orange!18,
+                     minimum width=4.0cm, minimum height=1.7cm,
+                     align=center, font=\scriptsize},
+    llm/.style     ={rectangle, draw, rounded corners=3pt, fill=purple!12,
+                     minimum width=2.8cm, minimum height=1.7cm,
+                     align=center, font=\scriptsize},
+    dbtab/.style   ={rectangle, draw, rounded corners=3pt, fill=red!7,
+                     minimum width=6.0cm, minimum height=1.3cm,
+                     align=center, font=\scriptsize},
+    ext/.style     ={rectangle, draw, dashed, rounded corners=3pt, fill=gray!7,
+                     minimum width=5.8cm, minimum height=1.0cm,
+                     align=center, font=\scriptsize},
+    grpbox/.style  ={rectangle, draw, dashed, rounded corners=5pt, inner sep=5pt},
+    arr/.style     ={->, thick, >=Latex},
+    darr/.style    ={->, thick, dashed, >=Latex},
 ]
 
-% ---------------- USER ----------------
-\node[block] (user) {End Users\\(Web Browser)};
+% ── TIER 0 : Users ────────────────────────────────────────────────────────────
+\node[user] (user)
+    {\textbf{End Users}
+     \enspace(Web Browsers \ | \ Transportation Agencies \ | \
+              Traffic Management Centers)};
 
-% ---------------- FRONTEND ----------------
-\node[block, below=2cm of user] (frontend)
-    {Streamlit Frontend\\
-     \footnotesize Interactive Safety Dashboard};
+% ── TIER 1 : Streamlit Frontend pages ────────────────────────────────────────
+\node[page, below=1.3cm of user, xshift=-5.3cm] (p0)
+    {\textbf{Dashboard}\\Geospatial Map\\$\alpha$-Blend};
+\node[page, right=0.2cm of p0] (p1)
+    {\textbf{Trend}\\Analysis\\Time-Series};
+\node[page, right=0.2cm of p1] (p2)
+    {\textbf{Analytics}\\Validation\\Correlations};
+\node[page, right=0.2cm of p2] (p3)
+    {\textbf{Sensitivity}\\Analysis\\Perturbation};
+\node[chatpage, right=0.6cm of p3] (p4)
+    {\textbf{SafetyChat}\\NL Query\\Interface};
 
-\node[service, below=0.4cm of frontend] (frontend_sub)
-    {Geospatial Maps (folium)\\
-     Charts + $\alpha$-Blending\\
-     API Polling (5 min)};
+\node[grpbox, fit=(p0)(p1)(p2)(p3)(p4),
+      label={[font=\small\bfseries, fill=white, inner sep=2pt,
+              rounded corners=2pt]above:{Streamlit Frontend (Google Cloud Run)}}]
+      (fe_box) {};
 
-% ---------------- BACKEND (FASTAPI) ----------------
-\node[block, below=2.4cm of frontend_sub] (backend)
-    {FastAPI Backend\\
-     \footnotesize REST API on Google Cloud Run};
+% ── TIER 2 : Backend API layer ────────────────────────────────────────────────
+% api_main placed so it roughly centres on analysis pages p0-p3
+\node[api, below=1.6cm of p1, xshift=0.4cm] (api_main)
+    {\textbf{FastAPI --- Safety REST API}\quad\textit{(Google Cloud Run)}\\[2pt]
+     \texttt{/api/v1/safety/index} \quad
+     \texttt{/api/v1/analytics} \quad
+     \texttt{/api/v1/history} \quad
+     \texttt{/api/v1/database\_explorer}};
 
-% Backend subservices (horizontal row)
-\node[service, below=0.5cm of backend, xshift=-3.5cm] (mcdm)
-    {Hybrid MCDM Service\\SAW + EDAS + CODAS + CRITIC};
+\node[chatapi, right=0.5cm of api_main] (api_chat)
+    {\textbf{SafetyChat API}\\
+     \textit{(Google Cloud Run)}\\[2pt]
+     \texttt{POST /api/v1/chat/}\\
+     Schema validation \& dispatch};
 
-\node[service, below=0.5cm of backend, xshift=3.5cm] (rtsi)
-    {Real-Time Safety Index Service\\EB Rates + Uplift Factors};
+\node[grpbox, fit=(api_main)(api_chat),
+      label={[font=\small\bfseries, fill=white, inner sep=2pt,
+              rounded corners=2pt]above:{FastAPI Backend (Google Cloud Run)}}]
+      (be_box) {};
 
-% ---------------- DATABASE ----------------
-\node[db, below=3.0cm of backend] (database)
-    {Cloud SQL\\PostgreSQL\\PostGIS};
+% ── TIER 3 : Core services ────────────────────────────────────────────────────
+\node[svc, below=1.55cm of api_main, xshift=-2.2cm] (mcdm)
+    {\textbf{Hybrid MCDM Service}\\[3pt]
+     SAW + EDAS + CODAS\\
+     CRITIC-Derived Weights\\
+     15-min Aggregated Bins};
 
-\node[font=\scriptsize, below=0.1cm of database]
-    {15-min Aggregated BSM/PSM\newline Vehicle \& VRU Counts\newline Speed Distribution\newline Crash Records};
+\node[svc, right=0.4cm of mcdm] (rtsi)
+    {\textbf{RT-SI Service}\\[3pt]
+     EB Stabilisation\\
+     Uplift Factors\\
+     VRU \& Vehicle Sub-Indices};
 
-% ---------------- CLOUD RUN GROUP BOX ----------------
-\node[cloudbox, fit=(frontend) (frontend_sub) (backend) (mcdm) (rtsi),
-      label={[font=\small]above:Google Cloud Run Containerized Services}] (cloudrunbox) {};
+\node[chatsvc, right=0.4cm of rtsi] (chatsvc)
+    {\textbf{Chat Service}\\[3pt]
+     \texttt{get\_safety\_score}\\
+     \texttt{get\_component\_breakdown}\\
+     \texttt{get\_historical\_baseline}\\
+     \texttt{compare\_intersections}};
 
-% ---------------- DATA FLOW ARROWS ----------------
+\node[llm, right=0.4cm of chatsvc] (llm)
+    {\textbf{OpenAI}\\GPT-4o\\[3pt]
+     Tool-Augmented\\Function Calling};
 
-% User -> Frontend
-\draw[line] (user) -- node[right, font=\scriptsize]{HTTPS} (frontend);
+% ── TIER 4 : Database ─────────────────────────────────────────────────────────
+% db_rt centred roughly under mcdm+rtsi; db_crash under chatsvc
+\node[dbtab, below=1.5cm of mcdm, xshift=2.2cm] (db_rt)
+    {\textbf{Real-Time Tables}\\[2pt]
+     \texttt{bsm} | \texttt{psm} | \texttt{vehicle-count}\\
+     \texttt{vru-count} | \texttt{speed-distribution} | \texttt{safety-event}};
 
-% Frontend -> Backend
-\draw[line] (frontend_sub) -- node[right, font=\scriptsize]{HTTPS / JSON} (backend);
+\node[dbtab, right=0.7cm of db_rt] (db_crash)
+    {\textbf{Historical Crash Dataset}\\[2pt]
+     VDOT Records 2017--2024\\
+     Fatal / Injury / PDO --- Spatially Joined};
 
-% Backend -> DB
-%\draw[line] (backend) -- node[right, font=\scriptsize]{SQL Queries} (database);
+\node[grpbox, fit=(db_rt)(db_crash),
+      label={[font=\small\bfseries, fill=white, inner sep=2pt,
+              rounded corners=2pt]above:{Cloud SQL (PostgreSQL + PostGIS, Google Cloud)}}]
+      (db_box) {};
 
-% DB -> Backend submodules
-\draw[line] (database) -| node[left, font=\scriptsize]{15-min Data} (mcdm);
-\draw[line] (database) -| node[right, font=\scriptsize]{Historical Crashes} (rtsi);
+% ── TIER 5 : External data sources ───────────────────────────────────────────
+\node[ext, below=1.2cm of db_rt] (ext_vcc)
+    {\textbf{VCC / Trino Smart Cities Platform}\\
+     BSM \& PSM Connected-Vehicle Telemetry};
 
-% Backend submodules -> Backend core
-\draw[line] (mcdm.north) |- node[left, font=\scriptsize]{MCDM Scores} (backend);
-\draw[line] (rtsi.north) |- node[right, font=\scriptsize]{RT-SI Scores} (backend);
+\node[ext, below=1.2cm of db_crash] (ext_vdot)
+    {\textbf{VDOT Traffic Safety Data}\\
+     Police-Reported Crashes (2017--2024)};
 
-% Backend -> Frontend (returning scores)
-\draw[line] (backend) -- node[above, font=\scriptsize]{Raw Scores JSON} (frontend_sub);
+% ── ARROWS ────────────────────────────────────────────────────────────────────
 
-% Frontend blending
-\draw[line] (frontend_sub.north) -- ++(0,0.25)
-    node[above, font=\scriptsize]{Final Safety Index via $\alpha$-blend};
+% Users → Frontend (route to p2 node, centre of the analysis pages row)
+\draw[arr] (user.south) -- node[right, font=\scriptsize]{HTTPS}
+    (p2.north);
+
+% Frontend analysis pages → Safety API (route straight into api_main)
+\draw[arr] ([xshift=-0.3cm]p1.south) --
+    node[right, font=\scriptsize]{HTTPS / REST (5-min poll)}
+    ([xshift=-0.3cm]api_main.north);
+
+% SafetyChat page → Chat API
+\draw[arr] (p4.south) -- node[right, font=\scriptsize]{HTTPS / REST}
+    (api_chat.north);
+
+% Safety API → MCDM & RT-SI services
+\draw[arr] (api_main.south) -| (mcdm.north);
+\draw[arr] (api_main.south) -| (rtsi.north);
+
+% Chat API → Chat Service
+\draw[arr] (api_chat.south) -- (chatsvc.north);
+
+% Chat Service <-> OpenAI (bidirectional)
+\draw[<->, thick] (chatsvc.east) --
+    node[above, font=\scriptsize]{Tool calls}
+    (llm.west);
+
+% MCDM → Real-Time DB
+\draw[arr] (mcdm.south) -|
+    node[pos=0.75, right, font=\scriptsize]{SQL}
+    ([xshift=-1.0cm]db_rt.north);
+
+% RT-SI → Historical DB
+\draw[arr] (rtsi.south) -|
+    node[pos=0.75, right, font=\scriptsize]{SQL}
+    ([xshift=1.0cm]db_rt.north);
+
+% Chat Service → Historical DB (LLM tool queries)
+\draw[arr] (chatsvc.south) -|
+    node[pos=0.75, right, font=\scriptsize]{SQL (tool calls)}
+    (db_crash.north);
+
+% External sources → DB (ETL ingestion, dashed)
+\draw[darr] (ext_vcc.north) --
+    node[right, font=\scriptsize]{ETL / Collector}
+    (db_rt.south);
+\draw[darr] (ext_vdot.north) --
+    node[right, font=\scriptsize]{Import Script}
+    (db_crash.south);
 
 \end{tikzpicture}
-\caption{Vertical cloud-native system architecture for the VTTSI platform showing Streamlit frontend, FastAPI backend, and Cloud SQL database integrated via Google Cloud Run.}
-\label{fig:VTTSI-system-design}
-\end{figure}

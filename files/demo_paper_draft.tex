@@ -70,43 +70,33 @@ demonstrates four end-to-end use cases across monitored intersections in Falls C
 \section{Introduction}
 \label{sec:intro}
 
-Real-time intersection safety data are increasingly available through connected-vehicle
-infrastructure, yet the gap between a numerical safety score and actionable operational
-insight remains large.
-Transportation Management Center (TMC) operators must interpret multi-dimensional indices
-under time pressure, often without the domain expertise to distinguish a volume-driven
-risk spike from a behavioral anomaly. Existing traffic dashboards present data but do
-not explain causality or suggest actions.
+TMC operators must interpret multi-dimensional safety indices under time pressure, yet
+existing dashboards present data without explaining causality or suggesting actions.
+Tool-augmented LLMs can reason over structured numerical data to produce grounded
+explanations \cite{toolformer2023}, but prior LLM+traffic work targets signal control
+\cite{llmlight2024} or AV motion planning \cite{gptdriver2023,drivevlm2024}---not
+safety-index explanation for infrastructure operators.
 
-Recent work on tool-augmented LLMs demonstrates that function-calling models can reason
-over structured numerical data and produce accurate, grounded explanations
-\cite{toolformer2023,openai_functioncalling}.
-Within transportation, LLM efforts have targeted signal control \cite{llmlight2024}
-and AV motion planning \cite{gptdriver2023,drivevlm2024},
-but \emph{safety-index explanation} for infrastructure operators remains unaddressed.
-
-\textbf{VTTSI-Chat} addresses this gap.
-It extends the existing VTTSI backend---a hybrid RT--SI + MCDM scoring pipeline
-running on Google Cloud Run---with a SafetyChat module whose LLM issues structured
-function calls to live VTTSI endpoints, constructs evidence-grounded narratives, and
-delivers them through a conversational Streamlit interface.
-
-\textbf{Contribution.}
-VTTSI-Chat is the first system to combine (1) a hybrid EB-stabilized crash index with
-real-time MCDM scoring, and (2) a tool-augmented LLM that generates causal safety
-narratives for TMC operators via natural language dialogue.
+\textbf{VTTSI-Chat} closes this gap by pairing the VTTSI hybrid scoring pipeline with
+\textbf{SafetyChat}: a GPT-4o module that issues typed function calls to live VTTSI
+endpoints and returns causal safety narratives via natural language dialogue.
+It is the first system to combine a hybrid EB-stabilized crash index with real-time
+MCDM scoring \emph{and} an operator-facing LLM explanation layer.
 
 % ─────────────────────────────────────────────────────────
 \section{VTTSI System Overview}
 \label{sec:system}
 
-\begin{figure}[t]
-    \centering
-    \includegraphics[width=\linewidth]{system-architecture.png}
-    \caption{VTTSI cloud architecture. The SafetyChat LLM module (dashed border) is
-             the new contribution of this demo paper.}
-    \label{fig:architecture}
-\end{figure}
+\begin{figure*}[t]
+\centering
+\resizebox{\textwidth}{!}{%
+\input{system-architecture}%
+}
+\caption{VTTSI cloud-native system architecture. The orange pathway (SafetyChat API,
+         Chat Service, OpenAI GPT-4o) is the new contribution of this demo paper;
+         the blue/green/yellow left pathway shows the existing safety-index pipeline.}
+\label{fig:architecture}
+\end{figure*}
 
 The VTTSI backend (FastAPI, Google Cloud Run) computes two complementary safety indices
 every 15 minutes from connected-vehicle telemetry streamed via the VTTI Trino system
@@ -168,78 +158,41 @@ Scores map to risk levels: 0--40 = low, 41--70 = moderate, 71--100 = high.
 The $\alpha$ parameter is user-adjustable to shift emphasis between historical risk
 and instantaneous anomaly detection.
 
+\subsection{Geospatial Data Foundation}
+
+Each intersection is registered with a centroid $(lat_i, lon_i)$ and an
+axis-aligned bounding box $B_i$ ($\delta\!\approx\!0.001^{\circ}$, $\approx$111\,m).
+VDOT crash records are assigned to intersections at import time via a PostGIS
+\texttt{ST\_Within} predicate; overlaps are resolved by minimum Haversine distance.
+This one-time spatial join materialises the per-site counts $C_{i,s}$ (Eq.~(1))
+as a static lookup table.
+The Streamlit Dashboard polls \texttt{/api/v1/safety/index} every five minutes and
+recolors each \texttt{folium.CircleMarker}---\textcolor{green!60!black}{green}
+($\mathrm{SI}<60$), \textcolor{orange!80!black}{amber} (60--75),
+\textcolor{red}{red} ($>75$)---with radius proportional to traffic volume,
+giving operators a dual spatial encoding of risk and exposure
+(Figure~\ref{fig:demo-screenshots}a).
+
 % ─────────────────────────────────────────────────────────
 \section{SafetyChat: LLM-Powered Explanation Module}
 \label{sec:safetychat}
 
-\begin{figure}[t]
-    \centering
-    \begin{tikzpicture}[
-        node distance = 0.52cm and 0.85cm,
-        box/.style = {rectangle, draw, rounded corners=3pt,
-                      minimum width=2.5cm, minimum height=0.6cm,
-                      text centered, align=center, font=\small},
-        llm/.style = {box, fill=blue!10},
-        api/.style = {box, fill=orange!15},
-        db/.style  = {box, fill=green!10},
-        arr/.style = {-{Stealth[length=4pt]}, thick}
-    ]
-    \node[llm] (ui)   {SafetyChat UI\\(Streamlit)};
-    \node[llm, below=of ui]  (llm) {GPT-4o\\(function-calling)};
-    \node[api, right=of llm, xshift=0.3cm] (api) {VTTSI API\\(FastAPI)};
-    \node[db,  below=of api] (db)  {Cloud SQL\\PostgreSQL};
-    \node[db,  below=of db]  (trino){VTTI Trino\\(CV Telemetry)};
-    \draw[arr] (ui)  -- (llm);
-    \draw[arr] (llm) -- node[above,font=\scriptsize]{6 tools} (api);
-    \draw[arr] (api) -- (db);
-    \draw[arr] (db)  -- (trino);
-    \draw[arr,dashed] (api) -- ++(0.95,0) |- (llm);
-    \draw[arr,dashed] (llm) -- (ui);
-    \end{tikzpicture}
-    \caption{SafetyChat data flow. Solid = request path; dashed = response path.}
-    \label{fig:safetychat-flow}
-\end{figure}
-
-\subsection{Design}
-
 VTTSI already answers \emph{what} the score is; SafetyChat answers \emph{why} and
 \emph{what to do}.
-We adopt the tool-augmented LLM pattern \cite{toolformer2023}: GPT-4o is equipped with
-typed function calls that map to VTTSI REST endpoints, ensuring every numerical claim
-in a generated narrative is grounded in live API data.
-An agentic loop (up to six iterations) allows the model to chain tool calls---for
-example, first ranking all intersections and then drilling into component breakdowns for
-the top-ranked sites.
-
-\subsection{Tool Definitions}
-
-SafetyChat exposes six tools via the OpenAI function-calling protocol
-\cite{openai_functioncalling}:
-
-\begin{enumerate}
-    \item \texttt{get\_safety\_score(intersection, \mbox{target\_time})} ---
-          returns RT--SI, MCDM, and blended scores with top uplift factors;
-          \texttt{target\_time} enables historical point-in-time queries.
-    \item \texttt{get\_component\_breakdown(intersection, \mbox{target\_time})} ---
-          returns CRITIC-weighted criterion values for a specific 15-minute bin.
-    \item \texttt{get\_historical\_baseline(intersection)} ---
-          returns EB prior, 7-year VDOT crash severity breakdown, and $\lambda^\star$.
-    \item \texttt{compare\_intersections(metric, alpha)} ---
-          ranks all monitored intersections by any index component.
-    \item \texttt{get\_trend\_data(intersection, days\_back)} ---
-          returns a 7--30 day MCDM score trend with direction indicator and
-          up to 20 sampled time-bin snapshots.
-    \item \texttt{run\_sql\_query(query)} ---
-          executes any read-only \textsc{select} against the live database for
-          ad-hoc exploration; guarded against write operations.
-\end{enumerate}
-
-\subsection{Differentiation}
+GPT-4o is equipped with typed function calls \cite{openai_functioncalling} that map
+to VTTSI REST endpoints, grounding every claim in live data.
+An agentic loop (up to six iterations) enables chained calls---e.g., ranking all
+intersections then drilling into the top site's breakdown.
+The six tools are:
+(1)~\texttt{get\_safety\_score} --- RT--SI, MCDM, and blended scores with uplift
+factors; optional \texttt{target\_time} for historical queries;
+(2)~\texttt{get\_component\_breakdown} --- CRITIC-weighted criteria for a 15-min bin;
+(3)~\texttt{get\_historical\_baseline} --- EB prior and 7-year crash severity breakdown;
+(4)~\texttt{compare\_intersections} --- ranks all sites by any index component;
+(5)~\texttt{get\_trend\_data} --- 7--30 day MCDM trend with sampled snapshots;
+(6)~\texttt{run\_sql\_query} --- read-only ad-hoc SQL, write-guarded.
 
 Table~\ref{tbl:comparison} positions VTTSI-Chat against related systems.
-Existing LLM+traffic systems target signal control \cite{llmlight2024,trafficgpt2023}
-or AV motion planning \cite{gptdriver2023,drivevlm2024}; none pair a hybrid
-crash--telemetry safety index with operator-facing causal narratives.
 
 \begin{table}[t]
 \centering
@@ -269,43 +222,50 @@ GPT-Driver \cite{gptdriver2023}  & \xmark & \cmark & \cmark & \xmark \\
 \section{Demonstration}
 \label{sec:demo}
 
-The live demo runs against the production VTTSI deployment on Google Cloud Run,
-monitoring eight instrumented intersections in Falls Church, VA.
-Attendees interact with the SafetyChat interface directly.
-Four use cases are demonstrated.
+The live demo runs against the production VTTSI deployment, monitoring 18
+intersections in Falls Church, VA. Four use cases are demonstrated.
 
-\subsection{Use Case 1: TMC Operator Morning Briefing}
-\textit{Query:} \emph{``Give me a morning safety briefing for all intersections.''}\\
-\textit{Action:} SafetyChat calls \texttt{compare\_intersections} to rank all sites by
-blended score, then \texttt{get\_component\_breakdown} for the two highest-ranked
-intersections.
-The response identifies peak-risk windows, dominant criteria (e.g., speed variance or
-elevated VRU counts), and compares current scores to the 7-day trend---synthesizing
-data from multiple API calls into a single situational-awareness narrative in under
-five seconds.
+\subsection{UC1: TMC Operator Morning Briefing}
+\textit{Query:} \emph{``Give me a morning safety briefing for all intersections.''}
+SafetyChat chains \texttt{compare\_intersections} and \texttt{get\_component\_breakdown}
+for the two highest-ranked sites, delivering a situational-awareness narrative
+identifying peak-risk windows and dominant criteria (e.g., speed variance, VRU counts)
+in under five seconds.
 
-\subsection{Use Case 2: Causal Safety Explanation for Planners}
-\textit{Query:} \emph{``Why did E.~Broad--N.~Washington score above 70 yesterday at
-5\,PM?''}\\
-\textit{Action:} SafetyChat passes \texttt{target\_time} (\texttt{2025-11-20T17:00})
-to \texttt{get\_safety\_score} and \texttt{get\_component\_breakdown}, identifies
-which criteria were in the 90th percentile for that bin, and traces the elevated score
-to concurrent peak vehicle volume and incident activity, consistent with the
-intersection's VDOT crash history.
+\subsection{UC2: Causal Safety Explanation for Planners}
+\textit{Query:} \emph{``Why did E.~Broad--N.~Washington score above 70 yesterday at 5\,PM?''}
+SafetyChat queries \texttt{get\_safety\_score} and \texttt{get\_component\_breakdown}
+at the historical time-bin, identifies criteria in the 90th percentile, and traces
+the elevated score to concurrent peak vehicle volume and incident activity.
 
-\subsection{Use Case 3: Emergency Responder Routing}
-\textit{Query:} \emph{``Which of Glebe--Potomac or Birch--W.~Broad has lower current
-risk for a priority crossing?''}\\
-\textit{Action:} SafetyChat calls \texttt{get\_safety\_score} for both intersections,
-compares RT--SI, MCDM, and blended indices in real time, and recommends the lower-risk
-route with reasoning grounded in current VRU counts and speed variance.
+\subsection{UC3: Emergency Responder Routing}
+\textit{Query:} \emph{``Which of Glebe--Potomac or Birch--W.~Broad has lower current risk?''}
+SafetyChat compares live RT--SI, MCDM, and blended indices for both intersections and
+recommends the lower-risk route with reasoning grounded in VRU counts and speed variance.
 
-\subsection{Use Case 4: Public Stakeholder Trend Engagement}
-\textit{Query:} \emph{``Is the Glebe--Potomac intersection getting safer over time?''}\\
-\textit{Action:} SafetyChat calls \texttt{get\_trend\_data} with a 30-day window,
-reports the trend direction and mean/max/min MCDM scores, and translates index values
-into plain-language risk levels (e.g., ``The score averaged 39.9 over 30 days---low
-risk, with an improving trend'').
+\subsection{UC4: Public Stakeholder Trend Engagement}
+\textit{Query:} \emph{``Is the Glebe--Potomac intersection getting safer over time?''}
+SafetyChat calls \texttt{get\_trend\_data} (30-day window) and translates mean/max/min
+MCDM scores into plain-language risk levels with a trend direction indicator.
+
+\begin{figure*}[t]
+\centering
+\begin{minipage}[t]{0.48\textwidth}
+  \includegraphics[height=1.6in,keepaspectratio,width=\textwidth]{screenshot_dashboard.png}\\[-0.2ex]
+  {\small\textit{(a) Dashboard: interactive map with 18 monitored intersections (Falls Church, VA),
+  real-time KPI cards (Avg Index 1.8, 0 High-Risk sites, 2.0\,K traffic volume).}}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}
+  \includegraphics[height=1.6in,keepaspectratio,width=\textwidth]{screenshot_safetychat_uc3_clean.png}\\[-0.2ex]
+  {\small\textit{(b) SafetyChat (UC3): emergency routing query---GPT-4o calls
+  \texttt{compare\_intersections} and returns Birch \& W.\,Broad as the safest
+  crossing (blended score 0.0) for immediate vehicle dispatch.}}
+\end{minipage}
+\caption{Live VTTSI-Chat demonstration: (a)~geospatial dashboard providing
+  system-wide situational awareness; (b)~SafetyChat natural-language response
+  grounding an emergency routing recommendation in live blended safety indices.}
+\label{fig:demo-screenshots}
+\end{figure*}
 
 \begin{table}[t]
 \centering
@@ -328,35 +288,37 @@ Trend engagement     & get\_trend\_data(30d)      & Official/Public \\
 \section{Related Work}
 \label{sec:related}
 
-EB-stabilized crash models \cite{persaud2007,montella2020systemic} and MCDM-based
-indices \cite{Amraji2025CombinedSafetyIndex,asadamraji2025combined} provide the
-theoretical foundation for VTTSI's dual scoring pipeline.
-Surrogate safety indicators \cite{schultz2025_surrogate,gettman2003ssam} complement
-crash data with real-time conflict proxies, but lack a unified aggregation framework.
-In the LLM domain, TrafficGPT \cite{trafficgpt2023} targets traffic flow analysis,
-LLMLight \cite{llmlight2024} handles signal control, and GPT-Driver / DriveVLM
-\cite{gptdriver2023,drivevlm2024} operate at the AV layer---none provide a
-safety-index explanation interface for infrastructure operators.
-VTTSI-Chat uniquely combines (i) a validated hybrid index fusing long-term crash
-history with 15-minute telemetry, (ii) a tool-augmented LLM grounded in live API data,
-and (iii) causal narratives traceable to raw sensor signals.
+VTTSI's scoring builds on EB-stabilized crash models
+\cite{persaud2007,montella2020systemic}, MCDM-based indices
+\cite{Amraji2025CombinedSafetyIndex,asadamraji2025combined}, and surrogate safety
+indicators \cite{schultz2025_surrogate,gettman2003ssam}.
+In the LLM domain, TrafficGPT \cite{trafficgpt2023}, LLMLight \cite{llmlight2024},
+and GPT-Driver/DriveVLM \cite{gptdriver2023,drivevlm2024} address flow analysis,
+signal control, and AV planning respectively---none provide a safety-index explanation
+interface for infrastructure operators.
 
 % ─────────────────────────────────────────────────────────
 \section{Conclusion}
 \label{sec:conclusion}
 
-VTTSI-Chat is a live, cloud-native intersection safety system that closes the gap
-between quantitative safety scoring and human-readable situational awareness.
-By grounding all LLM outputs in six typed API tool calls, SafetyChat delivers
-causally grounded, hallucination-resistant safety narratives to TMC operators,
-planners, emergency responders, and the public through natural language dialogue.
-Future work will integrate the Agentic Traffic Safety Knowledge Graph (TS--KG) as an
-additional tool, enabling the LLM to reason over intersection geometry, conflict
-topology, and causal trajectory motifs.
+VTTSI-Chat closes the gap between quantitative safety scoring and actionable
+situational awareness by grounding all LLM outputs in six typed API tool calls,
+delivering causally grounded safety narratives to TMC operators, planners, and
+emergency responders through natural language dialogue.
+The spatially-joined crash baseline, bounding-box intersection registry, and live
+15-minute telemetry together form the \emph{foundational geospatial layer} for future
+work integrating the Agentic Traffic Safety Knowledge Graph (TS--KG)---enabling the
+LLM to reason over intersection geometry, conflict topology, and causal trajectory
+motifs.
 
 \section*{Acknowledgment}
 The VTTSI system was developed in collaboration with the Virginia Tech Transportation
-Institute (VTTI). AI assistance was used in generating portions of this work.
+Institute (VTTI).
+Generative AI tools, including OpenAI ChatGPT (GPT-4o) and Anthropic Claude, were
+utilized to assist in generating portions of this work, including manuscript text,
+LaTeX formatting, and code snippets.
+All AI-generated content was reviewed, verified, and edited by the authors, who take
+full responsibility for the accuracy and integrity of the submitted manuscript.
 
 \printbibliography
 

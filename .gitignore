@@ -115,3 +115,33 @@ ENVIRONMENT/
 
 # Data integration folder
 data-integration/
+
+# PPM image files
+*.ppm
+
+# LaTeX intermediate files
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.xdv
+files/*.aux
+files/*.bbl
+files/*.bcf
+files/*.blg
+files/*.fdb_latexmk
+files/*.fls
+files/*.log
+files/*.out
+files/*.run.xml
+files/*.synctex.gz
+files/*.toc

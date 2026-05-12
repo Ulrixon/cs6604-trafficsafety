@@ -723,12 +723,21 @@ We blend the real-time MCDM with the historically informed RT–SI index because
 \section{System Design}
 \label{sec:systemdesign}
 
-\begin{figure}
-    \centering
-    \includegraphics[width=\linewidth]{system-architecture.png}
-    \caption{System architecture overview}
-    \label{fig:system-architecture}
-\end{figure}
+\begin{figure*}[t]
+\centering
+\resizebox{\textwidth}{!}{%
+\input{system-architecture}%
+}
+\caption{Refined cloud-native system architecture of VTTSI. The left pathway shows the
+safety-index pipeline: Streamlit analysis pages call the FastAPI REST endpoints, which
+dispatch to the Hybrid MCDM Service and RT-SI Service; both services query the shared
+Cloud SQL (PostgreSQL + PostGIS) database. The right pathway shows the SafetyChat
+module: the natural-language interface page calls \texttt{POST /api/v1/chat/}, which
+routes to a tool-augmented Chat Service that invokes four live-data tools via the
+OpenAI GPT-4o function-calling API. Dashed arrows indicate external ETL ingestion
+from the VCC/Trino connected-vehicle platform and VDOT historical crash records.}
+\label{fig:system-architecture}
+\end{figure*}
 
 
 The system adopts a cloud-based client--server architecture with a clear separation between the backend services, frontend visualization layer, and database management components. This modular design ensures scalability, maintainability, and seamless integration with cloud services using CI/CD pipeline.

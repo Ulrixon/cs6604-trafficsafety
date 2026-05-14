@@ -1,0 +1,460 @@
+%%
+%% VTTSI-Chat Demo Paper — ACM sigconf format, SIGSPATIAL 2026
+%%
+\documentclass[sigconf]{acmart}
+
+%% ─── Packages ────────────────────────────────────────────────────────────────
+%% (acmart handles fontenc, inputenc, url, hyperref, xcolor, booktabs)
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.multipart,fit,calc,
+                shapes.geometric,shapes,shapes.symbols,arrows}
+\usepackage{tabularx}
+\usepackage{siunitx}
+\sisetup{round-mode=places, round-precision=2}
+\usepackage{array}
+\usepackage{amsmath}
+\usepackage{pifont}
+\newcommand{\cmark}{\ding{51}}
+\newcommand{\xmark}{\ding{55}}
+
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\floatpagefraction}{0.8}
+
+%% ─── ACM Rights & Conference Metadata ───────────────────────────────────────
+\setcopyright{acmlicensed}
+\copyrightyear{2026}
+\acmYear{2026}
+\acmDOI{XXXXXXX.XXXXXXX}
+\acmConference[SIGSPATIAL '26]{The 34th ACM International Conference on
+  Advances in Geographic Information Systems}{November 2026}{Riverside, CA, USA}
+\acmISBN{978-1-4503-XXXX-X/26/11}
+
+%% ─────────────────────────────────────────────────────────────────────────────
+\begin{document}
+
+\title[VTTSI-Chat]{VTTSI-Chat: Agentic GeoAI for Real-Time Intersection
+  Safety Monitoring with Natural Language Explanation [Demo]}
+
+%% Authors ────────────────────────────────────────────────────────────────────
+\author{Cheng-Shun Chuang}
+\affiliation{%
+  \department{Computer Science}
+  \institution{Virginia Tech}
+  \city{Alexandria}
+  \state{Virginia}
+  \country{USA}}
+\email{cchengshun@vt.edu}
+
+\author{Jason Cusati}
+\affiliation{%
+  \department{Computer Science}
+  \institution{Virginia Tech}
+  \city{Blacksburg}
+  \state{Virginia}
+  \country{USA}}
+\email{djjay@vt.edu}
+
+\author{Victory Uhunmwangho}
+\affiliation{%
+  \department{Computer Science}
+  \institution{Virginia Tech}
+  \city{Blacksburg}
+  \state{Virginia}
+  \country{USA}}
+\email{victoryu@vt.edu}
+
+\renewcommand{\shortauthors}{Chuang et al.}
+
+%% Abstract ───────────────────────────────────────────────────────────────────
+\begin{abstract}
+We present \textbf{VTTSI-Chat}, a cloud-native agentic GeoAI system that
+pairs the Virginia Tech Transportation Safety Index (VTTSI)---a hybrid
+Real-Time Safety Index (RT--SI) and CRITIC-weighted MCDM pipeline---with a
+\textbf{SafetyChat} conversational module powered by a tool-augmented GPT-4o.
+VTTSI fuses seven years of VDOT crash records via Empirical Bayes
+stabilization with live J2735 connected-vehicle telemetry stored in a
+PostGIS spatial database, producing interpretable 0--100 safety scores every
+15 minutes across 18 instrumented intersections in Falls Church, VA.
+SafetyChat exposes six typed API tools to the LLM, grounding all natural
+language responses in live geospatial data and enabling TMC operators,
+planners, and emergency responders to query causal safety narratives through
+ordinary conversation.
+A live deployment at
+\url{https://cs6604-trafficsafety-180117512369.europe-west1.run.app}
+demonstrates four end-to-end use cases and is available for interactive
+exploration at the conference.
+\end{abstract}
+
+%% CCS Concepts ───────────────────────────────────────────────────────────────
+\begin{CCSXML}
+<ccs2012>
+ <concept>
+  <concept_id>10010147.10010178.10010179</concept_id>
+  <concept_desc>Computing methodologies~Natural language processing</concept_desc>
+  <concept_significance>500</concept_significance>
+ </concept>
+ <concept>
+  <concept_id>10010147.10010178.10010187</concept_id>
+  <concept_desc>Computing methodologies~Intelligent agents</concept_desc>
+  <concept_significance>500</concept_significance>
+ </concept>
+ <concept>
+  <concept_id>10002951.10003227.10003241</concept_id>
+  <concept_desc>Information systems~Decision support systems</concept_desc>
+  <concept_significance>300</concept_significance>
+ </concept>
+ <concept>
+  <concept_id>10003120.10003130.10003131</concept_id>
+  <concept_desc>Human-centered computing~Interactive systems and tools</concept_desc>
+  <concept_significance>300</concept_significance>
+ </concept>
+</ccs2012>
+\end{CCSXML}
+
+\ccsdesc[500]{Computing methodologies~Natural language processing}
+\ccsdesc[500]{Computing methodologies~Intelligent agents}
+\ccsdesc[300]{Information systems~Decision support systems}
+\ccsdesc[300]{Human-centered computing~Interactive systems and tools}
+
+\keywords{agentic GeoAI, traffic safety, spatio-temporal safety index,
+  natural language interface, MCDM, Empirical Bayes, connected vehicles,
+  PostGIS, tool-augmented LLM}
+
+\maketitle
+
+\sloppy
+\raggedbottom
+
+% ─────────────────────────────────────────────────────────
+\section{Introduction}
+\label{sec:intro}
+
+Geospatial intersection safety data are increasingly available through
+connected-vehicle infrastructure, yet a critical gap remains between
+numerical safety scores and actionable insight for operators.
+TMC practitioners must interpret multi-dimensional spatio-temporal indices
+under time pressure, yet existing dashboards present data without explaining
+causality or suggesting actions.
+Tool-augmented LLMs can reason over structured numerical data to produce
+grounded explanations \cite{toolformer2023}, but prior LLM+traffic work
+targets signal control \cite{llmlight2024} or AV motion planning
+\cite{gptdriver2023,drivevlm2024}---not safety-index explanation for
+infrastructure operators.
+
+\textbf{VTTSI-Chat} closes this gap by pairing the VTTSI hybrid scoring
+pipeline with \textbf{SafetyChat}: a GPT-4o module that issues typed function
+calls to live VTTSI endpoints and returns causal safety narratives via natural
+language dialogue.
+The system operates as an \emph{agentic GeoAI} interface: the LLM agent
+queries live PostGIS-backed safety data, reasons over spatio-temporal
+patterns across 18 geospatially registered intersections, and synthesizes
+evidence-grounded narratives for diverse operator roles.
+VTTSI-Chat is the first system to combine a hybrid EB-stabilized crash index
+with real-time MCDM scoring \emph{and} a natural language interface for
+spatial safety data.
+
+% ─────────────────────────────────────────────────────────
+\section{VTTSI System Overview}
+\label{sec:system}
+
+\begin{figure*}[t]
+\centering
+\resizebox{\textwidth}{!}{%
+\input{../system-architecture}%
+}
+\caption{VTTSI cloud-native system architecture. The orange pathway
+  (SafetyChat API, Chat Service, OpenAI GPT-4o) is the new contribution of
+  this demo paper; the blue/green/yellow left pathway shows the existing
+  safety-index pipeline.}
+\label{fig:architecture}
+\end{figure*}
+
+The VTTSI backend (FastAPI on Google Cloud Run) computes two complementary
+safety indices every 15 minutes.
+Six real-time tables stream from the VTTI Trino connected-vehicle system into
+Cloud SQL PostGIS: \texttt{bsm} (J2735 Basic Safety Messages: position,
+speed, braking), \texttt{psm} (Personal Safety Messages from VRUs),
+\texttt{vehicle-count}, \texttt{vru-count}, \texttt{speed-distribution},
+and \texttt{safety-event} (red-light running, intersection conflicts,
+near-miss detections).
+All streams are synchronized into 15-minute bins; a separate VDOT crash
+dataset (2017--2024) is spatially joined to intersections at import time via
+a PostGIS \texttt{ST\_Within} predicate using the VDOT LRS centerline
+network.
+
+\subsection{Real-Time Safety Index (RT--SI)}
+
+RT--SI anchors intersection risk to a severity-weighted Empirical Bayes (EB)
+baseline derived from 2017--2024 VDOT crash records.
+The historical crash rate is:
+\begin{equation}
+r_i = \frac{\sum_{s}\, w_s\, C_{i,s}}{E_i},
+\quad w_{\text{Fatal}}=10,\; w_{\text{Inj}}=3,\; w_{\text{PDO}}=1,
+\end{equation}
+where $C_{i,s}$ are crash counts by severity and $E_i$ is vehicle exposure.
+The EB stabilized rate is:
+\begin{equation}
+\hat{r}^{\text{EB}}_{i,t}(\lambda) =
+\frac{Y_{i,t} + \lambda\, r_0}{1 + \lambda},
+\quad \lambda^\star = 10{,}000,
+\end{equation}
+where $r_0$ is the global mean rate across all site-bins (2017--2024) and
+$\lambda^\star$ is chosen by minimizing Poisson log-loss on a 2025 hold-out
+set.
+Real-time uplift factors---bounded to $[0,1]$---adjust this baseline for
+speed deficit ($F^{\text{spd}}$), speed variance ($F^{\text{var}}$), and
+VRU--vehicle conflict exposure ($F^{\text{conf}}$):
+\begin{equation}
+U_{i,t} = 1 + \beta_1 F^{\text{spd}}_{i,t}
+              + \beta_2 F^{\text{var}}_{i,t}
+              + \beta_3 F^{\text{conf}}_{i,t},
+\end{equation}
+with $(\beta_1,\beta_2,\beta_3)=(0.3,0.3,0.4)$.
+VRU and vehicle sub-indices are combined with weights
+$(\omega_{\text{vru}}, \omega_{\text{veh}}) = (0.6, 0.4)$
+and min-max scaled to $\mathrm{SI}^{\text{RT}}\in[0,100]$.
+
+\subsection{MCDM Safety Index}
+
+A CRITIC-weighted multi-criteria pipeline \cite{Amraji2025CombinedSafetyIndex}
+constructs a decision matrix over five real-time criteria
+(vehicle count, VRU count, average speed, speed variance, incident count)
+for each intersection--time-bin pair.
+CRITIC criterion weights are derived from normalized standard deviations and
+inter-criterion Pearson correlations, recomputed every 24 hours.
+Three MCDM scoring methods---SAW, EDAS, and CODAS---are each computed and
+scaled to $[0,100]$; a second-pass CRITIC aggregation yields the hybrid index
+$\mathrm{SI}^{\text{MCDM}}\in[0,100]$ (higher = higher risk).
+Validation over 18 intersections shows that the three methods achieve
+pairwise Pearson correlations $r\approx0.78$--$0.99$, and RT--SI has a mean
+absolute deviation of $\approx 0.09$ under $\pm25\%$ joint parameter
+perturbation \cite{persaud2007}.
+
+\subsection{Blended Final Index}
+
+\begin{equation}
+\mathrm{SI}^{\text{Final}}_{i,t} =
+\alpha\,\mathrm{SI}^{\text{RT}}_{i,t} +
+(1-\alpha)\,\mathrm{SI}^{\text{MCDM}}_{i,t},
+\quad \alpha = 0.7\text{ (default)}.
+\label{eq:blend}
+\end{equation}
+
+Scores map to risk levels: 0--40 = low, 41--70 = moderate, 71--100 = high.
+
+\subsection{Geospatial Foundation and Dashboard}
+
+Each of the 18 intersections is registered with a centroid
+$(lat_i, lon_i)$ and an axis-aligned bounding box $B_i$
+($\delta\!\approx\!0.001^{\circ}$, $\approx$111\,m) in PostGIS.
+The one-time spatial join materialises per-site counts $C_{i,s}$ (Eq.~(1))
+as a static lookup table.
+The Streamlit Dashboard polls \texttt{/api/v1/safety/index} every five
+minutes and recolors each \texttt{folium.CircleMarker}---\textcolor{green!60!black}{green}
+($\mathrm{SI}<60$), \textcolor{orange!80!black}{amber} (60--75),
+\textcolor{red}{red} ($>75$)---with radius proportional to traffic volume,
+giving operators a dual spatial encoding of risk and exposure.
+An interactive $\alpha$-blending slider lets operators shift the final index
+between the historical-risk (RT--SI) and operational-anomaly (MCDM) poles
+in real time (Figure~\ref{fig:demo-screenshots}a).
+
+% ─────────────────────────────────────────────────────────
+\section{SafetyChat: LLM-Powered Explanation Module}
+\label{sec:safetychat}
+
+VTTSI already answers \emph{what} the score is; SafetyChat answers \emph{why}
+and \emph{what to do}.
+GPT-4o is equipped with typed function calls \cite{openai_functioncalling}
+that map to VTTSI REST endpoints, grounding every claim in live geospatial
+data.
+An agentic loop (up to six iterations) enables chained calls---e.g., ranking
+all intersections by spatial risk and then drilling into the top site's
+component breakdown.
+The six tools are:
+(1)~\texttt{get\_safety\_score} --- RT--SI, MCDM, and blended scores with
+uplift factors; optional \texttt{target\_time} for historical queries;
+(2)~\texttt{get\_component\_breakdown} --- CRITIC-weighted criteria for a
+15-min bin;
+(3)~\texttt{get\_historical\_baseline} --- EB prior and 7-year crash severity
+breakdown;
+(4)~\texttt{compare\_intersections} --- ranks all sites by any index
+component;
+(5)~\texttt{get\_trend\_data} --- 7--30 day MCDM trend with sampled
+snapshots;
+(6)~\texttt{run\_sql\_query} --- read-only ad-hoc SQL over the PostGIS
+database, write-guarded.
+
+Table~\ref{tbl:comparison} positions VTTSI-Chat against related systems.
+
+\begin{table}[t]
+\centering
+\caption{VTTSI-Chat vs.\ Related Systems}
+\label{tbl:comparison}
+\small
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabularx}{\columnwidth}{@{}l c c c c@{}}
+\toprule
+\textbf{System} &
+\textbf{\shortstack{Hybrid\\Index}} &
+\textbf{\shortstack{Real-Time\\Telemetry}} &
+\textbf{\shortstack{LLM\\Interface}} &
+\textbf{\shortstack{Causal\\Narrative}} \\
+\midrule
+Google / Apple Maps              & \xmark & \cmark & \xmark & \xmark \\
+Waycare / ATSPM                  & \xmark & \cmark & \xmark & \xmark \\
+TrafficGPT \cite{trafficgpt2023} & \xmark & \cmark & \cmark & \xmark \\
+LLMLight \cite{llmlight2024}     & \xmark & \cmark & \cmark & \xmark \\
+GPT-Driver \cite{gptdriver2023}  & \xmark & \cmark & \cmark & \xmark \\
+\textbf{VTTSI-Chat (ours)}       & \cmark & \cmark & \cmark & \cmark \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ─────────────────────────────────────────────────────────
+\section{Demonstration}
+\label{sec:demo}
+
+\subsection{Demo Setup}
+
+The live demo runs against the production VTTSI deployment monitoring 18
+intersections in Falls Church, VA.
+Conference attendees interact directly with the SafetyChat interface via
+a browser, typing natural language queries and observing LLM tool-call traces
+in real time alongside the companion Streamlit geospatial dashboard.
+Four canonical use cases guide the session.
+
+\subsection{UC1: TMC Operator Morning Briefing}
+\textit{Query:} \emph{``Give me a morning safety briefing for all
+intersections.''}
+SafetyChat chains \texttt{compare\_intersections} and
+\texttt{get\_component\_breakdown} for the two highest-ranked sites,
+delivering a situational-awareness narrative identifying peak-risk windows
+and dominant criteria (e.g., speed variance, VRU counts) in under five
+seconds.
+Where the Streamlit dashboard requires navigating multiple spatial charts,
+SafetyChat synthesizes multi-intersection data into a single paragraph.
+
+\subsection{UC2: Causal Safety Explanation for Planners}
+\textit{Query:} \emph{``Why did E.~Broad--N.~Washington score above 70
+yesterday at 5\,PM?''}
+SafetyChat queries \texttt{get\_safety\_score} and
+\texttt{get\_component\_breakdown} at the historical time-bin, identifies
+criteria in the 90th percentile, and traces the elevated score to concurrent
+peak vehicle volume and incident activity.
+
+\subsection{UC3: Emergency Responder Routing}
+\textit{Query:} \emph{``Which of Glebe--Potomac or Birch--W.~Broad has lower
+current risk?''}
+SafetyChat compares live RT--SI, MCDM, and blended indices for both
+intersections and recommends the lower-risk route with reasoning grounded in
+VRU counts and speed variance.
+
+\subsection{UC4: Public Stakeholder Trend Engagement}
+\textit{Query:} \emph{``Is the Glebe--Potomac intersection getting safer over
+time?''}
+SafetyChat calls \texttt{get\_trend\_data} (30-day window) and translates
+mean/max/min MCDM scores into plain-language risk levels with a trend
+direction indicator, making geospatial safety data accessible to
+non-technical stakeholders.
+
+\begin{figure*}[t]
+\centering
+\begin{minipage}[t]{0.48\textwidth}
+  \includegraphics[height=1.6in,keepaspectratio,width=\textwidth]{../screenshot_dashboard.png}\\[-0.2ex]
+  {\small\textit{(a) Dashboard: interactive Folium map with 18 monitored
+  intersections (Falls Church, VA), real-time KPI cards (Avg Index 1.8,
+  0 High-Risk sites, 2.0\,K traffic volume), and $\alpha$-blending slider.}}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}
+  \includegraphics[height=1.6in,keepaspectratio,width=\textwidth]{../screenshot_safetychat_uc3_clean.png}\\[-0.2ex]
+  {\small\textit{(b) SafetyChat (UC3): emergency routing query---GPT-4o
+  calls \texttt{compare\_intersections} and returns Birch \& W.\,Broad as
+  the safest crossing (blended score 0.0) for immediate vehicle dispatch.}}
+\end{minipage}
+\caption{Live VTTSI-Chat demonstration: (a)~geospatial dashboard providing
+  system-wide situational awareness; (b)~SafetyChat natural-language response
+  grounding an emergency routing recommendation in live blended safety
+  indices.}
+\label{fig:demo-screenshots}
+\end{figure*}
+
+\begin{table}[t]
+\centering
+\caption{Summary of Demonstration Use Cases}
+\label{tbl:usecases}
+\small
+\begin{tabularx}{\columnwidth}{@{}l X l@{}}
+\toprule
+\textbf{Use Case} & \textbf{Key Tool Calls} & \textbf{User} \\
+\midrule
+Morning briefing     & compare + breakdown        & TMC Operator \\
+Causal explanation   & score(t) + breakdown(t)    & Planner \\
+Responder routing    & score $\times$ 2           & Dispatcher \\
+Trend engagement     & get\_trend\_data(30d)      & Official/Public \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ─────────────────────────────────────────────────────────
+\section{Related Work}
+\label{sec:related}
+
+\textbf{Crash-based and hybrid safety indices.}
+VTTSI's scoring builds on EB-stabilized crash models
+\cite{persaud2007,montella2020systemic}, MCDM-based indices
+\cite{Amraji2025CombinedSafetyIndex,asadamraji2025combined}, and surrogate
+safety indicators \cite{schultz2025_surrogate,gettman2003ssam}.
+Existing hybrid indices produce numerical outputs only, with no conversational
+or geospatial explanation layer.
+
+\textbf{LLMs in transportation.}
+TrafficGPT \cite{trafficgpt2023}, LLMLight \cite{llmlight2024}, and
+GPT-Driver/DriveVLM \cite{gptdriver2023,drivevlm2024} address flow analysis,
+signal control, and AV planning respectively---none provides a safety-index
+explanation interface for infrastructure operators or operates over a
+PostGIS-backed spatio-temporal dataset.
+
+\textbf{Positioning.}
+VTTSI-Chat is differentiated by combining: (i) a \emph{validated hybrid
+geospatial safety index} fusing long-term crash history with 15-minute
+connected-vehicle telemetry; (ii) a \emph{tool-augmented LLM} that accesses
+live PostGIS-backed API data; and (iii) \emph{causal spatial narratives}
+that trace score components back to raw geospatial signals.
+No existing system offers all three, placing VTTSI-Chat squarely in the
+emerging area of agentic GeoAI and natural language interfaces for spatial
+data.
+
+% ─────────────────────────────────────────────────────────
+\section{Conclusion}
+\label{sec:conclusion}
+
+VTTSI-Chat demonstrates a working agentic GeoAI system that delivers causally
+grounded, natural language safety narratives over live spatio-temporal
+intersection data.
+By grounding all LLM outputs in six typed API calls to a PostGIS-backed
+safety pipeline, SafetyChat avoids hallucination while retaining the
+flexibility of conversational interaction over spatial data.
+The spatially-joined crash baseline, bounding-box intersection registry, and
+live 15-minute telemetry together form the \emph{foundational geospatial
+layer} for future work integrating the Agentic Traffic Safety Knowledge Graph
+(TS--KG) \cite{cusati2025agentickg}---enabling the LLM to reason over
+intersection geometry, conflict topology, and causal trajectory motifs,
+advancing the vision of trustworthy, explainable GeoAI for public safety.
+
+%% Acknowledgments ─────────────────────────────────────────────────────────
+\begin{acks}
+The VTTSI system was developed in collaboration with the Virginia Tech
+Transportation Institute (VTTI).
+Generative AI tools, including OpenAI ChatGPT (GPT-4o) and Anthropic Claude,
+were utilized to assist in generating portions of this work, including
+manuscript text, \LaTeX\ formatting, and code snippets.
+All AI-generated content was reviewed, verified, and edited by the authors,
+who take full responsibility for the accuracy and integrity of the submitted
+manuscript.
+\end{acks}
+
+%% Bibliography ────────────────────────────────────────────────────────────
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{../reference,../demo_refs}
+
+\end{document}

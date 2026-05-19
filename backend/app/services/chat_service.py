@@ -471,12 +471,15 @@ def _execute_get_safety_score(args: dict) -> dict:
         rt_result = _compute_rt_si(intersection, now, db, rt_si_svc)
         if rt_result:
             rt_si_score = float(rt_result.get("RT_SI", 0.0))
+            # Key names must match what rt_si_service.calculate_rt_si returns
+            # (F_variance / F_conflict / VRU_index / VEH_index) — the earlier
+            # abbreviations silently defaulted to 0.0.
             top_factors = {
                 "speed_uplift": round(rt_result.get("F_speed", 0.0), 3),
-                "variance_uplift": round(rt_result.get("F_var", 0.0), 3),
-                "conflict_uplift": round(rt_result.get("F_conf", 0.0), 3),
-                "vru_sub_index": round(rt_result.get("VRU_SI", 0.0), 2),
-                "vehicle_sub_index": round(rt_result.get("VEH_SI", 0.0), 2),
+                "variance_uplift": round(rt_result.get("F_variance", 0.0), 3),
+                "conflict_uplift": round(rt_result.get("F_conflict", 0.0), 3),
+                "vru_sub_index": round(rt_result.get("VRU_index", 0.0), 2),
+                "vehicle_sub_index": round(rt_result.get("VEH_index", 0.0), 2),
                 "data_timestamp": str(rt_result.get("timestamp", now)),
             }
 

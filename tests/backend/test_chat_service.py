@@ -193,6 +193,57 @@ class TestGetSafetyScore:
             # blended = 0.5 * 60 + 0.5 * 40 = 50.0
             assert result["blended_score"] == 50.0
 
+    def test_top_factors_use_rt_si_service_keys(self):
+        """
+        top_factors must read the keys rt_si_service.calculate_rt_si actually
+        returns: F_variance, F_conflict, VRU_index, VEH_index. An earlier
+        version read F_var / F_conf / VRU_SI / VEH_SI which simply do not
+        exist in the result dict — every factor silently defaulted to 0.0,
+        so SafetyChat reported all-zero uplift breakdowns even when the
+        underlying RT-SI computation had real values.
+        """
+        anchor = datetime(2025, 11, 1, 17, 0, 0)
+        db = MagicMock()
+        db.execute_query.return_value = [
+            {"max_ts": int(anchor.timestamp() * 1_000_000)}
+        ]
+        # Use the exact key names from rt_si_service.calculate_rt_si.
+        rt_result = {
+            "RT_SI": 70.0,
+            "F_speed": 0.5,
+            "F_variance": 0.4,
+            "F_conflict": 0.3,
+            "VRU_index": 12.5,
+            "VEH_index": 25.0,
+            "timestamp": "2025-11-01T17:00:00",
+        }
+        with patch("app.services.chat_service.get_db_client", return_value=db), \
+             patch("app.services.chat_service.MCDMSafetyIndexService") as mcdm_cls, \
+             patch("app.services.chat_service.RTSIService") as rtsi_cls, \
+             patch("app.api.intersection.find_crash_intersection_for_bsm",
+                   return_value=[{"crash_intersection_id": 101}]):
+            mcdm_cls.return_value.get_available_intersections.return_value = [
+                "birch_st-w_broad_st"
+            ]
+            mcdm_cls.return_value.calculate_safety_score_for_time.return_value = {
+                "mcdm_index": 30.0
+            }
+            rtsi_cls.return_value.calculate_rt_si.return_value = rt_result
+
+            from app.services.chat_service import _execute_get_safety_score
+            result = _execute_get_safety_score({"intersection": "birch"})
+
+            tf = result["top_factors"]
+            assert tf["speed_uplift"] == 0.5, "speed_uplift should read F_speed"
+            assert tf["variance_uplift"] == 0.4, \
+                "variance_uplift must read F_variance, not the non-existent F_var"
+            assert tf["conflict_uplift"] == 0.3, \
+                "conflict_uplift must read F_conflict, not the non-existent F_conf"
+            assert tf["vru_sub_index"] == 12.5, \
+                "vru_sub_index must read VRU_index, not the non-existent VRU_SI"
+            assert tf["vehicle_sub_index"] == 25.0, \
+                "vehicle_sub_index must read VEH_index, not the non-existent VEH_SI"
+
 
 # ---------------------------------------------------------------------------
 # get_historical_baseline tool handler

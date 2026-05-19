@@ -192,3 +192,43 @@ class TestGetSafetyScore:
             assert result["mcdm_score"] == 40.0
             # blended = 0.5 * 60 + 0.5 * 40 = 50.0
             assert result["blended_score"] == 50.0
+
+
+# ---------------------------------------------------------------------------
+# get_historical_baseline tool handler
+# ---------------------------------------------------------------------------
+
+class TestGetHistoricalBaseline:
+    """Regression: must query the table that actually exists."""
+
+    def test_queries_existing_crashes_table_not_misspelled_singular(self):
+        """
+        The crash-history query must target ``vdot_crashes_with_intersections``
+        (plural ``crashes``) — the table every other module uses. An earlier
+        version queried ``vdot_crash_with_intersections`` (singular), which
+        does not exist; the handler's blanket except swallowed the error and
+        the LLM silently lost the historical-baseline data for UC2-style
+        causal questions.
+        """
+        db = MagicMock()
+        db.execute_query.return_value = [{
+            "total_crashes": 5, "fatal": 1, "injury": 2, "pdo": 2,
+            "earliest": "2020-01-01", "latest": "2024-12-01",
+        }]
+        with patch("app.services.chat_service.get_db_client", return_value=db), \
+             patch("app.services.chat_service.MCDMSafetyIndexService") as mcdm_cls, \
+             patch("app.services.chat_service.RTSIService") as rtsi_cls, \
+             patch("app.api.intersection.find_crash_intersection_for_bsm",
+                   return_value=[{"crash_intersection_id": 101}]):
+            mcdm_cls.return_value.get_available_intersections.return_value = [
+                "birch_st-w_broad_st"
+            ]
+            rtsi_cls.return_value.get_eb_params.return_value = {"lambda_star": 10000}
+
+            from app.services.chat_service import _execute_get_historical_baseline
+            _execute_get_historical_baseline({"intersection": "birch"})
+
+            sql = db.execute_query.call_args[0][0]
+            assert "vdot_crashes_with_intersections" in sql, (
+                f"expected the plural table name, got SQL: {sql!r}"
+            )

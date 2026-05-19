@@ -589,7 +589,7 @@ def _execute_get_historical_baseline(args: dict) -> dict:
                 SUM(CASE WHEN severity = 'PDO' THEN 1 ELSE 0 END) AS pdo,
                 MIN(crash_date) AS earliest,
                 MAX(crash_date) AS latest
-            FROM public.vdot_crash_with_intersections
+            FROM public.vdot_crashes_with_intersections
             WHERE crash_intersection_id = %(crash_id)s
         """
         rows = db.execute_query(query, {"crash_id": crash_id})

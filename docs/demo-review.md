@@ -203,6 +203,60 @@ is an Accept.
 
 ---
 
+## Addendum: RT-SI = 0 root cause (S2 finding)
+
+Reading `backend/app/api/intersection.py` revealed why every monitored
+intersection currently reports `rt_si_index = 0.0`:
+
+**The path that produces RT-SI:**
+
+1. `find_crash_intersection_for_bsm(bsm_name, db)` looks the live
+   intersection up in `intersection_details_view`, computes a `short_name`
+   via `normalize_intersection_name`, and calls
+   `_find_nearest_crash_intersection(short_name, db)`.
+2. `_find_nearest_crash_intersection` issues
+   `SELECT crash_intersection_id FROM public.crash_intersection_id_with_coord WHERE LOWER(short_name) = LOWER(%(short_name)s)`
+   — i.e. an **exact** short-name match — and its docstring explicitly notes
+   it "will not perform any coordinate-based fallbacks."
+3. If the short-name lookup misses, `crash_intersection_id = None` →
+   `_compute_rt_si` short-circuits to `None` → the index handler treats
+   the value as `0.0`.
+
+**Why every site fails the match.** BSM intersection names come from the
+connected-vehicle infrastructure (e.g. `birch_st-w_broad_st`); crash
+intersection names come from VDOT police reports. The two naming
+conventions don't agree character-for-character on any of the 18 monitored
+sites — including the three with live telemetry (`birch_st-w_broad_st`,
+`e_broad_st-n_washington_st`, `glebe-potomac`) — so every site falls
+through to `crash_intersection_id = None` and RT-SI is skipped.
+
+**Why this matters for the paper.** The "hybrid" claim in the abstract and
+§2 is structurally correct (the formula combines RT-SI and MCDM via α) but
+operationally empty in the current snapshot: blended reduces to
+`(1−α)·MCDM` for every observable answer. A careful reviewer running the
+live demo will notice.
+
+**Fix path (out of scope for this branch).** Re-enable a coordinate-based
+fallback in `_find_nearest_crash_intersection` (PostGIS `ST_Distance`
+against `crash_intersection_id_with_coord.geom`). With a ~50m proximity
+threshold the three BSM sites with live data should map to their nearest
+crash record and start producing real RT-SI values.
+
+**Suggested paper paragraph (drop into §2.1 after the RT-SI formula
+block):**
+
+> *In the current submission snapshot the RT-SI component evaluates to
+> zero across all monitored sites: the name-based join between live BSM
+> intersection identifiers and the VDOT crash-record dataset misses for
+> every site, and a coordinate-based fallback is not yet wired in. As a
+> consequence the blended index reduces to (1 − α) · SI^MCDM in
+> §2.3. We treat this as a deployment-side data-integration gap rather
+> than a formula limitation: once a PostGIS proximity fallback is enabled
+> on the crash-record join, the RT-SI component activates as defined in
+> Eqs. 1–16 and the blended index recovers the contribution of long-term
+> crash history. Camera-ready will report numbers measured after the
+> fallback is enabled.*
+
 ## Pre-submission checklist
 
 - [ ] **W1** — Land `fix/compare-intersections-time-anchor` and redeploy.

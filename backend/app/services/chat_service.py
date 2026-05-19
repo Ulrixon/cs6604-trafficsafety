@@ -393,6 +393,49 @@ def _resolve_intersection(name: str, available: list[str]) -> str | None:
     return best
 
 
+def _latest_data_time(db) -> datetime:
+    """
+    Return the most recent sensor-data timestamp, so time-windowed queries
+    don't miss data when the server clock runs ahead of the sensor feed.
+    Falls back to the server clock if the lookup fails.
+    """
+    try:
+        rows = db.execute_query(
+            'SELECT MAX(publish_timestamp) AS max_ts FROM "vehicle-count"'
+        )
+        if rows and rows[0].get("max_ts"):
+            return datetime.fromtimestamp(rows[0]["max_ts"] / 1_000_000)
+    except Exception as e:
+        logger.warning(f"could not resolve latest data time, using server clock: {e}")
+    return datetime.now()
+
+
+def _compute_rt_si(intersection: str, when: datetime, db, rt_si_svc) -> dict | None:
+    """
+    Best-effort RT-SI result for one intersection at ``when``.
+
+    Returns the raw RT-SI service result dict, or None if the intersection has
+    no linked crash-history record or the computation fails.
+    """
+    try:
+        from ..api.intersection import find_crash_intersection_for_bsm
+
+        mapping = find_crash_intersection_for_bsm(intersection, db)
+        valid = next((m for m in mapping if m.get("crash_intersection_id")), None)
+        if not valid:
+            return None
+        return rt_si_svc.calculate_rt_si(
+            valid["crash_intersection_id"],
+            when,
+            bin_minutes=15,
+            realtime_intersection=intersection,
+            lookback_hours=168,
+        )
+    except Exception as e:
+        logger.warning(f"RT-SI computation failed for {intersection}: {e}")
+        return None
+
+
 def _execute_get_safety_score(args: dict) -> dict:
     """Tool: get_safety_score"""
     intersection_query = args.get("intersection", "")
@@ -416,11 +459,7 @@ def _execute_get_safety_score(args: dict) -> dict:
                 return {"error": f"Invalid target_time format: '{target_time_str}'. Use ISO-8601."}
         else:
             # Anchor to latest available data so server clock drift doesn't cause empty results
-            latest_row = db.execute_query('SELECT MAX(publish_timestamp) AS max_ts FROM "vehicle-count"')
-            if latest_row and latest_row[0].get("max_ts"):
-                now = datetime.fromtimestamp(latest_row[0]["max_ts"] / 1_000_000)
-            else:
-                now = datetime.now()
+            now = _latest_data_time(db)
 
         # MCDM score
         mcdm_result = mcdm_svc.calculate_safety_score_for_time(intersection, now)
@@ -429,32 +468,17 @@ def _execute_get_safety_score(args: dict) -> dict:
         # RT-SI score (best-effort)
         rt_si_score = 0.0
         top_factors: dict = {}
-        try:
-            from ..api.intersection import find_crash_intersection_for_bsm
-            mapping = find_crash_intersection_for_bsm(intersection, db)
-            valid = next(
-                (m for m in mapping if m.get("crash_intersection_id")), None
-            )
-            if valid:
-                rt_result = rt_si_svc.calculate_rt_si(
-                    valid["crash_intersection_id"],
-                    now,
-                    bin_minutes=15,
-                    realtime_intersection=intersection,
-                    lookback_hours=168,
-                )
-                if rt_result:
-                    rt_si_score = float(rt_result.get("RT_SI", 0.0))
-                    top_factors = {
-                        "speed_uplift": round(rt_result.get("F_speed", 0.0), 3),
-                        "variance_uplift": round(rt_result.get("F_var", 0.0), 3),
-                        "conflict_uplift": round(rt_result.get("F_conf", 0.0), 3),
-                        "vru_sub_index": round(rt_result.get("VRU_SI", 0.0), 2),
-                        "vehicle_sub_index": round(rt_result.get("VEH_SI", 0.0), 2),
-                        "data_timestamp": str(rt_result.get("timestamp", now)),
-                    }
-        except Exception as e:
-            logger.warning(f"RT-SI lookup failed for SafetyChat: {e}")
+        rt_result = _compute_rt_si(intersection, now, db, rt_si_svc)
+        if rt_result:
+            rt_si_score = float(rt_result.get("RT_SI", 0.0))
+            top_factors = {
+                "speed_uplift": round(rt_result.get("F_speed", 0.0), 3),
+                "variance_uplift": round(rt_result.get("F_var", 0.0), 3),
+                "conflict_uplift": round(rt_result.get("F_conf", 0.0), 3),
+                "vru_sub_index": round(rt_result.get("VRU_SI", 0.0), 2),
+                "vehicle_sub_index": round(rt_result.get("VEH_SI", 0.0), 2),
+                "data_timestamp": str(rt_result.get("timestamp", now)),
+            }
 
         blended = round(alpha * rt_si_score + (1 - alpha) * mcdm_score, 2)
         risk_label = (
@@ -602,11 +626,17 @@ def _execute_compare_intersections(args: dict) -> dict:
     metric = args.get("metric", "blended")
     top_n = int(args.get("top_n", 5))
     alpha = float(args.get("alpha", 0.7))
+    needs_rt_si = metric in ("blended", "rt_si")
 
     try:
         db = get_db_client()
         mcdm_svc = MCDMSafetyIndexService(db)
         rt_si_svc = RTSIService(db)
+
+        # Anchor to the latest available data: scoring every site against
+        # datetime.now() queries an empty window when the server clock runs
+        # ahead of the sensor feed, silently reporting all-zero scores.
+        when = _latest_data_time(db)
 
         available = mcdm_svc.get_available_intersections()
         rows: list[dict] = []
@@ -614,7 +644,7 @@ def _execute_compare_intersections(args: dict) -> dict:
         for intersection in available:
             entry: dict[str, Any] = {"intersection": intersection}
             try:
-                mcdm_result = mcdm_svc.calculate_safety_score_for_time(intersection, datetime.now())
+                mcdm_result = mcdm_svc.calculate_safety_score_for_time(intersection, when)
                 mcdm_score = float(mcdm_result.get("mcdm_index", 0.0)) if mcdm_result else 0.0
                 entry["mcdm"] = round(mcdm_score, 2)
                 entry["vehicle_count"] = mcdm_result.get("vehicle_count") if mcdm_result else None
@@ -624,8 +654,15 @@ def _execute_compare_intersections(args: dict) -> dict:
             except Exception:
                 entry["mcdm"] = 0.0
 
-            entry["rt_si"] = 0.0
-            entry["blended"] = round(alpha * entry["rt_si"] + (1 - alpha) * entry["mcdm"], 2)
+            # RT-SI is computed only when the ranking metric needs it — a
+            # per-site RT-SI calculation across every intersection is costly.
+            rt_si_score = 0.0
+            if needs_rt_si:
+                rt_result = _compute_rt_si(intersection, when, db, rt_si_svc)
+                if rt_result:
+                    rt_si_score = float(rt_result.get("RT_SI", 0.0))
+            entry["rt_si"] = round(rt_si_score, 2)
+            entry["blended"] = round(alpha * rt_si_score + (1 - alpha) * entry["mcdm"], 2)
             rows.append(entry)
 
         # Sort by requested metric

@@ -1,0 +1,243 @@
+{
+  "base": "https://cs6604-trafficsafety-180117512369.europe-west1.run.app",
+  "ground_truth": [
+    {
+      "name": "birch_st-w_broad_st",
+      "blended": 15.546767552864871,
+      "mcdm": 51.822558509549566,
+      "rt_si": 0.0,
+      "type": "Blended"
+    },
+    {
+      "name": "e_annandale_rd-hillwood_ave",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "e_broad_st-little_falls_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "e_broad_st-n_cherry_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "e_broad_st-n_washington_st",
+      "blended": 15.78541586759163,
+      "mcdm": 52.61805289197209,
+      "rt_si": 0.0,
+      "type": "Blended"
+    },
+    {
+      "name": "e_broad_st-s_roosevelt_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "glebe-potomac",
+      "blended": 0.19842011545026708,
+      "mcdm": 0.6614003848342235,
+      "rt_si": 0.0,
+      "type": "Blended"
+    },
+    {
+      "name": "great_falls_st-n_west_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "hillwood-s_washington_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "hillwood_ave-s_roosevelt_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "n_maple_ave-w_broad_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "n_washington_st-park_place",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "n_west_st-park_ave",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "rowell_ct-w_broad_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "s_virginia_ave-w_broad_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "s_west_st-w_broad_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "tinners_hill-s_washington_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "w_annandale_rd-w_broad_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    }
+  ],
+  "results": [
+    {
+      "id": "V1",
+      "question": "What is the current MCDM safety score for Birch & W. Broad?",
+      "expect": "value",
+      "site": "birch_st-w_broad_st",
+      "field": "mcdm",
+      "reply": "The current MCDM safety score for Birch & W. Broad is 44.95, which indicates a moderate risk level.",
+      "latency_s": 10.89,
+      "status": 200,
+      "error": "",
+      "verdict": "MISMATCH",
+      "expected": "mcdm=51.82 (birch_st-w_broad_st)",
+      "detail": "closest claim 44.95; ground truth 51.82"
+    },
+    {
+      "id": "V2",
+      "question": "What is the current MCDM safety score for E. Broad & N. Washington?",
+      "expect": "value",
+      "site": "e_broad_st-n_washington_st",
+      "field": "mcdm",
+      "reply": "The current MCDM safety score for the intersection of E. Broad & N. Washington is 61.17. This places it in the moderate risk category.",
+      "latency_s": 4.61,
+      "status": 200,
+      "error": "",
+      "verdict": "MISMATCH",
+      "expected": "mcdm=52.62 (e_broad_st-n_washington_st)",
+      "detail": "closest claim 61.17; ground truth 52.62"
+    },
+    {
+      "id": "V3",
+      "question": "What is the current MCDM safety score for Glebe & Potomac?",
+      "expect": "value",
+      "site": "glebe-potomac",
+      "field": "mcdm",
+      "reply": "The current MCDM safety score for the intersection at Glebe & Potomac is 0.0, indicating very low risk from the MCDM perspective. The overall blended safety score, which combines both RT-SI and MCDM components, is also at a low risk level with a score of 1.35.",
+      "latency_s": 3.53,
+      "status": 200,
+      "error": "",
+      "verdict": "MATCH",
+      "expected": "mcdm=0.66 (glebe-potomac)",
+      "detail": "closest claim 0.0 within \u00b12.0 of 0.66"
+    },
+    {
+      "id": "V4",
+      "question": "Which intersection currently has the highest MCDM safety score?",
+      "expect": "argmax",
+      "field": "mcdm",
+      "reply": "Currently, multiple intersections have an MCDM safety score of 0. These include:\n\n- Birch St & W Broad St\n- E Annandale Rd & Hillwood Ave\n- E Broad St & Little Falls St\n- E Broad St & N Cherry St\n- E Broad St & N Washington St\n\nAll have a score of 0, indicating no recorded risk for the criteria measured by the MCDM at this time. This likely indicates recent lack of data or very low occurrences of incidents affecting these metrics.",
+      "latency_s": 4.63,
+      "status": 200,
+      "error": "",
+      "verdict": "MATCH",
+      "expected": "top mcdm: e_broad_st-n_washington_st (52.62)",
+      "detail": "reply names e_broad_st-n_washington_st"
+    },
+    {
+      "id": "V5",
+      "question": "Is Glebe & Potomac currently higher or lower risk than Birch & W. Broad?",
+      "expect": "compare",
+      "site_a": "glebe-potomac",
+      "site_b": "birch_st-w_broad_st",
+      "field": "mcdm",
+      "reply": "Currently, the intersection at Birch & W. Broad is at a higher risk than Glebe & Potomac, but both are in the low risk category. Specifically, Birch & W. Broad has a blended safety score of 14.99, whereas Glebe & Potomac has a score of 1.35.",
+      "latency_s": 4.81,
+      "status": 200,
+      "error": "",
+      "verdict": "MANUAL",
+      "expected": "glebe-potomac (0.66) lower than birch_st-w_broad_st (51.82) on mcdm",
+      "detail": "names both sites; comparative verdict unclear from text"
+    },
+    {
+      "id": "V6",
+      "question": "Are there any intersections currently scoring above 70 on the MCDM index?",
+      "expect": "threshold_above",
+      "field": "mcdm",
+      "threshold": 70,
+      "reply": "Currently, there are no intersections scoring above 70 on the MCDM index. All top intersections currently have a score of 0 on the MCDM index. If you have any further questions or need additional data, feel free to ask!",
+      "latency_s": 4.16,
+      "status": 200,
+      "error": "",
+      "verdict": "MATCH",
+      "expected": "0 site(s) with mcdm > 70",
+      "detail": "GT has none above threshold; reply says none"
+    },
+    {
+      "id": "V7",
+      "question": "How many monitored intersections currently have live telemetry data?",
+      "expect": "count_with_data",
+      "reply": "",
+      "latency_s": 12.39,
+      "status": 402,
+      "error": "OpenAI quota exceeded. Add billing at https://platform.openai.com/account/billing",
+      "verdict": "MISMATCH",
+      "expected": "3 intersection(s) with live data (of 18 monitored)",
+      "detail": "GT count 3; reply numbers: []"
+    },
+    {
+      "id": "V8",
+      "question": "What is the current blended safety index for Birch & W. Broad at alpha=0.7?",
+      "expect": "value",
+      "site": "birch_st-w_broad_st",
+      "field": "blended",
+      "reply": "The current blended safety index for the intersection at Birch & W. Broad with an alpha of 0.7 is 14.99, which indicates a low risk level. The real-time factors contributing to this score include a speed uplift of 0.661, with no significant variance or conflict uplifts. The VRU and vehicle sub-indices are also not contributing significantly.",
+      "latency_s": 10.11,
+      "status": 200,
+      "error": "",
+      "verdict": "MATCH",
+      "expected": "blended=15.55 (birch_st-w_broad_st)",
+      "detail": "closest claim 14.99 within \u00b12.0 of 15.55"
+    }
+  ]
+}

@@ -7,7 +7,7 @@ Tests cover:
   - compare_intersections time anchoring + RT-SI (regression for UC1 bug)
   - get_safety_score RT-SI integration
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 from unittest.mock import patch, MagicMock
@@ -283,3 +283,57 @@ class TestGetHistoricalBaseline:
             assert "vdot_crashes_with_intersections" in sql, (
                 f"expected the plural table name, got SQL: {sql!r}"
             )
+
+
+# ---------------------------------------------------------------------------
+# Latest-data anchoring for the remaining tool handlers
+# ---------------------------------------------------------------------------
+
+ANCHOR = datetime(2025, 11, 1, 17, 0, 0)
+
+
+def _db_at_anchor() -> MagicMock:
+    db = MagicMock()
+    db.execute_query.return_value = [
+        {"max_ts": int(ANCHOR.timestamp() * 1_000_000)}
+    ]
+    return db
+
+
+class TestGetComponentBreakdown:
+    def test_anchors_to_latest_data_when_no_target_time(self):
+        """Without target_time, scoring uses the latest-data timestamp."""
+        db = _db_at_anchor()
+        with patch("app.services.chat_service.get_db_client", return_value=db), \
+             patch("app.services.chat_service.MCDMSafetyIndexService") as mcdm_cls:
+            mcdm = mcdm_cls.return_value
+            mcdm.get_available_intersections.return_value = ["birch_st-w_broad_st"]
+            mcdm.calculate_safety_score_for_time.return_value = {
+                "mcdm_index": 50.0,
+                "vehicle_count": 800,
+                "vru_count": 5,
+            }
+            from app.services.chat_service import _execute_get_component_breakdown
+            _execute_get_component_breakdown({"intersection": "birch"})
+            _, scored_at = mcdm.calculate_safety_score_for_time.call_args[0]
+            assert scored_at == ANCHOR
+
+
+class TestGetTrendData:
+    def test_anchors_end_time_to_latest_data(self):
+        """The trend window's end pins to the latest-data timestamp."""
+        db = _db_at_anchor()
+        with patch("app.services.chat_service.get_db_client", return_value=db), \
+             patch("app.services.chat_service.MCDMSafetyIndexService") as mcdm_cls:
+            mcdm = mcdm_cls.return_value
+            mcdm.get_available_intersections.return_value = ["birch_st-w_broad_st"]
+            mcdm.calculate_safety_score_trend.return_value = [
+                {"time_bin": ANCHOR - timedelta(hours=1), "mcdm_index": 50.0}
+            ]
+            from app.services.chat_service import _execute_get_trend_data
+            _execute_get_trend_data({"intersection": "birch", "days_back": 7})
+            args = mcdm.calculate_safety_score_trend.call_args[0]
+            # signature: (intersection, start_time, end_time)
+            _, start_time, end_time = args
+            assert end_time == ANCHOR
+            assert end_time - start_time == timedelta(days=7)

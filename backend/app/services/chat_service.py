@@ -525,11 +525,7 @@ def _execute_get_component_breakdown(args: dict) -> dict:
                 return {"error": f"Invalid target_time format: '{target_time_str}'. Use ISO-8601."}
         else:
             # Anchor to latest available data so server clock drift doesn't cause empty results
-            latest_row = db.execute_query('SELECT MAX(publish_timestamp) AS max_ts FROM "vehicle-count"')
-            if latest_row and latest_row[0].get("max_ts"):
-                query_time = datetime.fromtimestamp(latest_row[0]["max_ts"] / 1_000_000)
-            else:
-                query_time = datetime.now()
+            query_time = _latest_data_time(db)
 
         result = mcdm_svc.calculate_safety_score_for_time(intersection, query_time)
         if not result:
@@ -712,11 +708,7 @@ def _execute_get_trend_data(args: dict) -> dict:
             return {"error": f"Intersection '{intersection_query}' not found. Available: {available}"}
 
         # Anchor to the latest data available in the DB (server clock ≠ data clock)
-        latest_row = db.execute_query('SELECT MAX(publish_timestamp) AS max_ts FROM "vehicle-count"')
-        if latest_row and latest_row[0].get("max_ts"):
-            end_time = datetime.fromtimestamp(latest_row[0]["max_ts"] / 1_000_000)
-        else:
-            end_time = datetime.now()
+        end_time = _latest_data_time(db)
         start_time = end_time - timedelta(days=days_back)
 
         trend = mcdm_svc.calculate_safety_score_trend(intersection, start_time, end_time)

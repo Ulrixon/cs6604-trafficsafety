@@ -69,9 +69,13 @@ class Settings(BaseSettings):
         description="OpenAI API key for the SafetyChat LLM module",
     )
     OPENAI_MODEL: str = Field(
-        "gpt-4o",
+        # Pinned to a dated snapshot for reproducibility — the unsuffixed
+        # 'gpt-4o' alias drifts as OpenAI rolls new defaults, which would
+        # invalidate the demo paper's measured numbers between runs. Override
+        # via the OPENAI_MODEL env var when bumping the snapshot.
+        "gpt-4o-2024-11-20",
         env="OPENAI_MODEL",
-        description="OpenAI model to use for SafetyChat (e.g. gpt-4o, gpt-4o-mini)",
+        description="OpenAI model to use for SafetyChat (dated snapshot recommended).",
     )
     OPENAI_MAX_TOKENS: int = Field(
         1024,

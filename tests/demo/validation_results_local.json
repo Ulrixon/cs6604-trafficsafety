@@ -1,0 +1,243 @@
+{
+  "base": "http://localhost:8001",
+  "ground_truth": [
+    {
+      "name": "birch_st-w_broad_st",
+      "blended": 15.546767552864877,
+      "mcdm": 51.82255850954958,
+      "rt_si": 0.0,
+      "type": "Blended"
+    },
+    {
+      "name": "e_annandale_rd-hillwood_ave",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "e_broad_st-little_falls_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "e_broad_st-n_cherry_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "e_broad_st-n_washington_st",
+      "blended": 15.785415867591627,
+      "mcdm": 52.618052891972084,
+      "rt_si": 0.0,
+      "type": "Blended"
+    },
+    {
+      "name": "e_broad_st-s_roosevelt_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "glebe-potomac",
+      "blended": 0.19842011545026644,
+      "mcdm": 0.6614003848342214,
+      "rt_si": 0.0,
+      "type": "Blended"
+    },
+    {
+      "name": "great_falls_st-n_west_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "hillwood-s_washington_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "hillwood_ave-s_roosevelt_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "n_maple_ave-w_broad_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "n_washington_st-park_place",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "n_west_st-park_ave",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "rowell_ct-w_broad_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "s_virginia_ave-w_broad_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "s_west_st-w_broad_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "tinners_hill-s_washington_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    },
+    {
+      "name": "w_annandale_rd-w_broad_st",
+      "blended": 0.0,
+      "mcdm": 0.0,
+      "rt_si": 0.0,
+      "type": "No Data"
+    }
+  ],
+  "results": [
+    {
+      "id": "V1",
+      "question": "What is the current MCDM safety score for Birch & W. Broad?",
+      "expect": "value",
+      "site": "birch_st-w_broad_st",
+      "field": "mcdm",
+      "reply": "The current MCDM safety score for the Birch & W. Broad intersection is 44.95, placing it in the \"moderate risk\" range.",
+      "latency_s": 16.8,
+      "status": 200,
+      "error": "",
+      "verdict": "MISMATCH",
+      "expected": "mcdm=51.82 (birch_st-w_broad_st)",
+      "detail": "closest claim 44.95; ground truth 51.82"
+    },
+    {
+      "id": "V2",
+      "question": "What is the current MCDM safety score for E. Broad & N. Washington?",
+      "expect": "value",
+      "site": "e_broad_st-n_washington_st",
+      "field": "mcdm",
+      "reply": "The current MCDM safety score for the E. Broad & N. Washington intersection is **61.17**, which falls into the **moderate risk** category.",
+      "latency_s": 10.65,
+      "status": 200,
+      "error": "",
+      "verdict": "MISMATCH",
+      "expected": "mcdm=52.62 (e_broad_st-n_washington_st)",
+      "detail": "closest claim 61.17; ground truth 52.62"
+    },
+    {
+      "id": "V3",
+      "question": "What is the current MCDM safety score for Glebe & Potomac?",
+      "expect": "value",
+      "site": "glebe-potomac",
+      "field": "mcdm",
+      "reply": "The current MCDM safety score for the Glebe & Potomac intersection is 0.0, indicating a low-risk level.",
+      "latency_s": 9.42,
+      "status": 200,
+      "error": "",
+      "verdict": "MATCH",
+      "expected": "mcdm=0.66 (glebe-potomac)",
+      "detail": "closest claim 0.0 within \u00b12.0 of 0.66"
+    },
+    {
+      "id": "V4",
+      "question": "Which intersection currently has the highest MCDM safety score?",
+      "expect": "argmax",
+      "field": "mcdm",
+      "reply": "The intersection with the highest current MCDM safety score is \"E Broad St & N Washington St,\" which has a score of 61.17, indicating moderate risk.",
+      "latency_s": 38.4,
+      "status": 200,
+      "error": "",
+      "verdict": "MATCH",
+      "expected": "top mcdm: e_broad_st-n_washington_st (52.62)",
+      "detail": "reply names e_broad_st-n_washington_st with a superlative"
+    },
+    {
+      "id": "V5",
+      "question": "Is Glebe & Potomac currently higher or lower risk than Birch & W. Broad?",
+      "expect": "compare",
+      "site_a": "glebe-potomac",
+      "site_b": "birch_st-w_broad_st",
+      "field": "mcdm",
+      "reply": "Currently, the Glebe & Potomac intersection has a lower risk with a blended safety score of 1.35 (low risk) compared to Birch & W. Broad, which has a blended safety score of 14.99 (also low risk). Both are considered low-risk, but Birch & W. Broad has a slightly higher score.",
+      "latency_s": 17.24,
+      "status": 200,
+      "error": "",
+      "verdict": "MATCH",
+      "expected": "glebe-potomac (0.66) lower than birch_st-w_broad_st (51.82) on mcdm",
+      "detail": "names both sites + a comparative term"
+    },
+    {
+      "id": "V6",
+      "question": "Are there any intersections currently scoring above 70 on the MCDM index?",
+      "expect": "threshold_above",
+      "field": "mcdm",
+      "threshold": 70,
+      "reply": "No intersections are currently scoring above 70 on the MCDM safety index. The highest score is 61.17 at the \"E Broad St - N Washington St\" intersection, which falls within the moderate risk range.",
+      "latency_s": 37.85,
+      "status": 200,
+      "error": "",
+      "verdict": "MATCH",
+      "expected": "0 site(s) with mcdm > 70",
+      "detail": "GT has none above threshold; reply says none"
+    },
+    {
+      "id": "V7",
+      "question": "How many monitored intersections currently have live telemetry data?",
+      "expect": "count_with_data",
+      "reply": "Currently, there are no monitored intersections with live telemetry data. This may indicate a system-wide outage or temporary lack of real-time updates. It is advisable to check for sensor or system connectivity issues.",
+      "latency_s": 5.64,
+      "status": 200,
+      "error": "",
+      "verdict": "MISMATCH",
+      "expected": "3 intersection(s) with live data (of 18 monitored)",
+      "detail": "GT count 3; reply numbers: []"
+    },
+    {
+      "id": "V8",
+      "question": "What is the current blended safety index for Birch & W. Broad at alpha=0.7?",
+      "expect": "value",
+      "site": "birch_st-w_broad_st",
+      "field": "blended",
+      "reply": "The current blended safety index for Birch & W. Broad with alpha=0.7 is **14.99** (low risk). The contributing factors include a speed uplift of 0.661, variance uplift of 0.1, and conflict uplift of 0.819. The data is current as of 2025-11-25 16:00:19.",
+      "latency_s": 9.79,
+      "status": 200,
+      "error": "",
+      "verdict": "MATCH",
+      "expected": "blended=15.55 (birch_st-w_broad_st)",
+      "detail": "closest claim 16.0 within \u00b12.0 of 15.55"
+    }
+  ]
+}

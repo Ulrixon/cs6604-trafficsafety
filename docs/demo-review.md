@@ -203,7 +203,33 @@ is an Accept.
 
 ---
 
-## Addendum: RT-SI = 0 root cause (S2 finding)
+## Addendum: RT-SI = 0 — initial root-cause hypothesis revised (2026-05-20)
+
+A local end-to-end test of the fix branch (PR #20) caught the API container
+logs in mid-flight, and they show the exact short-name match in
+``_find_nearest_crash_intersection`` **does succeed** for at least
+``broad-washington``, ``broad-cherry``, ``broad-roosevelt``, ``glebe-potomac``,
+and ``annandale-hillwood``. So the original "name matching misses for every
+site" framing below is **not the full story** — the crash-intersection_id IS
+resolved for several sites, yet ``/safety/index/`` still reports
+``rt_si_index = 0.0`` for every row including those.
+
+That means there's a *second* reason RT-SI evaluates to zero downstream of
+the name lookup — most likely either (a) ``calculate_rt_si`` is short-
+circuiting on a separate branch (e.g. ``rt_data`` empty for the matched
+intersection), or (b) the uplift / sub-index math is producing zero given
+the current sensor data. Tracing that is queued for the next session.
+
+Treat the §S2 paragraph below as describing *one of* the contributors, not
+the sole cause. The drop-in paper paragraph should be revisited once we
+have the full picture; in the meantime the safest framing is the more
+generic one: *"In the current deployment snapshot the RT-SI component
+evaluates to zero across monitored sites; the contributing data-pipeline
+gaps are documented in the supplementary repository."*
+
+---
+
+## Addendum: RT-SI = 0 — initial hypothesis (S2 finding, partial)
 
 Reading `backend/app/api/intersection.py` revealed why every monitored
 intersection currently reports `rt_si_index = 0.0`:

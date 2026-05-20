@@ -109,11 +109,19 @@ VALIDATIONS: list[dict] = [
 # ── HTTP helpers ──────────────────────────────────────────────────────────
 
 
-def fetch_gt(base: str) -> list[dict]:
-    """Normalised ground-truth rows from /api/v1/safety/index/."""
-    r = requests.get(f"{base}/api/v1/safety/index/", timeout=120)
-    r.raise_for_status()
-    payload = r.json()
+def fetch_gt(base: str, gt_file: str | None = None) -> list[dict]:
+    """
+    Normalised ground-truth rows. Loads from a local JSON file if ``gt_file`` is
+    provided (avoids the slow /api/v1/safety/index/ endpoint when the local DB
+    is recomputing); otherwise calls the live endpoint.
+    """
+    if gt_file:
+        with open(gt_file, encoding="utf-8") as fh:
+            payload = json.load(fh)
+    else:
+        r = requests.get(f"{base}/api/v1/safety/index/", timeout=120)
+        r.raise_for_status()
+        payload = r.json()
     rows = payload if isinstance(payload, list) else payload.get("intersections", [])
     out: list[dict] = []
     for row in rows:
@@ -321,11 +329,18 @@ def main() -> int:
                     help="Markdown output path")
     ap.add_argument("--json", default="tests/demo/validation_results.json",
                     help="raw JSON output path")
+    ap.add_argument("--gt-file", default=None,
+                    help="Load ground truth from a local JSON file instead of "
+                         "calling /api/v1/safety/index/ (use when the endpoint "
+                         "is slow / unavailable)")
     args = ap.parse_args()
     base = args.base.rstrip("/")
 
-    print(f"Fetching ground truth from {base}/api/v1/safety/index/ ...")
-    gt = fetch_gt(base)
+    if args.gt_file:
+        print(f"Loading ground truth from {args.gt_file} ...")
+    else:
+        print(f"Fetching ground truth from {base}/api/v1/safety/index/ ...")
+    gt = fetch_gt(base, args.gt_file)
     if not gt:
         print("FAIL: empty ground truth — cannot validate")
         return 2

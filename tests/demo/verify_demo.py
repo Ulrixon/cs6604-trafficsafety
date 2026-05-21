@@ -32,6 +32,7 @@ import argparse
 import json
 import re
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 
@@ -161,15 +162,47 @@ class UCResult:
 # ── HTTP helpers ──────────────────────────────────────────────────────────────
 
 
+def _call_with_deadline(fn, deadline_s: float):
+    """
+    Run ``fn()`` under a hard wall-clock deadline.
+
+    ``requests``' own ``timeout`` is per-socket-operation, not total: a server
+    that holds the connection open or trickles bytes can wedge a call far past
+    the nominal timeout (observed: a 300s-timeout POST that ran 47 minutes).
+    The worker is a daemon thread, so a genuinely hung call leaks one thread
+    but never blocks script exit.
+
+    Raises TimeoutError if ``fn`` does not return within ``deadline_s``.
+    """
+    box: dict = {}
+
+    def runner() -> None:
+        try:
+            box["value"] = fn()
+        except Exception as exc:  # noqa: BLE001 - re-raised on the caller thread
+            box["error"] = exc
+
+    t = threading.Thread(target=runner, daemon=True)
+    t.start()
+    t.join(deadline_s)
+    if t.is_alive():
+        raise TimeoutError(f"call exceeded {deadline_s:.0f}s hard deadline")
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
+
+
 def check_health(base: str) -> bool:
     """Confirm the deployment is up before running use cases."""
     for path in ("/health", "/docs"):
         try:
-            r = requests.get(base + path, timeout=30)
+            r = _call_with_deadline(
+                lambda: requests.get(base + path, timeout=30), 45
+            )
             if r.ok:
                 print(f"  health: {base}{path} -> {r.status_code}")
                 return True
-        except requests.RequestException as exc:
+        except (requests.RequestException, TimeoutError) as exc:
             print(f"  health: {base}{path} -> {exc}")
     return False
 
@@ -177,11 +210,13 @@ def check_health(base: str) -> bool:
 def get_tools(base: str) -> list[str]:
     """Fetch the LLM tool definitions; the paper says there are six."""
     try:
-        r = requests.get(f"{base}/api/v1/chat/tools", timeout=30)
+        r = _call_with_deadline(
+            lambda: requests.get(f"{base}/api/v1/chat/tools", timeout=30), 45
+        )
         r.raise_for_status()
         tools = r.json().get("tools", [])
         return [t.get("function", {}).get("name", "?") for t in tools]
-    except requests.RequestException as exc:
+    except (requests.RequestException, TimeoutError) as exc:
         print(f"  WARN: could not fetch /api/v1/chat/tools: {exc}")
         return []
 
@@ -199,10 +234,12 @@ def get_ground_truth(base: str) -> list[dict]:
     volume. An empty list just disables the numeric cross-check (UCs still run).
     """
     try:
-        r = requests.get(f"{base}/api/v1/safety/index/", timeout=120)
+        r = _call_with_deadline(
+            lambda: requests.get(f"{base}/api/v1/safety/index/", timeout=120), 150
+        )
         r.raise_for_status()
         payload = r.json()
-    except (requests.RequestException, ValueError) as exc:
+    except (requests.RequestException, ValueError, TimeoutError) as exc:
         print(f"  WARN: could not fetch ground truth /safety/index/: {exc}")
         return []
 
@@ -256,9 +293,11 @@ def ask(base: str, query: str) -> tuple[int | None, float, str, str]:
     body = {"messages": [{"role": "user", "content": query}]}
     started = time.perf_counter()
     try:
-        r = requests.post(url, json=body, timeout=300)
+        r = _call_with_deadline(
+            lambda: requests.post(url, json=body, timeout=300), 330
+        )
         latency = time.perf_counter() - started
-    except requests.RequestException as exc:
+    except (requests.RequestException, TimeoutError) as exc:
         return None, time.perf_counter() - started, "", str(exc)
 
     if not r.ok:

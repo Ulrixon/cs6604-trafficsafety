@@ -23,7 +23,10 @@ class TestSettings:
         s = Settings()
         # Key defaults to empty string (not None) – avoids AttributeError in checks
         assert isinstance(s.OPENAI_API_KEY, str)
-        assert s.OPENAI_MODEL == "gpt-4o"
+        # Pinned to a dated snapshot for reproducibility; see config.py.
+        assert s.OPENAI_MODEL.startswith("gpt-4o-"), (
+            f"OPENAI_MODEL default should be a pinned snapshot, got {s.OPENAI_MODEL!r}"
+        )
         assert s.OPENAI_MAX_TOKENS == 1024
 
     def test_empirical_bayes_k_positive(self):

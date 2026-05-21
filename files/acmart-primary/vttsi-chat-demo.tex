@@ -64,8 +64,10 @@ Real-Time Safety Index (RT--SI) and CRITIC-weighted MCDM pipeline---with a
 \textbf{SafetyChat} conversational module powered by a tool-augmented GPT-4o.
 VTTSI fuses seven years of VDOT crash records via Empirical Bayes
 stabilization with live J2735 connected-vehicle telemetry stored in a
-PostGIS spatial database, producing interpretable 0--100 safety scores every
-15 minutes across 18 instrumented intersections in Falls Church, VA.
+PostGIS spatial database, producing interpretable 0--100 safety scores at
+15-minute resolution across 18 geospatially registered intersections in
+Falls Church, VA (three currently streaming live telemetry; the remaining
+fifteen are wired into the pipeline and awaiting sensor activation).
 SafetyChat exposes six typed API tools to the LLM, grounding all natural
 language responses in live geospatial data and enabling TMC operators,
 planners, and emergency responders to query causal safety narratives through
@@ -308,7 +310,9 @@ GPT-Driver \cite{gptdriver2023}  & \xmark & \cmark & \cmark & \xmark \\
 \subsection{Demo Setup}
 
 The live demo runs against the production VTTSI deployment monitoring 18
-intersections in Falls Church, VA.
+intersections in Falls Church, VA (three currently streaming live
+connected-vehicle telemetry; the remaining fifteen are spatially registered
+and pipelined but awaiting sensor activation).
 Conference attendees interact directly with the SafetyChat interface via
 a browser, typing natural language queries and observing LLM tool-call traces
 in real time alongside the companion Streamlit geospatial dashboard.

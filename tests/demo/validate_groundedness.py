@@ -23,6 +23,7 @@ import argparse
 import json
 import re
 import sys
+import threading
 import time
 
 try:
@@ -109,6 +110,33 @@ VALIDATIONS: list[dict] = [
 # ── HTTP helpers ──────────────────────────────────────────────────────────
 
 
+def _call_with_deadline(fn, deadline_s: float):
+    """
+    Run ``fn()`` under a hard wall-clock deadline. ``requests``' own ``timeout``
+    is per-socket-operation, not total — a server holding the connection open
+    can wedge a call far past it. The worker is a daemon thread, so a hung
+    call leaks one thread but never blocks script exit.
+
+    Raises TimeoutError if ``fn`` does not return within ``deadline_s``.
+    """
+    box: dict = {}
+
+    def runner() -> None:
+        try:
+            box["value"] = fn()
+        except Exception as exc:  # noqa: BLE001 - re-raised on the caller thread
+            box["error"] = exc
+
+    t = threading.Thread(target=runner, daemon=True)
+    t.start()
+    t.join(deadline_s)
+    if t.is_alive():
+        raise TimeoutError(f"call exceeded {deadline_s:.0f}s hard deadline")
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
+
+
 def fetch_gt(base: str, gt_file: str | None = None) -> list[dict]:
     """
     Normalised ground-truth rows. Loads from a local JSON file if ``gt_file`` is
@@ -119,7 +147,9 @@ def fetch_gt(base: str, gt_file: str | None = None) -> list[dict]:
         with open(gt_file, encoding="utf-8") as fh:
             payload = json.load(fh)
     else:
-        r = requests.get(f"{base}/api/v1/safety/index/", timeout=120)
+        r = _call_with_deadline(
+            lambda: requests.get(f"{base}/api/v1/safety/index/", timeout=120), 150
+        )
         r.raise_for_status()
         payload = r.json()
     rows = payload if isinstance(payload, list) else payload.get("intersections", [])
@@ -140,12 +170,15 @@ def fetch_gt(base: str, gt_file: str | None = None) -> list[dict]:
 def ask(base: str, q: str) -> tuple[str, float, int | None, str]:
     started = time.perf_counter()
     try:
-        r = requests.post(
-            f"{base}/api/v1/chat/",
-            json={"messages": [{"role": "user", "content": q}]},
-            timeout=300,
+        r = _call_with_deadline(
+            lambda: requests.post(
+                f"{base}/api/v1/chat/",
+                json={"messages": [{"role": "user", "content": q}]},
+                timeout=300,
+            ),
+            330,
         )
-    except requests.RequestException as exc:
+    except (requests.RequestException, TimeoutError) as exc:
         return "", time.perf_counter() - started, None, str(exc)
     latency = time.perf_counter() - started
     if not r.ok:

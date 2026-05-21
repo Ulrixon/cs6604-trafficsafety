@@ -129,6 +129,8 @@ class MCDMSafetyIndexService:
                         "mcdm_index": float(row["MCDM_Safety_Index"]),
                         "vehicle_count": int(row["vehicle_count"]),
                         "vru_count": int(row["vru_count"]),
+                        "avg_speed": float(row["avg_speed"]),
+                        "speed_variance": float(row["speed_variance"]),
                         "incident_count": int(row["incident_count"]),
                         "near_miss_count": int(row.get("near_miss_count", 0)),
                         "time_bin": row["time_bin"],

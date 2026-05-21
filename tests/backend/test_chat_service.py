@@ -103,7 +103,7 @@ class TestCompareIntersections:
             mcdm.calculate_safety_score_for_time.return_value = {"mcdm_index": 52.0}
 
             from app.services.chat_service import _execute_compare_intersections
-            _execute_compare_intersections({"metric": "mcdm"})
+            _execute_compare_intersections({"metric": "blended"})
 
             assert mcdm.calculate_safety_score_for_time.called
             _, scored_at = mcdm.calculate_safety_score_for_time.call_args[0]
@@ -157,6 +157,91 @@ class TestCompareIntersections:
 
             fcib.assert_not_called()
             rtsi_cls.return_value.calculate_rt_si.assert_not_called()
+
+    def test_batches_mcdm_rankings_for_non_rt_metrics(self):
+        """
+        Pure-MCDM rankings should collect and score the latest matrix once,
+        instead of recalculating a 24-hour matrix for every intersection.
+        """
+        db = self._db_at_anchor()
+        with patch("app.services.chat_service.get_db_client", return_value=db), \
+             patch("app.services.chat_service.MCDMSafetyIndexService") as mcdm_cls, \
+             patch("app.services.chat_service.RTSIService") as rtsi_cls:
+            mcdm = mcdm_cls.return_value
+            mcdm.calculate_latest_safety_scores.return_value = [
+                {
+                    "intersection": "birch_st-w_broad_st",
+                    "mcdm_index": 50.0,
+                    "vehicle_count": 100,
+                    "vru_count": 10,
+                    "incident_count": 2,
+                    "near_miss_count": 1,
+                    "avg_speed": 24.0,
+                    "speed_variance": 12.0,
+                    "time_bin": self.ANCHOR,
+                },
+                {
+                    "intersection": "e_broad_st-n_washington_st",
+                    "mcdm_index": 75.0,
+                    "vehicle_count": 200,
+                    "vru_count": 20,
+                    "incident_count": 4,
+                    "near_miss_count": 0,
+                    "avg_speed": 22.0,
+                    "speed_variance": 18.0,
+                    "time_bin": self.ANCHOR,
+                },
+            ]
+
+            from app.services.chat_service import _execute_compare_intersections
+            result = _execute_compare_intersections({"metric": "mcdm"})
+
+            mcdm.calculate_latest_safety_scores.assert_called_once()
+            mcdm.calculate_safety_score_for_time.assert_not_called()
+            rtsi_cls.return_value.calculate_rt_si.assert_not_called()
+            assert result["rankings"][0]["intersection"] == "e_broad_st-n_washington_st"
+            assert result["rankings"][0]["mcdm"] == 75.0
+
+    def test_morning_briefing_uses_fast_path_without_openai(self):
+        """
+        The canonical UC1 query should not enter the OpenAI agent loop; it is a
+        fixed latest-data ranking plus concise operator summary.
+        """
+        with patch(
+            "app.services.chat_service._execute_compare_intersections",
+            return_value={
+                "rankings": [
+                    {
+                        "intersection": "e_broad_st-n_washington_st",
+                        "mcdm": 75.0,
+                        "vehicle_count": 200,
+                        "vru_count": 20,
+                        "incident_count": 4,
+                        "speed_variance": 18.0,
+                    },
+                    {
+                        "intersection": "birch_st-w_broad_st",
+                        "mcdm": 50.0,
+                        "vehicle_count": 100,
+                        "vru_count": 10,
+                        "incident_count": 2,
+                        "speed_variance": 12.0,
+                    },
+                ],
+                "data_time": str(self.ANCHOR),
+            },
+        ), patch("openai.OpenAI") as openai_cls:
+            from app.services.chat_service import run_chat
+            reply = run_chat([
+                {
+                    "role": "user",
+                    "content": "Give me a morning safety briefing for all intersections.",
+                }
+            ])
+
+            openai_cls.assert_not_called()
+            assert "E Broad St & N Washington St" in reply
+            assert "75.00" in reply
 
 
 # ---------------------------------------------------------------------------

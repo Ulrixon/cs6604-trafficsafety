@@ -626,11 +626,73 @@ def _execute_compare_intersections(args: dict) -> dict:
     top_n = int(args.get("top_n", 5))
     alpha = float(args.get("alpha", 0.7))
     needs_rt_si = metric in ("blended", "rt_si")
+    can_batch_mcdm = metric in (
+        "mcdm",
+        "vehicle_count",
+        "vru_count",
+        "incident_count",
+        "speed_variance",
+    )
 
     try:
         db = get_db_client()
         mcdm_svc = MCDMSafetyIndexService(db)
         rt_si_svc = RTSIService(db)
+
+        if can_batch_mcdm:
+            latest_scores = mcdm_svc.calculate_latest_safety_scores(
+                bin_minutes=15,
+                lookback_hours=24,
+            )
+            rows = []
+            for item in latest_scores:
+                rows.append(
+                    {
+                        "intersection": item.get("intersection"),
+                        "mcdm": round(float(item.get("mcdm_index", 0.0)), 2),
+                        "rt_si": 0.0,
+                        "blended": round(
+                            (1 - alpha) * float(item.get("mcdm_index", 0.0)),
+                            2,
+                        ),
+                        "vehicle_count": item.get("vehicle_count"),
+                        "vru_count": item.get("vru_count"),
+                        "incident_count": item.get("incident_count"),
+                        "near_miss_count": item.get("near_miss_count"),
+                        "avg_speed": item.get("avg_speed"),
+                        "speed_variance": item.get("speed_variance"),
+                        "time_bin": item.get("time_bin"),
+                    }
+                )
+
+            sort_key = {
+                "mcdm": "mcdm",
+                "vehicle_count": "vehicle_count",
+                "vru_count": "vru_count",
+                "incident_count": "incident_count",
+                "speed_variance": "speed_variance",
+            }.get(metric, "mcdm")
+
+            rows.sort(key=lambda r: (r.get(sort_key) or 0.0), reverse=True)
+            latest_time = None
+            if rows:
+                latest_time = max(
+                    (
+                        r.get("time_bin")
+                        for r in rows
+                        if r.get("time_bin") is not None
+                    ),
+                    default=None,
+                )
+            return {
+                "metric": metric,
+                "alpha": alpha,
+                "top_n": top_n,
+                "rankings": rows[:top_n],
+                "total_intersections": len(rows),
+                "retrieved_at": datetime.now().isoformat(),
+                "data_time": str(latest_time) if latest_time is not None else None,
+            }
 
         # Anchor to the latest available data: scoring every site against
         # datetime.now() queries an empty window when the server clock runs
@@ -691,6 +753,114 @@ def _execute_compare_intersections(args: dict) -> dict:
     except Exception as e:
         logger.error(f"compare_intersections tool error: {e}", exc_info=True)
         return {"error": str(e)}
+
+
+def _is_morning_briefing_request(messages: list[dict]) -> bool:
+    """Return True for the canonical UC1 all-intersection briefing query."""
+    if not messages:
+        return False
+    last = messages[-1]
+    if last.get("role") != "user":
+        return False
+    content = str(last.get("content", "")).lower()
+    return (
+        "briefing" in content
+        and "morning" in content
+        and ("all intersections" in content or "intersections" in content)
+    )
+
+
+def _display_intersection(name: str) -> str:
+    parts = str(name).split("-")
+    return " & ".join(
+        " ".join(
+            token.capitalize()
+            for token in part.replace("_", " ").split()
+            if token
+        )
+        for part in parts
+        if part
+    )
+
+
+def _risk_label(score: float) -> str:
+    if score > 70:
+        return "high risk"
+    if score > 40:
+        return "moderate risk"
+    return "low risk"
+
+
+def _dominant_criteria(row: dict) -> str:
+    candidates = [
+        ("vehicle volume", row.get("vehicle_count"), "{:,.0f} vehicles"),
+        ("VRU activity", row.get("vru_count"), "{:,.0f} VRUs"),
+        ("incident activity", row.get("incident_count"), "{:,.0f} incidents"),
+        ("speed variance", row.get("speed_variance"), "{:.2f}"),
+    ]
+    present = []
+    for label, value, fmt in candidates:
+        if value is None:
+            continue
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            continue
+        if numeric > 0:
+            present.append((label, numeric, fmt.format(numeric)))
+    if not present:
+        return "no elevated real-time criteria"
+    # Use raw magnitudes only to choose a concise explanation; the MCDM score
+    # itself remains the ranked safety signal.
+    present.sort(key=lambda item: item[1], reverse=True)
+    return ", ".join(f"{label} ({formatted})" for label, _, formatted in present[:3])
+
+
+def _run_morning_briefing_fast_path() -> str:
+    """
+    Deterministic UC1 path.
+
+    The LLM agent loop is useful for open-ended questions, but the demo's
+    all-intersection morning briefing is fixed: rank latest intersections and
+    summarize the leading criteria. This avoids multiple OpenAI round trips and
+    avoids recomputing the same MCDM matrix once per intersection.
+    """
+    comparison = _execute_compare_intersections({"metric": "mcdm", "top_n": 5})
+    if comparison.get("error"):
+        return f"Morning briefing is unavailable: {comparison['error']}"
+
+    rankings = comparison.get("rankings", [])
+    if not rankings:
+        return "Morning briefing is unavailable because no live intersection data was returned."
+
+    top_rows = rankings[:2]
+    data_time = comparison.get("data_time")
+    lead = (
+        f"Morning safety briefing from latest available data"
+        f"{f' ({data_time})' if data_time else ''}: "
+    )
+
+    sentences = []
+    for idx, row in enumerate(top_rows, start=1):
+        score = float(row.get("mcdm", 0.0) or 0.0)
+        sentences.append(
+            f"{idx}. {_display_intersection(row.get('intersection', 'unknown'))} "
+            f"ranks highest with an MCDM score of {score:.2f} "
+            f"({_risk_label(score)}), driven by {_dominant_criteria(row)}."
+        )
+
+    if len(rankings) > 2:
+        remaining_scores = [float(r.get("mcdm", 0.0) or 0.0) for r in rankings[2:]]
+        if remaining_scores:
+            sentences.append(
+                f"The next monitored sites are lower, with top-five remaining "
+                f"scores from {min(remaining_scores):.2f} to {max(remaining_scores):.2f}."
+            )
+
+    sentences.append(
+        "Operational focus: watch the top-ranked approaches first and verify any incident or VRU spikes on the dashboard."
+    )
+    return lead + " ".join(sentences)
 
 
 def _execute_get_trend_data(args: dict) -> dict:
@@ -851,6 +1021,9 @@ def run_chat(messages: list[dict]) -> str:
     RuntimeError
         If the OpenAI API call fails.
     """
+    if _is_morning_briefing_request(messages):
+        return _run_morning_briefing_fast_path()
+
     if not settings.OPENAI_API_KEY:
         raise ValueError(
             "OPENAI_API_KEY is not set. "

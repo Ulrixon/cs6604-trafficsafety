@@ -15,6 +15,7 @@ from ..services.db_client import get_db_client
 from ..services.mcdm_service import MCDMSafetyIndexService
 from ..services.rt_si_service import RTSIService
 from ..core.config import settings
+from ..core.cache import TTLCache
 from ..core.intersection_mapping import (
     normalize_intersection_name,
     validate_intersection_in_tables,
@@ -23,6 +24,13 @@ from ..core.intersection_mapping import (
 
 router = APIRouter(prefix="/safety/index", tags=["Safety Index"])
 logger = logging.getLogger(__name__)
+
+# The safety-index listing recomputes RT-SI/MCDM for every intersection on each
+# request; the underlying data only refreshes on the 15-minute bin boundary, so
+# a short-lived response cache makes all but the first request near-instant.
+# 5-minute TTL bounds staleness well under one data-refresh cycle.
+_SAFETY_INDEX_CACHE_TTL = 300
+_safety_index_cache = TTLCache(ttl_seconds=_SAFETY_INDEX_CACHE_TTL)
 
 
 def find_crash_intersection_for_bsm(bsm_intersection: str, db_client) -> list:
@@ -165,6 +173,13 @@ def list_intersections(
     - GET /api/v1/safety/index/?alpha=0.0 - Pure MCDM
     """
 
+    # Serve from cache when a recent identical request is still fresh.
+    cache_key = ("list_intersections", round(alpha, 4), include_mcdm, bin_minutes)
+    hit, cached = _safety_index_cache.get(cache_key)
+    if hit:
+        logger.info(f"safety-index cache hit for {cache_key}")
+        return cached
+
     db_client = get_db_client()
     rt_si_service = RTSIService(db_client)
     mcdm_service = MCDMSafetyIndexService(db_client)
@@ -172,13 +187,16 @@ def list_intersections(
     # Get available BSM intersections
     bsm_intersections = mcdm_service.get_available_intersections()
 
-    # Build mapping_results for all intersections
+    # Build crash-intersection mappings once. mapping_results keeps the first
+    # entry (for get_all); full_mappings keeps the whole list so the
+    # per-intersection loop below can reuse it instead of re-querying.
     mapping_results = {}
+    full_mappings: dict[str, list] = {}
     for intersection in bsm_intersections:
         mapping_list = find_crash_intersection_for_bsm(intersection, db_client)
         if mapping_list:
-            # Use the first valid mapping for each intersection
             mapping_results[intersection] = mapping_list[0]
+            full_mappings[intersection] = mapping_list
 
     # Get base intersection data (coordinates, traffic volume, etc.)
     base_intersections = get_all(mapping_results)
@@ -225,10 +243,9 @@ def list_intersections(
         # Calculate RT-SI (primary safety index)
         rt_si_calculated = False
         if bsm_intersection_name:
-            # Use find_crash_intersection_for_bsm to get the proper crash intersection ID
-            crash_intersection_list = find_crash_intersection_for_bsm(
-                bsm_intersection_name, db_client
-            )
+            # Reuse the crash mapping computed once above (avoids a second
+            # find_crash_intersection_for_bsm round-trip per intersection).
+            crash_intersection_list = full_mappings.get(bsm_intersection_name, [])
             # Use first valid result with crash_intersection_id
             valid_crash = next(
                 (
@@ -319,6 +336,9 @@ def list_intersections(
         logger.info(
             f"Returning {len(results)} intersections with RT-SI as primary index"
         )
+        # Only cache non-empty results — an empty list usually means a
+        # transient upstream failure we shouldn't pin for the TTL window.
+        _safety_index_cache.set(cache_key, results)
 
     return results
 

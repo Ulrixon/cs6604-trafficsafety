@@ -580,16 +580,24 @@ def _execute_get_historical_baseline(args: dict) -> dict:
             }
 
         crash_id = valid["crash_intersection_id"]
+        # Column names and KABCO severity buckets match rt_si_service.py /
+        # find_lambda.py, which query this same table: the matched-intersection
+        # FK is matched_intersection_id, severity is crash_severity (codes
+        # K/A/B or the words Fatal/Injury), and PDO is the residual bucket.
         query = """
             SELECT
                 COUNT(*) AS total_crashes,
-                SUM(CASE WHEN severity = 'Fatal' THEN 1 ELSE 0 END) AS fatal,
-                SUM(CASE WHEN severity = 'Injury' THEN 1 ELSE 0 END) AS injury,
-                SUM(CASE WHEN severity = 'PDO' THEN 1 ELSE 0 END) AS pdo,
+                SUM(CASE WHEN crash_severity IN ('K', 'Fatal')
+                         THEN 1 ELSE 0 END) AS fatal,
+                SUM(CASE WHEN crash_severity IN ('A', 'B', 'Injury')
+                         THEN 1 ELSE 0 END) AS injury,
+                SUM(CASE WHEN crash_severity IN ('K', 'Fatal', 'A', 'B', 'Injury')
+                         THEN 0 ELSE 1 END) AS pdo,
                 MIN(crash_date) AS earliest,
                 MAX(crash_date) AS latest
             FROM public.vdot_crashes_with_intersections
-            WHERE crash_intersection_id = %(crash_id)s
+            WHERE matched_intersection_id = %(crash_id)s
+              AND crash_year BETWEEN 2017 AND 2024
         """
         rows = db.execute_query(query, {"crash_id": crash_id})
         crash_row = rows[0] if rows else {}

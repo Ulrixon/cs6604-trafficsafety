@@ -370,6 +370,41 @@ class TestGetHistoricalBaseline:
                 f"expected the plural table name, got SQL: {sql!r}"
             )
 
+    def test_query_uses_real_column_names(self):
+        """
+        The crash-history query must use the columns
+        vdot_crashes_with_intersections actually has — crash_severity and
+        matched_intersection_id — verified against rt_si_service.py and
+        find_lambda.py, which query the same table successfully. 'severity'
+        and 'crash_intersection_id' do not exist (psycopg2 UndefinedColumn).
+        The query is also year-scoped to match its total_crashes_2017_2024 key.
+        """
+        db = MagicMock()
+        db.execute_query.return_value = [{
+            "total_crashes": 5, "fatal": 1, "injury": 2, "pdo": 2,
+            "earliest": "2020-01-01", "latest": "2024-12-01",
+        }]
+        with patch("app.services.chat_service.get_db_client", return_value=db), \
+             patch("app.services.chat_service.MCDMSafetyIndexService") as mcdm_cls, \
+             patch("app.services.chat_service.RTSIService") as rtsi_cls, \
+             patch("app.api.intersection.find_crash_intersection_for_bsm",
+                   return_value=[{"crash_intersection_id": 101}]):
+            mcdm_cls.return_value.get_available_intersections.return_value = [
+                "birch_st-w_broad_st"
+            ]
+            rtsi_cls.return_value.get_eb_params.return_value = {"lambda_star": 10000}
+
+            from app.services.chat_service import _execute_get_historical_baseline
+            _execute_get_historical_baseline({"intersection": "birch"})
+
+            sql = db.execute_query.call_args[0][0]
+            assert "crash_severity" in sql, "must use crash_severity, not severity"
+            assert "matched_intersection_id" in sql, \
+                "must filter on matched_intersection_id, not crash_intersection_id"
+            assert "crash_year" in sql, "must scope to 2017-2024 via crash_year"
+            assert "WHERE crash_intersection_id" not in sql, \
+                "the non-existent crash_intersection_id column must be gone"
+
 
 # ---------------------------------------------------------------------------
 # Latest-data anchoring for the remaining tool handlers

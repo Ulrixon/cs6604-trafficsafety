@@ -71,10 +71,13 @@ class VTTIPostgresClient:
             )
 
         try:
-            # Create connection pool
+            # ThreadedConnectionPool (not SimpleConnectionPool): FastAPI runs
+            # synchronous endpoints in a worker thread pool, so the connection
+            # pool is accessed concurrently. SimpleConnectionPool is
+            # single-threaded and races getconn/putconn under that load.
             if self.port is None:
                 # Unix socket mode
-                self.connection_pool = psycopg2.pool.SimpleConnectionPool(
+                self.connection_pool = psycopg2.pool.ThreadedConnectionPool(
                     min_connections,
                     max_connections,
                     host=self.host,
@@ -83,7 +86,7 @@ class VTTIPostgresClient:
                     password=self.password,
                 )
             else:
-                self.connection_pool = psycopg2.pool.SimpleConnectionPool(
+                self.connection_pool = psycopg2.pool.ThreadedConnectionPool(
                     min_connections,
                     max_connections,
                     host=self.host,

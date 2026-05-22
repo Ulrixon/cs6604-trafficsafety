@@ -1017,21 +1017,34 @@ def run_chat(messages: list[dict]) -> str:
     Raises
     ------
     ValueError
-        If OPENAI_API_KEY is not configured.
+        If OPENAI_API_KEY is not configured (non-briefing queries only).
     RuntimeError
-        If the OpenAI API call fails.
+        If the openai package is not installed.
+
+    Notes
+    -----
+    The deterministic morning-briefing path is a *fallback*: the agent
+    answers the canonical UC1 query normally, and the template is served
+    only when OpenAI is unavailable (no key, or the API call fails), so the
+    demo still works if OpenAI is down. Non-briefing queries surface any
+    OpenAI failure to the caller unchanged.
     """
-    if _is_morning_briefing_request(messages):
-        return _run_morning_briefing_fast_path()
+    is_briefing = _is_morning_briefing_request(messages)
 
     if not settings.OPENAI_API_KEY:
+        if is_briefing:
+            logger.warning(
+                "OPENAI_API_KEY not set; serving the deterministic "
+                "morning-briefing fallback"
+            )
+            return _run_morning_briefing_fast_path()
         raise ValueError(
             "OPENAI_API_KEY is not set. "
             "Add it to backend/.env: OPENAI_API_KEY=sk-..."
         )
 
     try:
-        from openai import OpenAI
+        from openai import OpenAI, OpenAIError
     except ImportError as exc:
         raise RuntimeError(
             "openai package is not installed. "
@@ -1061,38 +1074,49 @@ def run_chat(messages: list[dict]) -> str:
 
     # Agentic loop: keep calling until no more tool calls
     max_iterations = 6  # prevent runaway loops
-    for _ in range(max_iterations):
-        response = client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=full_messages,
-            tools=TOOLS,
-            tool_choice="auto",
-            max_tokens=settings.OPENAI_MAX_TOKENS,
-        )
-
-        choice = response.choices[0]
-        assistant_msg = choice.message
-
-        # Append assistant turn to history
-        full_messages.append(assistant_msg.model_dump(exclude_unset=True))
-
-        if choice.finish_reason != "tool_calls" or not assistant_msg.tool_calls:
-            # Final text response
-            return assistant_msg.content or ""
-
-        # Execute each tool call and feed results back
-        for tool_call in assistant_msg.tool_calls:
-            tool_result = _dispatch_tool_call(
-                tool_call.function.name,
-                tool_call.function.arguments,
+    try:
+        for _ in range(max_iterations):
+            response = client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=full_messages,
+                tools=TOOLS,
+                tool_choice="auto",
+                max_tokens=settings.OPENAI_MAX_TOKENS,
             )
-            full_messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": tool_result,
-                }
+
+            choice = response.choices[0]
+            assistant_msg = choice.message
+
+            # Append assistant turn to history
+            full_messages.append(assistant_msg.model_dump(exclude_unset=True))
+
+            if choice.finish_reason != "tool_calls" or not assistant_msg.tool_calls:
+                # Final text response
+                return assistant_msg.content or ""
+
+            # Execute each tool call and feed results back
+            for tool_call in assistant_msg.tool_calls:
+                tool_result = _dispatch_tool_call(
+                    tool_call.function.name,
+                    tool_call.function.arguments,
+                )
+                full_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": tool_result,
+                    }
+                )
+    except OpenAIError as exc:
+        # OpenAI failed (quota, rate limit, outage). The deterministic
+        # briefing can still answer UC1; any other query must surface it.
+        if is_briefing:
+            logger.warning(
+                f"OpenAI call failed ({type(exc).__name__}); serving the "
+                f"deterministic morning-briefing fallback"
             )
+            return _run_morning_briefing_fast_path()
+        raise
 
     # Safety fallback: return whatever the model has
     last = full_messages[-1]

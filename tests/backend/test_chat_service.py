@@ -204,8 +204,9 @@ class TestCompareIntersections:
 
     def test_morning_briefing_uses_fast_path_without_openai(self):
         """
-        The canonical UC1 query should not enter the OpenAI agent loop; it is a
-        fixed latest-data ranking plus concise operator summary.
+        When OpenAI is unavailable (here: no API key), the canonical UC1 query
+        falls back to the deterministic latest-data ranking plus concise
+        operator summary instead of erroring.
         """
         with patch(
             "app.services.chat_service._execute_compare_intersections",
@@ -422,3 +423,147 @@ class TestGetTrendData:
             _, start_time, end_time = args
             assert end_time == ANCHOR
             assert end_time - start_time == timedelta(days=7)
+
+
+# ---------------------------------------------------------------------------
+# Morning-briefing deterministic fallback
+# ---------------------------------------------------------------------------
+
+class TestMorningBriefingFallback:
+    """
+    The deterministic morning-briefing path is a *fallback* — it runs only
+    when the OpenAI agent is unavailable, never as the default for the
+    canonical UC1 query.
+    """
+
+    def _briefing_messages(self):
+        return [{
+            "role": "user",
+            "content": "Give me a morning safety briefing for all intersections.",
+        }]
+
+    def _llm_response(self, text):
+        """A mock OpenAI response carrying a final (non-tool-call) reply."""
+        msg = MagicMock()
+        msg.content = text
+        msg.tool_calls = None
+        msg.model_dump.return_value = {"role": "assistant", "content": text}
+        choice = MagicMock()
+        choice.finish_reason = "stop"
+        choice.message = msg
+        resp = MagicMock()
+        resp.choices = [choice]
+        return resp
+
+    def test_briefing_uses_agent_when_openai_available(self):
+        """With a working key, the briefing goes through the agent loop —
+        not the deterministic template."""
+        with patch("app.services.chat_service.settings") as mock_settings, \
+             patch("openai.OpenAI") as openai_cls:
+            mock_settings.OPENAI_API_KEY = "sk-test"
+            mock_settings.OPENAI_MODEL = "gpt-4o"
+            mock_settings.OPENAI_MAX_TOKENS = 1024
+            client = openai_cls.return_value
+            client.chat.completions.create.return_value = self._llm_response(
+                "Agent-generated briefing."
+            )
+
+            from app.services.chat_service import run_chat
+            reply = run_chat(self._briefing_messages())
+
+            client.chat.completions.create.assert_called()
+            assert reply == "Agent-generated briefing."
+
+    def test_briefing_falls_back_when_openai_errors(self):
+        """If the OpenAI call fails, the briefing degrades to the
+        deterministic fast path instead of erroring."""
+        from openai import OpenAIError
+        with patch("app.services.chat_service.settings") as mock_settings, \
+             patch("openai.OpenAI") as openai_cls, \
+             patch(
+                 "app.services.chat_service._execute_compare_intersections",
+                 return_value={
+                     "rankings": [{
+                         "intersection": "e_broad_st-n_washington_st",
+                         "mcdm": 75.0, "vehicle_count": 200, "vru_count": 20,
+                         "incident_count": 4, "speed_variance": 18.0,
+                     }],
+                     "data_time": "2025-11-01 17:00:00",
+                 },
+             ):
+            mock_settings.OPENAI_API_KEY = "sk-test"
+            mock_settings.OPENAI_MODEL = "gpt-4o"
+            mock_settings.OPENAI_MAX_TOKENS = 1024
+            client = openai_cls.return_value
+            client.chat.completions.create.side_effect = OpenAIError(
+                "insufficient_quota"
+            )
+
+            from app.services.chat_service import run_chat
+            reply = run_chat(self._briefing_messages())
+
+            client.chat.completions.create.assert_called()
+            assert "Morning safety briefing" in reply
+            assert "E Broad St & N Washington St" in reply
+
+    def test_non_briefing_query_does_not_fall_back_on_openai_error(self):
+        """A non-briefing query must surface OpenAI failures — the
+        deterministic path can only answer the briefing."""
+        from openai import OpenAIError
+        with patch("app.services.chat_service.settings") as mock_settings, \
+             patch("openai.OpenAI") as openai_cls:
+            mock_settings.OPENAI_API_KEY = "sk-test"
+            mock_settings.OPENAI_MODEL = "gpt-4o"
+            mock_settings.OPENAI_MAX_TOKENS = 1024
+            client = openai_cls.return_value
+            client.chat.completions.create.side_effect = OpenAIError("boom")
+
+            from app.services.chat_service import run_chat
+            with pytest.raises(OpenAIError):
+                run_chat([{"role": "user", "content": "What is the weather?"}])
+
+
+class TestMorningBriefingOutput:
+    """Quality of the deterministic morning-briefing text."""
+
+    def test_ranked_rows_use_distinct_wording(self):
+        """Each ranked row must be described by its own position — only the
+        first is 'highest'."""
+        with patch(
+            "app.services.chat_service._execute_compare_intersections",
+            return_value={
+                "rankings": [
+                    {"intersection": "e_broad_st-n_washington_st", "mcdm": 75.0,
+                     "vehicle_count": 200, "vru_count": 20, "incident_count": 4,
+                     "speed_variance": 18.0},
+                    {"intersection": "birch_st-w_broad_st", "mcdm": 50.0,
+                     "vehicle_count": 100, "vru_count": 10, "incident_count": 2,
+                     "speed_variance": 12.0},
+                ],
+                "data_time": "2025-11-01 17:00:00",
+            },
+        ):
+            from app.services.chat_service import _run_morning_briefing_fast_path
+            reply = _run_morning_briefing_fast_path()
+            assert reply.count("ranks highest") == 1
+            assert "ranks second" in reply
+
+    def test_does_not_claim_false_causation(self):
+        """The fast path lacks CRITIC-weighted contributions, so it must not
+        claim a criterion 'drove' the score — it reports raw figures only."""
+        with patch(
+            "app.services.chat_service._execute_compare_intersections",
+            return_value={
+                "rankings": [
+                    {"intersection": "e_broad_st-n_washington_st", "mcdm": 75.0,
+                     "vehicle_count": 1089, "vru_count": 59, "incident_count": 11,
+                     "speed_variance": 37.0},
+                ],
+                "data_time": "2025-11-01 17:00:00",
+            },
+        ):
+            from app.services.chat_service import _run_morning_briefing_fast_path
+            reply = _run_morning_briefing_fast_path()
+            assert "driven by" not in reply.lower()
+            # raw figures are still surfaced, just not as a causal claim
+            assert "1,089 vehicles" in reply

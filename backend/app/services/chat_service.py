@@ -791,15 +791,23 @@ def _risk_label(score: float) -> str:
     return "low risk"
 
 
-def _dominant_criteria(row: dict) -> str:
-    candidates = [
-        ("vehicle volume", row.get("vehicle_count"), "{:,.0f} vehicles"),
-        ("VRU activity", row.get("vru_count"), "{:,.0f} VRUs"),
-        ("incident activity", row.get("incident_count"), "{:,.0f} incidents"),
-        ("speed variance", row.get("speed_variance"), "{:.2f}"),
+def _real_time_readings(row: dict) -> str:
+    """
+    Comma-joined list of a row's raw real-time figures, in a fixed order.
+
+    These are *reported counts*, not a causal attribution: the fast path does
+    not have the CRITIC-weighted per-criterion contributions needed to say
+    which criterion drove the MCDM score, so it must not claim one did.
+    Returns "" when no figure is present.
+    """
+    fields = [
+        (row.get("vehicle_count"), "{:,.0f} vehicles"),
+        (row.get("vru_count"), "{:,.0f} VRUs"),
+        (row.get("incident_count"), "{:,.0f} incidents"),
+        (row.get("speed_variance"), "speed variance {:.2f}"),
     ]
-    present = []
-    for label, value, fmt in candidates:
+    parts = []
+    for value, fmt in fields:
         if value is None:
             continue
         try:
@@ -807,13 +815,8 @@ def _dominant_criteria(row: dict) -> str:
         except (TypeError, ValueError):
             continue
         if numeric > 0:
-            present.append((label, numeric, fmt.format(numeric)))
-    if not present:
-        return "no elevated real-time criteria"
-    # Use raw magnitudes only to choose a concise explanation; the MCDM score
-    # itself remains the ranked safety signal.
-    present.sort(key=lambda item: item[1], reverse=True)
-    return ", ".join(f"{label} ({formatted})" for label, _, formatted in present[:3])
+            parts.append(fmt.format(numeric))
+    return ", ".join(parts)
 
 
 def _run_morning_briefing_fast_path() -> str:
@@ -840,14 +843,20 @@ def _run_morning_briefing_fast_path() -> str:
         f"{f' ({data_time})' if data_time else ''}: "
     )
 
+    rank_words = {1: "ranks highest", 2: "ranks second", 3: "ranks third"}
     sentences = []
     for idx, row in enumerate(top_rows, start=1):
         score = float(row.get("mcdm", 0.0) or 0.0)
-        sentences.append(
-            f"{idx}. {_display_intersection(row.get('intersection', 'unknown'))} "
-            f"ranks highest with an MCDM score of {score:.2f} "
-            f"({_risk_label(score)}), driven by {_dominant_criteria(row)}."
+        rank_word = rank_words.get(idx, f"ranks #{idx}")
+        name = _display_intersection(row.get("intersection", "unknown"))
+        sentence = (
+            f"{idx}. {name} {rank_word} with an MCDM score of {score:.2f} "
+            f"({_risk_label(score)})"
         )
+        readings = _real_time_readings(row)
+        if readings:
+            sentence += f"; current readings: {readings}"
+        sentences.append(sentence + ".")
 
     if len(rankings) > 2:
         remaining_scores = [float(r.get("mcdm", 0.0) or 0.0) for r in rankings[2:]]
@@ -1017,21 +1026,34 @@ def run_chat(messages: list[dict]) -> str:
     Raises
     ------
     ValueError
-        If OPENAI_API_KEY is not configured.
+        If OPENAI_API_KEY is not configured (non-briefing queries only).
     RuntimeError
-        If the OpenAI API call fails.
+        If the openai package is not installed.
+
+    Notes
+    -----
+    The deterministic morning-briefing path is a *fallback*: the agent
+    answers the canonical UC1 query normally, and the template is served
+    only when OpenAI is unavailable (no key, or the API call fails), so the
+    demo still works if OpenAI is down. Non-briefing queries surface any
+    OpenAI failure to the caller unchanged.
     """
-    if _is_morning_briefing_request(messages):
-        return _run_morning_briefing_fast_path()
+    is_briefing = _is_morning_briefing_request(messages)
 
     if not settings.OPENAI_API_KEY:
+        if is_briefing:
+            logger.warning(
+                "OPENAI_API_KEY not set; serving the deterministic "
+                "morning-briefing fallback"
+            )
+            return _run_morning_briefing_fast_path()
         raise ValueError(
             "OPENAI_API_KEY is not set. "
             "Add it to backend/.env: OPENAI_API_KEY=sk-..."
         )
 
     try:
-        from openai import OpenAI
+        from openai import OpenAI, OpenAIError
     except ImportError as exc:
         raise RuntimeError(
             "openai package is not installed. "
@@ -1061,38 +1083,49 @@ def run_chat(messages: list[dict]) -> str:
 
     # Agentic loop: keep calling until no more tool calls
     max_iterations = 6  # prevent runaway loops
-    for _ in range(max_iterations):
-        response = client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=full_messages,
-            tools=TOOLS,
-            tool_choice="auto",
-            max_tokens=settings.OPENAI_MAX_TOKENS,
-        )
-
-        choice = response.choices[0]
-        assistant_msg = choice.message
-
-        # Append assistant turn to history
-        full_messages.append(assistant_msg.model_dump(exclude_unset=True))
-
-        if choice.finish_reason != "tool_calls" or not assistant_msg.tool_calls:
-            # Final text response
-            return assistant_msg.content or ""
-
-        # Execute each tool call and feed results back
-        for tool_call in assistant_msg.tool_calls:
-            tool_result = _dispatch_tool_call(
-                tool_call.function.name,
-                tool_call.function.arguments,
+    try:
+        for _ in range(max_iterations):
+            response = client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=full_messages,
+                tools=TOOLS,
+                tool_choice="auto",
+                max_tokens=settings.OPENAI_MAX_TOKENS,
             )
-            full_messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": tool_result,
-                }
+
+            choice = response.choices[0]
+            assistant_msg = choice.message
+
+            # Append assistant turn to history
+            full_messages.append(assistant_msg.model_dump(exclude_unset=True))
+
+            if choice.finish_reason != "tool_calls" or not assistant_msg.tool_calls:
+                # Final text response
+                return assistant_msg.content or ""
+
+            # Execute each tool call and feed results back
+            for tool_call in assistant_msg.tool_calls:
+                tool_result = _dispatch_tool_call(
+                    tool_call.function.name,
+                    tool_call.function.arguments,
+                )
+                full_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": tool_result,
+                    }
+                )
+    except OpenAIError as exc:
+        # OpenAI failed (quota, rate limit, outage). The deterministic
+        # briefing can still answer UC1; any other query must surface it.
+        if is_briefing:
+            logger.warning(
+                f"OpenAI call failed ({type(exc).__name__}); serving the "
+                f"deterministic morning-briefing fallback"
             )
+            return _run_morning_briefing_fast_path()
+        raise
 
     # Safety fallback: return whatever the model has
     last = full_messages[-1]

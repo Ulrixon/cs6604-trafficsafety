@@ -324,10 +324,12 @@ intersections.''}
 SafetyChat chains \texttt{compare\_intersections} and
 \texttt{get\_component\_breakdown} for the two highest-ranked sites,
 delivering a situational-awareness narrative identifying peak-risk windows
-and dominant criteria (e.g., speed variance, VRU counts) in under five
-seconds.
+and dominant criteria (e.g., speed variance, VRU counts).
 Where the Streamlit dashboard requires navigating multiple spatial charts,
 SafetyChat synthesizes multi-intersection data into a single paragraph.
+If the LLM backend is unavailable, this use case degrades gracefully to a
+deterministic briefing computed directly from the latest safety scores, so
+it remains demonstrable even during an API outage.
 
 \subsection{UC2: Causal Safety Explanation for Planners}
 \textit{Query:} \emph{``Why did E.~Broad--N.~Washington score above 70

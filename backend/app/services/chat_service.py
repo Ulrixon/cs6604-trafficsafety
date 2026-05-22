@@ -791,15 +791,23 @@ def _risk_label(score: float) -> str:
     return "low risk"
 
 
-def _dominant_criteria(row: dict) -> str:
-    candidates = [
-        ("vehicle volume", row.get("vehicle_count"), "{:,.0f} vehicles"),
-        ("VRU activity", row.get("vru_count"), "{:,.0f} VRUs"),
-        ("incident activity", row.get("incident_count"), "{:,.0f} incidents"),
-        ("speed variance", row.get("speed_variance"), "{:.2f}"),
+def _real_time_readings(row: dict) -> str:
+    """
+    Comma-joined list of a row's raw real-time figures, in a fixed order.
+
+    These are *reported counts*, not a causal attribution: the fast path does
+    not have the CRITIC-weighted per-criterion contributions needed to say
+    which criterion drove the MCDM score, so it must not claim one did.
+    Returns "" when no figure is present.
+    """
+    fields = [
+        (row.get("vehicle_count"), "{:,.0f} vehicles"),
+        (row.get("vru_count"), "{:,.0f} VRUs"),
+        (row.get("incident_count"), "{:,.0f} incidents"),
+        (row.get("speed_variance"), "speed variance {:.2f}"),
     ]
-    present = []
-    for label, value, fmt in candidates:
+    parts = []
+    for value, fmt in fields:
         if value is None:
             continue
         try:
@@ -807,13 +815,8 @@ def _dominant_criteria(row: dict) -> str:
         except (TypeError, ValueError):
             continue
         if numeric > 0:
-            present.append((label, numeric, fmt.format(numeric)))
-    if not present:
-        return "no elevated real-time criteria"
-    # Use raw magnitudes only to choose a concise explanation; the MCDM score
-    # itself remains the ranked safety signal.
-    present.sort(key=lambda item: item[1], reverse=True)
-    return ", ".join(f"{label} ({formatted})" for label, _, formatted in present[:3])
+            parts.append(fmt.format(numeric))
+    return ", ".join(parts)
 
 
 def _run_morning_briefing_fast_path() -> str:
@@ -840,14 +843,20 @@ def _run_morning_briefing_fast_path() -> str:
         f"{f' ({data_time})' if data_time else ''}: "
     )
 
+    rank_words = {1: "ranks highest", 2: "ranks second", 3: "ranks third"}
     sentences = []
     for idx, row in enumerate(top_rows, start=1):
         score = float(row.get("mcdm", 0.0) or 0.0)
-        sentences.append(
-            f"{idx}. {_display_intersection(row.get('intersection', 'unknown'))} "
-            f"ranks highest with an MCDM score of {score:.2f} "
-            f"({_risk_label(score)}), driven by {_dominant_criteria(row)}."
+        rank_word = rank_words.get(idx, f"ranks #{idx}")
+        name = _display_intersection(row.get("intersection", "unknown"))
+        sentence = (
+            f"{idx}. {name} {rank_word} with an MCDM score of {score:.2f} "
+            f"({_risk_label(score)})"
         )
+        readings = _real_time_readings(row)
+        if readings:
+            sentence += f"; current readings: {readings}"
+        sentences.append(sentence + ".")
 
     if len(rankings) > 2:
         remaining_scores = [float(r.get("mcdm", 0.0) or 0.0) for r in rankings[2:]]

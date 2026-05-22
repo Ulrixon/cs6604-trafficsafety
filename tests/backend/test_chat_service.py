@@ -521,3 +521,49 @@ class TestMorningBriefingFallback:
             from app.services.chat_service import run_chat
             with pytest.raises(OpenAIError):
                 run_chat([{"role": "user", "content": "What is the weather?"}])
+
+
+class TestMorningBriefingOutput:
+    """Quality of the deterministic morning-briefing text."""
+
+    def test_ranked_rows_use_distinct_wording(self):
+        """Each ranked row must be described by its own position — only the
+        first is 'highest'."""
+        with patch(
+            "app.services.chat_service._execute_compare_intersections",
+            return_value={
+                "rankings": [
+                    {"intersection": "e_broad_st-n_washington_st", "mcdm": 75.0,
+                     "vehicle_count": 200, "vru_count": 20, "incident_count": 4,
+                     "speed_variance": 18.0},
+                    {"intersection": "birch_st-w_broad_st", "mcdm": 50.0,
+                     "vehicle_count": 100, "vru_count": 10, "incident_count": 2,
+                     "speed_variance": 12.0},
+                ],
+                "data_time": "2025-11-01 17:00:00",
+            },
+        ):
+            from app.services.chat_service import _run_morning_briefing_fast_path
+            reply = _run_morning_briefing_fast_path()
+            assert reply.count("ranks highest") == 1
+            assert "ranks second" in reply
+
+    def test_does_not_claim_false_causation(self):
+        """The fast path lacks CRITIC-weighted contributions, so it must not
+        claim a criterion 'drove' the score — it reports raw figures only."""
+        with patch(
+            "app.services.chat_service._execute_compare_intersections",
+            return_value={
+                "rankings": [
+                    {"intersection": "e_broad_st-n_washington_st", "mcdm": 75.0,
+                     "vehicle_count": 1089, "vru_count": 59, "incident_count": 11,
+                     "speed_variance": 37.0},
+                ],
+                "data_time": "2025-11-01 17:00:00",
+            },
+        ):
+            from app.services.chat_service import _run_morning_briefing_fast_path
+            reply = _run_morning_briefing_fast_path()
+            assert "driven by" not in reply.lower()
+            # raw figures are still surfaced, just not as a causal claim
+            assert "1,089 vehicles" in reply

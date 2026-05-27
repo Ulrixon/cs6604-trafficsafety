@@ -9,6 +9,8 @@ from datetime import date, timedelta
 from typing import List, Optional
 import logging
 
+from ..core.config import settings
+from ..core.redis_cache import response_cache
 from ..schemas.analytics import (
     CorrelationMetrics,
     CrashDataPoint,
@@ -76,6 +78,18 @@ def get_correlation(
     """
     try:
         start_date, end_date = _resolve_date_range(start_date, end_date, 30)
+        cache_key = response_cache.make_key(
+            "analytics-correlation",
+            start_date.isoformat(),
+            end_date.isoformat(),
+            threshold,
+            proximity_radius,
+        )
+        hit, cached = response_cache.get(
+            cache_key, settings.ANALYTICS_CACHE_TTL_SECONDS
+        )
+        if hit:
+            return cached
 
         metrics = get_correlation_metrics(
             start_date=start_date,
@@ -84,6 +98,12 @@ def get_correlation(
             proximity_radius=proximity_radius
         )
 
+        response_cache.set(
+            cache_key,
+            metrics,
+            settings.ANALYTICS_CACHE_TTL_SECONDS,
+            cache_empty=True,
+        )
         return metrics
 
     except Exception as e:
@@ -117,6 +137,18 @@ def get_crashes(
     """
     try:
         start_date, end_date = _resolve_date_range(start_date, end_date, 7)
+        cache_key = response_cache.make_key(
+            "analytics-crashes",
+            start_date.isoformat(),
+            end_date.isoformat(),
+            proximity_radius,
+            limit,
+        )
+        hit, cached = response_cache.get(
+            cache_key, settings.ANALYTICS_CACHE_TTL_SECONDS
+        )
+        if hit:
+            return cached
 
         crashes = get_crash_data_for_period(
             start_date=start_date,
@@ -125,6 +157,12 @@ def get_crashes(
             limit=limit
         )
 
+        response_cache.set(
+            cache_key,
+            crashes,
+            settings.ANALYTICS_CACHE_TTL_SECONDS,
+            cache_empty=True,
+        )
         return crashes
 
     except Exception as e:
@@ -145,6 +183,17 @@ def get_scatter_data(
     """
     try:
         start_date, end_date = _resolve_date_range(start_date, end_date, 30)
+        cache_key = response_cache.make_key(
+            "analytics-scatter",
+            start_date.isoformat(),
+            end_date.isoformat(),
+            proximity_radius,
+        )
+        hit, cached = response_cache.get(
+            cache_key, settings.ANALYTICS_CACHE_TTL_SECONDS
+        )
+        if hit:
+            return cached
 
         data = get_scatter_plot_data(
             start_date=start_date,
@@ -152,6 +201,12 @@ def get_scatter_data(
             proximity_radius=proximity_radius
         )
 
+        response_cache.set(
+            cache_key,
+            data,
+            settings.ANALYTICS_CACHE_TTL_SECONDS,
+            cache_empty=True,
+        )
         return data
 
     except Exception as e:
@@ -176,6 +231,18 @@ def get_time_series(
     """
     try:
         start_date, end_date = _resolve_date_range(start_date, end_date, 7)
+        cache_key = response_cache.make_key(
+            "analytics-time-series",
+            start_date.isoformat(),
+            end_date.isoformat(),
+            intersection_id,
+            proximity_radius,
+        )
+        hit, cached = response_cache.get(
+            cache_key, settings.ANALYTICS_CACHE_TTL_SECONDS
+        )
+        if hit:
+            return cached
 
         data = get_time_series_with_crashes(
             start_date=start_date,
@@ -184,6 +251,12 @@ def get_time_series(
             proximity_radius=proximity_radius
         )
 
+        response_cache.set(
+            cache_key,
+            data,
+            settings.ANALYTICS_CACHE_TTL_SECONDS,
+            cache_empty=True,
+        )
         return data
 
     except Exception as e:
@@ -202,6 +275,17 @@ def get_weather_analysis(
     """
     try:
         start_date, end_date = _resolve_date_range(start_date, end_date, 30)
+        cache_key = response_cache.make_key(
+            "analytics-weather",
+            start_date.isoformat(),
+            end_date.isoformat(),
+            proximity_radius,
+        )
+        hit, cached = response_cache.get(
+            cache_key, settings.ANALYTICS_CACHE_TTL_SECONDS
+        )
+        if hit:
+            return cached
 
         data = get_weather_impact_analysis(
             start_date=start_date,
@@ -209,6 +293,12 @@ def get_weather_analysis(
             proximity_radius=proximity_radius
         )
 
+        response_cache.set(
+            cache_key,
+            data,
+            settings.ANALYTICS_CACHE_TTL_SECONDS,
+            cache_empty=True,
+        )
         return data
 
     except Exception as e:

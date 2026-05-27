@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 from .schemas.intersection import IntersectionRead
 from .core.config import settings  # type: ignore
+from .core.redis_cache import response_cache
 from .api.intersection import router as intersection_router
 from .db.connection import init_db, close_db, check_db_health
 from .services.db_client import get_db_client, close_db_client
@@ -195,6 +196,7 @@ def create_app() -> FastAPI:
                 "enabled": settings.USE_POSTGRESQL,
                 "status": "not_configured",
             },
+            "cache": response_cache.status(),
         }
 
         if settings.USE_POSTGRESQL:

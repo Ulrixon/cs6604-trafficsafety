@@ -34,6 +34,38 @@ class Settings(BaseSettings):
         description="Maximum overflow connections beyond pool size",
     )
 
+    # Response caching
+    CACHE_ENABLED: bool = Field(
+        True,
+        env="CACHE_ENABLED",
+        description="Enable API response caching for expensive read endpoints",
+    )
+    REDIS_URL: str = Field(
+        "",
+        env="REDIS_URL",
+        description="Redis connection URL. If blank, cache falls back to in-process memory.",
+    )
+    CACHE_KEY_PREFIX: str = Field(
+        "traffic-safety-api",
+        env="CACHE_KEY_PREFIX",
+        description="Prefix for Redis cache keys",
+    )
+    SAFETY_INDEX_CACHE_TTL_SECONDS: int = Field(
+        300,
+        env="SAFETY_INDEX_CACHE_TTL_SECONDS",
+        description="TTL for latest safety index responses",
+    )
+    SAFETY_TIME_CACHE_TTL_SECONDS: int = Field(
+        900,
+        env="SAFETY_TIME_CACHE_TTL_SECONDS",
+        description="TTL for historical safety time queries",
+    )
+    ANALYTICS_CACHE_TTL_SECONDS: int = Field(
+        900,
+        env="ANALYTICS_CACHE_TTL_SECONDS",
+        description="TTL for analytics and validation responses",
+    )
+
     # Trino database configuration
     TRINO_HOST: str = "smart-cities-trino.pre-prod.cloud.vtti.vt.edu"
     TRINO_PORT: int = 443

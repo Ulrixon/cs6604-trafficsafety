@@ -22,6 +22,12 @@ services:
       # Safety Index settings
       - EMPIRICAL_BAYES_K=${EMPIRICAL_BAYES_K:-50}
       - DEFAULT_LOOKBACK_DAYS=${DEFAULT_LOOKBACK_DAYS:-7}
+      - CACHE_ENABLED=${CACHE_ENABLED:-true}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CACHE_KEY_PREFIX=${CACHE_KEY_PREFIX:-traffic-safety-api-local}
+      - SAFETY_INDEX_CACHE_TTL_SECONDS=${SAFETY_INDEX_CACHE_TTL_SECONDS:-300}
+      - SAFETY_TIME_CACHE_TTL_SECONDS=${SAFETY_TIME_CACHE_TTL_SECONDS:-900}
+      - ANALYTICS_CACHE_TTL_SECONDS=${ANALYTICS_CACHE_TTL_SECONDS:-900}
 
       # VCC API configuration
       - VCC_BASE_URL=${VCC_BASE_URL:-https://vcc.vtti.vt.edu}
@@ -48,3 +54,23 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    container_name: safety-index-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redis_data:

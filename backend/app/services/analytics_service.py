@@ -5,6 +5,7 @@ Provides metrics and visualizations for validating safety index effectiveness.
 """
 
 import logging
+import os
 from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict, Any
 import pandas as pd
@@ -24,12 +25,35 @@ from ..schemas.analytics import (
 
 logger = logging.getLogger(__name__)
 
-# GCP PostgreSQL Database Configuration
-GCP_DB_HOST = "34.140.49.230"
-GCP_DB_PORT = 5432
-GCP_DB_NAME = "vtsi"
-GCP_DB_USER = "jason"
-GCP_DB_PASSWORD = "*9ZS^l(HGq].BA]6"
+
+def _connect_vtti_postgres():
+    """Connect to VTTI PostgreSQL, preferring Cloud SQL Unix sockets on Cloud Run."""
+    database = os.getenv("VTTI_DB_NAME", "vtsi")
+    user = os.getenv("VTTI_DB_USER", "postgres")
+    password = os.getenv("VTTI_DB_PASSWORD")
+    instance_connection_name = os.getenv("INSTANCE_CONNECTION_NAME") or os.getenv(
+        "VTTI_DB_INSTANCE_CONNECTION_NAME"
+    )
+    host = os.getenv("VTTI_DB_HOST")
+
+    if not host and instance_connection_name:
+        host = f"/cloudsql/{instance_connection_name}"
+
+    if not password:
+        raise ValueError("VTTI_DB_PASSWORD is required for VTTI PostgreSQL access")
+
+    connect_kwargs = {
+        "host": host or "127.0.0.1",
+        "database": database,
+        "user": user,
+        "password": password,
+        "connect_timeout": 10,
+    }
+
+    if not connect_kwargs["host"].startswith("/cloudsql/"):
+        connect_kwargs["port"] = int(os.getenv("VTTI_DB_PORT", "5432"))
+
+    return psycopg2.connect(**connect_kwargs)
 
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -95,15 +119,7 @@ def load_crashes_from_gcp(
             logger.warning("No intersections found for spatial filtering")
             return []
 
-        # Connect to GCP database
-        conn = psycopg2.connect(
-            host=GCP_DB_HOST,
-            port=GCP_DB_PORT,
-            database=GCP_DB_NAME,
-            user=GCP_DB_USER,
-            password=GCP_DB_PASSWORD,
-            connect_timeout=10
-        )
+        conn = _connect_vtti_postgres()
 
         query = f"""
             SELECT

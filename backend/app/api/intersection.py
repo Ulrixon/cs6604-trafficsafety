@@ -15,7 +15,7 @@ from ..services.db_client import get_db_client
 from ..services.mcdm_service import MCDMSafetyIndexService
 from ..services.rt_si_service import RTSIService
 from ..core.config import settings
-from ..core.cache import TTLCache
+from ..core.redis_cache import response_cache
 from ..core.intersection_mapping import (
     normalize_intersection_name,
     validate_intersection_in_tables,
@@ -24,14 +24,6 @@ from ..core.intersection_mapping import (
 
 router = APIRouter(prefix="/safety/index", tags=["Safety Index"])
 logger = logging.getLogger(__name__)
-
-# The safety-index listing recomputes RT-SI/MCDM for every intersection on each
-# request; the underlying data only refreshes on the 15-minute bin boundary, so
-# a short-lived response cache makes all but the first request near-instant.
-# 5-minute TTL bounds staleness well under one data-refresh cycle.
-_SAFETY_INDEX_CACHE_TTL = 300
-_safety_index_cache = TTLCache(ttl_seconds=_SAFETY_INDEX_CACHE_TTL)
-
 
 def find_crash_intersection_for_bsm(bsm_intersection: str, db_client) -> list:
     """
@@ -173,9 +165,15 @@ def list_intersections(
     - GET /api/v1/safety/index/?alpha=0.0 - Pure MCDM
     """
 
-    # Serve from cache when a recent identical request is still fresh.
-    cache_key = ("list_intersections", round(alpha, 4), include_mcdm, bin_minutes)
-    hit, cached = _safety_index_cache.get(cache_key)
+    cache_key = response_cache.make_key(
+        "safety-index-list",
+        round(alpha, 4),
+        include_mcdm,
+        bin_minutes,
+    )
+    hit, cached = response_cache.get(
+        cache_key, settings.SAFETY_INDEX_CACHE_TTL_SECONDS
+    )
     if hit:
         logger.info(f"safety-index cache hit for {cache_key}")
         return cached
@@ -336,9 +334,11 @@ def list_intersections(
         logger.info(
             f"Returning {len(results)} intersections with RT-SI as primary index"
         )
-        # Only cache non-empty results — an empty list usually means a
-        # transient upstream failure we shouldn't pin for the TTL window.
-        _safety_index_cache.set(cache_key, results)
+        response_cache.set(
+            cache_key,
+            results,
+            settings.SAFETY_INDEX_CACHE_TTL_SECONDS,
+        )
 
     return results
 
@@ -464,10 +464,22 @@ def list_available_intersections():
     """
     Get list of all available intersections in the database.
     """
+    cache_key = response_cache.make_key("safety-intersections-list")
+    hit, cached = response_cache.get(cache_key, settings.SAFETY_TIME_CACHE_TTL_SECONDS)
+    if hit:
+        return cached
+
     db_client = get_db_client()
     mcdm_service = MCDMSafetyIndexService(db_client)
     intersections = mcdm_service.get_available_intersections()
-    return {"intersections": intersections}
+    payload = {"intersections": intersections}
+    response_cache.set(
+        cache_key,
+        payload,
+        settings.SAFETY_TIME_CACHE_TTL_SECONDS,
+        cache_empty=True,
+    )
+    return payload
 
 
 @router.get("/sensitivity-analysis")
@@ -520,6 +532,19 @@ def get_sensitivity_analysis(
     if end_time <= start_time:
         raise HTTPException(status_code=400, detail="end_time must be after start_time")
 
+    cache_key = response_cache.make_key(
+        "safety-sensitivity",
+        intersection,
+        start_time.isoformat(),
+        end_time.isoformat(),
+        bin_minutes,
+        round(perturbation_pct, 4),
+        n_samples,
+    )
+    hit, cached = response_cache.get(cache_key, settings.SAFETY_TIME_CACHE_TTL_SECONDS)
+    if hit:
+        return cached
+
     db_client = get_db_client()
 
     try:
@@ -539,6 +564,11 @@ def get_sensitivity_analysis(
         if "error" in results:
             raise HTTPException(status_code=404, detail=results["error"])
 
+        response_cache.set(
+            cache_key,
+            results,
+            settings.SAFETY_TIME_CACHE_TTL_SECONDS,
+        )
         return results
 
     except Exception as e:
@@ -590,6 +620,17 @@ def get_safety_score_at_time(
     GET /api/v1/safety/index/time/specific?intersection=glebe-potomac&time=2025-11-09T10:00:00&bin_minutes=15&alpha=0.7
     ```
     """
+    cache_key = response_cache.make_key(
+        "safety-time-specific",
+        intersection,
+        time.isoformat(),
+        bin_minutes,
+        round(alpha, 4),
+    )
+    hit, cached = response_cache.get(cache_key, settings.SAFETY_TIME_CACHE_TTL_SECONDS)
+    if hit:
+        return cached
+
     db_client = get_db_client()
     mcdm_service = MCDMSafetyIndexService(db_client)
     rt_si_service = RTSIService(db_client)
@@ -711,6 +752,11 @@ def get_safety_score_at_time(
     # Final clamp on safety_index
     result["safety_index"] = max(0.0, min(100.0, result["safety_index"]))
 
+    response_cache.set(
+        cache_key,
+        result,
+        settings.SAFETY_TIME_CACHE_TTL_SECONDS,
+    )
     return result
 
 
@@ -761,6 +807,19 @@ def get_safety_score_trend(
     # Validate time range
     if end_time <= start_time:
         raise HTTPException(status_code=400, detail="end_time must be after start_time")
+
+    cache_key = response_cache.make_key(
+        "safety-time-range",
+        intersection,
+        start_time.isoformat(),
+        end_time.isoformat(),
+        bin_minutes,
+        round(alpha, 4),
+        include_correlations,
+    )
+    hit, cached = response_cache.get(cache_key, settings.SAFETY_TIME_CACHE_TTL_SECONDS)
+    if hit:
+        return cached
 
     db_client = get_db_client()
     mcdm_service = MCDMSafetyIndexService(db_client)
@@ -948,8 +1007,7 @@ def get_safety_score_trend(
             # Don't fail the request if correlation analysis fails
             correlation_analysis = {"error": str(e)}
 
-    # Return results with correlation analysis
-    return {
+    payload = {
         "time_series": results,
         "correlation_analysis": correlation_analysis,
         "metadata": {
@@ -960,3 +1018,9 @@ def get_safety_score_trend(
             "data_points": len(results),
         },
     }
+    response_cache.set(
+        cache_key,
+        payload,
+        settings.SAFETY_TIME_CACHE_TTL_SECONDS,
+    )
+    return payload

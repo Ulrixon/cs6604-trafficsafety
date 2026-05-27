@@ -25,6 +25,29 @@ npm run build
 npm run preview -- --port 8080
 ```
 
+## Cloud UI Tests
+
+The Playwright cloud test set exercises the deployed Vite dashboard and the
+deployed backend API it should be wired to.
+
+```bash
+cd frontend
+npm run test:e2e:cloud
+```
+
+Optional overrides:
+
+```bash
+CLOUD_FRONTEND_URL=https://your-frontend.run.app \
+CLOUD_BACKEND_API_URL=https://your-backend.run.app/api/v1 \
+npm run test:e2e:cloud
+```
+
+Defaults:
+
+- Frontend: `https://safety-index-frontend-180117512369.europe-west1.run.app`
+- Backend API: `https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1`
+
 ## Dashboard Areas
 
 - Operations: blended safety scores, risk map, filters, priority queue, and detail panel.

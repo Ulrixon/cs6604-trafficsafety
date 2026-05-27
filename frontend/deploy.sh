@@ -29,16 +29,36 @@ deploy_cloudrun() {
     echo "🚀 Deploying to Google Cloud Run..."
     
     read -p "Enter GCP Project ID: " PROJECT_ID
+    read -p "Enter backend base URL (default: https://cs6604-trafficsafety-6mb53achqa-ew.a.run.app): " BACKEND_URL
+    BACKEND_URL=${BACKEND_URL:-https://cs6604-trafficsafety-6mb53achqa-ew.a.run.app}
+    IMAGE_NAME="us-central1-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/traffic-safety-dashboard"
     gcloud config set project "$PROJECT_ID"
+    gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+    if ! gcloud artifacts repositories describe cloud-run-source-deploy \
+        --location us-central1 \
+        --project "$PROJECT_ID" >/dev/null 2>&1; then
+        gcloud artifacts repositories create cloud-run-source-deploy \
+            --repository-format=docker \
+            --location us-central1 \
+            --project "$PROJECT_ID" \
+            --description="Cloud Run deployment images"
+    fi
     
     echo ""
-    echo "Building and deploying..."
+    echo "Building and pushing image to Artifact Registry..."
+    docker build \
+        --build-arg VITE_API_URL="${BACKEND_URL}/api/v1" \
+        -t "${IMAGE_NAME}:latest" .
+    docker push "${IMAGE_NAME}:latest"
+
+    echo ""
+    echo "Deploying..."
     gcloud run deploy traffic-safety-dashboard \
-        --source . \
+        --image "${IMAGE_NAME}:latest" \
         --region us-central1 \
         --platform managed \
         --allow-unauthenticated \
-        --port 8501 \
+        --port 8080 \
         --memory 1Gi \
         --cpu 1 \
         --max-instances 10
@@ -144,7 +164,8 @@ test_docker() {
     
     echo ""
     echo "Starting container..."
-    docker run -p 8501:8501 \
+    docker run -p 8080:8080 \
+        -e PORT=8080 \
         --name traffic-safety-test \
         traffic-safety-dashboard
 }

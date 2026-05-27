@@ -1,9 +1,9 @@
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
-  name: traffic-safety-dashboard
+  name: safety-index-frontend
   labels:
-    cloud.googleapis.com/location: us-central1
+    cloud.googleapis.com/location: europe-west1
 spec:
   template:
     metadata:
@@ -16,29 +16,29 @@ spec:
       containerConcurrency: 80
       timeoutSeconds: 300
       containers:
-      - image: gcr.io/PROJECT_ID/traffic-safety-dashboard:latest
+      - image: europe-west1-docker.pkg.dev/symbolic-cinema-305010/cloud-run-source-deploy/safety-index-frontend:latest
         ports:
         - name: http1
-          containerPort: 8501
+          containerPort: 8080
         env:
         - name: PORT
-          value: "8501"
+          value: "8080"
         resources:
           limits:
             cpu: '1'
             memory: 1Gi
         startupProbe:
           httpGet:
-            path: /_stcore/health
-            port: 8501
+            path: /health
+            port: 8080
           initialDelaySeconds: 10
           timeoutSeconds: 10
           periodSeconds: 10
           failureThreshold: 3
         livenessProbe:
           httpGet:
-            path: /_stcore/health
-            port: 8501
+            path: /health
+            port: 8080
           initialDelaySeconds: 30
           timeoutSeconds: 10
           periodSeconds: 30

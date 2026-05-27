@@ -26,6 +26,11 @@ venv/
 ENV/
 env/
 
+# Node/Vite
+node_modules/
+npm-debug.log*
+dist/
+
 # IDE
 .vscode/
 .idea/

@@ -1,49 +1,20 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Traffic Safety Dashboard - Quick Start Script
-# This script sets up and runs the Streamlit application
+set -e
 
-set -e  # Exit on error
+echo "Traffic Safety Dashboard - Vite frontend"
+echo "========================================"
 
-echo "🚦 Traffic Safety Dashboard - Setup & Launch"
-echo "============================================="
-echo ""
-
-# Check if Python is installed
-if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 is not installed. Please install Python 3.9 or higher."
-    exit 1
+if ! command -v npm >/dev/null 2>&1; then
+  echo "npm is required. Install Node.js 18 or newer, then rerun this script."
+  exit 1
 fi
 
-echo "✅ Python found: $(python3 --version)"
-echo ""
-
-# Check if virtual environment exists
-if [ ! -d ".venv" ]; then
-    echo "📦 Creating virtual environment..."
-    python3 -m venv .venv
-    echo "✅ Virtual environment created"
-else
-    echo "✅ Virtual environment already exists"
+if [ ! -d "node_modules" ]; then
+  echo "Installing frontend dependencies..."
+  npm install
 fi
 
-echo ""
-echo "🔧 Activating virtual environment..."
-source .venv/bin/activate
-
-echo ""
-echo "📥 Installing dependencies..."
-pip install --upgrade pip -q
-pip install -r requirements.txt -q
-
-echo "✅ Dependencies installed"
-echo ""
-
-echo "🚀 Starting Streamlit application..."
-echo ""
-echo "The dashboard will open in your browser at http://localhost:8501"
-echo ""
-echo "Press Ctrl+C to stop the server"
-echo ""
-
-streamlit run app/views/main.py
+echo "Starting Vite dev server at http://localhost:5173"
+echo "Backend API defaults to http://localhost:8000/api/v1 unless VITE_API_URL is set."
+npm run dev

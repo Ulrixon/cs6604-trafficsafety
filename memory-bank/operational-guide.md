@@ -1,607 +1,263 @@
 # Operational Guide - Traffic Safety Index System
 
-## System Status: ✅ FULLY OPERATIONAL - CLOUD & LOCAL | 🤖 SAFETYCHAT LIVE
-
-Last Updated: 2026-05-01
-
----
-
-## Architecture Overview
-
-### Cloud Production (GCP)
-
-```
-VCC API (https://vcc.vtti.vt.edu)
-    ↓
-Google Cloud Run: cs6604-trafficsafety-collector
-    ├─→ GCS: cs6604-trafficsafety-parquet (Parquet files)
-    └─→ Cloud SQL: vtsi-postgres (PostgreSQL + PostGIS)
-    ↓
-Google Cloud Run: cs6604-trafficsafety (Backend API)
-    ↓
-Google Cloud Run: safety-index-frontend (Streamlit Dashboard)
-```
-
-### Local Development (Docker)
-
-```
-VCC API (https://vcc.vtti.vt.edu)
-    ↓
-Data Collector (60s interval)
-    ↓
-Parquet Storage (/app/data/parquet/)
-    ├── raw/bsm/        - Basic Safety Messages
-    ├── raw/psm/        - Personal Safety Messages
-    ├── raw/mapdata/    - Map Data
-    ├── features/       - Extracted features
-    ├── indices/        - Computed safety indices
-    └── constants/      - Normalization constants
-    ↓
-FastAPI (http://localhost:8001)
-    └── /api/v1/safety/index/
-```
+**Last Updated**: 2026-05-27  
+**Status**: Cloud Run production active | Vite frontend active | FastAPI backend active | Cloud SQL private IP only
 
 ---
 
-## Quick Commands
+## Production Architecture
 
-### GCP Cloud Operations
-
-**View Data Collector Logs:**
-```bash
-gcloud run services logs read cs6604-trafficsafety-collector \
-  --region=europe-west1 --project=symbolic-cinema-305010 --limit=50
+```
+Frontend user
+    ↓
+Cloud Run: safety-index-frontend
+    - Vite React static app served by nginx
+    - URL: https://safety-index-frontend-180117512369.europe-west1.run.app
+    ↓
+Cloud Run: cs6604-trafficsafety
+    - FastAPI backend
+    - URL: https://cs6604-trafficsafety-180117512369.europe-west1.run.app
+    - API base: /api/v1
+    - Direct VPC egress for private Cloud SQL access
+    ↓
+Cloud SQL: vtsi-postgres
+    - PostgreSQL 17.9
+    - Private IP: 10.75.222.3
+    - Public IP: disabled
 ```
 
-**View Backend API Logs:**
-```bash
-gcloud run services logs read cs6604-trafficsafety \
-  --region=europe-west1 --project=symbolic-cinema-305010 --limit=50
-```
+Legacy Streamlit is retained only at `frontend/legacy-streamlit/` for reference.
 
-**List Cloud Run Services:**
-```bash
-gcloud run services list \
-  --region=europe-west1 --project=symbolic-cinema-305010
-```
+---
 
-**Deploy Backend (incl. SafetyChat):**
-```bash
-source ~/google-cloud-sdk/path.bash.inc
-gcloud run deploy cs6604-trafficsafety \
-  --source backend \
-  --region europe-west1 \
-  --project symbolic-cinema-305010 \
-  --allow-unauthenticated
-```
-Latest deployed revision: `cs6604-trafficsafety-00130-kf8`
+## Current Cloud Resources
 
-**Deploy Data Collector:**
-```bash
-cd backend
-bash deploy-collector-gcp.sh
-```
+| Resource | Name | Notes |
+|---|---|---|
+| GCP project | `symbolic-cinema-305010` | Project number `180117512369` |
+| Region | `europe-west1` | Belgium |
+| Backend Cloud Run | `cs6604-trafficsafety` | Latest verified revision after cache/private-IP work: `cs6604-trafficsafety-00159-pfk` |
+| Frontend Cloud Run | `safety-index-frontend` | Active Vite dashboard |
+| Collector Cloud Run | `cs6604-trafficsafety-collector` | Cost-control target; do not re-enable unless needed |
+| Cloud SQL | `vtsi-postgres` | Active PostgreSQL database |
+| Deleted Cloud SQL | `vttsi` | Duplicate instance removed |
+| GCS bucket | `gs://cs6604-trafficsafety-parquet` | Historical/raw data bucket |
 
-**View SafetyChat (LLM) Logs:**
-```bash
-gcloud run services logs read cs6604-trafficsafety \
-  --region=europe-west1 --project=symbolic-cinema-305010 --limit=50
-```
+---
 
-**Check GCS Files:**
-```bash
-gcloud storage ls gs://cs6604-trafficsafety-parquet/raw/ --recursive
-```
+## Cloud SQL Operating Rules
 
-**Check Cloud SQL Status:**
+- Use private IP `10.75.222.3` from Cloud Run.
+- Public IP is disabled to avoid reservation billing.
+- Backend must keep VPC egress configured for private ranges.
+- Do not set `INSTANCE_CONNECTION_NAME` for socket mode unless intentionally reverting the connection strategy.
+- Backend should use literal DB user env binding and secret-backed DB password. Do not expose password values in logs or docs.
+
+Useful checks:
+
 ```bash
 gcloud sql instances describe vtsi-postgres \
-  --project=symbolic-cinema-305010
+  --project symbolic-cinema-305010
 ```
 
-**Connect to Cloud SQL:**
 ```bash
-gcloud sql connect vtsi-postgres \
-  --user=jason --database=vtsi --project=symbolic-cinema-305010
+gcloud run services describe cs6604-trafficsafety \
+  --region europe-west1 \
+  --project symbolic-cinema-305010
 ```
 
-**Import Data to Cloud SQL:**
+---
+
+## Deployment Commands
+
+### Backend
+
 ```bash
 cd backend
-bash import-to-gcp-db.sh
+./deploy-gcp.sh
+```
+
+Check backend health:
+
+```bash
+curl -s https://cs6604-trafficsafety-180117512369.europe-west1.run.app/health
+```
+
+View backend logs:
+
+```bash
+gcloud run services logs read cs6604-trafficsafety \
+  --region=europe-west1 \
+  --project=symbolic-cinema-305010 \
+  --limit=100
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm run build
+./deploy-gcp.sh
+```
+
+The frontend build should receive:
+
+```bash
+VITE_API_URL=https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1
+```
+
+View frontend logs:
+
+```bash
+gcloud run services logs read safety-index-frontend \
+  --region=europe-west1 \
+  --project=symbolic-cinema-305010 \
+  --limit=100
 ```
 
 ---
 
-### Local Development - Monitoring
+## Test Commands
 
-**View Data Collection Logs:**
+### Local Backend Regression
 
 ```bash
-docker-compose logs -f data-collector
+python -m pytest tests/backend -q
 ```
 
-**View API Logs:**
+Latest verified: `48 passed`.
+
+### Cloud Backend API Smoke Tests
 
 ```bash
-docker-compose logs -f api
+RUN_CLOUD_TESTS=1 python -m pytest tests/cloud -q
 ```
 
-**Check All Services:**
+Latest verified against Cloud Run: `7 passed`.
+
+Override backend target:
 
 ```bash
-docker-compose ps
+RUN_CLOUD_TESTS=1 \
+CLOUD_BACKEND_URL=https://your-backend.run.app \
+python -m pytest tests/cloud -q
 ```
 
-### Data Operations
-
-**View Collected BSM Files:**
+### Cloud Frontend UI Tests
 
 ```bash
-MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector ls -lh /app/data/parquet/raw/bsm/
+cd frontend
+npm run test:e2e:cloud
 ```
 
-**Count Total BSM Messages:**
+Latest verified against Cloud Run: `4 passed`.
+
+If Playwright browser binaries are missing:
 
 ```bash
-MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector find /app/data/parquet/raw/bsm/ -name "*.parquet" | wc -l
+cd frontend
+npx playwright install chromium
 ```
 
-**View Normalization Constants:**
+Override targets:
 
 ```bash
-MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector ls -lh /app/data/parquet/constants/
+CLOUD_FRONTEND_URL=https://your-frontend.run.app \
+CLOUD_BACKEND_API_URL=https://your-backend.run.app/api/v1 \
+npm run test:e2e:cloud
 ```
 
-**View Safety Indices:**
+### Frontend Build
 
 ```bash
-MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector ls -lh /app/data/parquet/indices/
+cd frontend
+npm run build
 ```
 
-### Processing
+Latest verified: build passed.
 
-**Run Historical Processing (1 day lookback):**
+---
 
-```bash
-MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector python process_historical.py --days 1 --storage-path /app/data/parquet
-```
+## New Cloud Test Layout
 
-**Run Historical Processing (7 days lookback):**
+| Test Set | Path | Purpose |
+|---|---|---|
+| Backend cloud tests | `tests/cloud/test_backend_cloud_api.py` | Cloud Run health, OpenAPI, safety index data, intersection catalog, range endpoint, chat tools |
+| Cloud test docs | `tests/cloud/README.md` | How to run and override endpoint URLs |
+| Frontend cloud E2E | `frontend/e2e/cloud-dashboard.spec.ts` | Vite dashboard loads live backend, map tiles/markers render, panels navigate |
+| Playwright cloud config | `frontend/playwright.cloud.config.ts` | Defaults to production frontend and backend API |
 
-```bash
-MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector python process_historical.py --days 7 --storage-path /app/data/parquet
-```
+---
 
-**Run Historical Processing (specific intersection):**
+## Caching
 
-```bash
-MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector python process_historical.py --days 7 --intersection "0.0" --storage-path /app/data/parquet
-```
+- Cache implementation: `backend/app/core/redis_cache.py`
+- Current behavior: per-instance cache is acceptable.
+- External Redis is optional. If unavailable, the app falls back to memory cache.
+- Cache status appears in `/health`.
+- Cached endpoint areas include safety index, history, database explorer, transparency, chat tool metadata, and VCC/status-style reads.
 
-### API Testing
+---
 
-**Health Check:**
+## SQL Safety Notes
 
-```bash
-curl http://localhost:8001/health
-```
+- Local app DB service paths use SQLAlchemy statements/models.
+- Core metadata: `backend/app/models/database.py`
+- Main service refactor: `backend/app/services/db_service.py`
+- Database explorer external table access validates identifiers and uses `psycopg2.sql.Identifier`.
+- Trino query builders escape user-controlled string literals.
+- SafetyChat ad-hoc SQL tool is read-only and rejects comments, multi-statements, and write/DDL keywords.
 
-**Get All Safety Indices (formatted):**
-
-```bash
-curl -s http://localhost:8001/api/v1/safety/index/ | python -m json.tool
-```
-
-**Get Specific Intersection:**
-
-```bash
-curl http://localhost:8001/api/v1/safety/index/0
-```
-
-**Run Sensitivity Analysis:**
+Run SQL safety tests:
 
 ```bash
-curl -X POST "http://localhost:8001/api/v1/analysis/sensitivity" \
-     -H "Content-Type: application/json" \
-     -d '{"intersection_id": "0.0", "start_date": "2025-11-01", "end_date": "2025-11-07", "perturbation_range": 0.25, "steps": 10}'
-```
-
-**View API Documentation:**
-Open in browser: http://localhost:8001/docs
-
-### Frontend Dashboard
-
-**Access Dashboard:**
-Open in browser: http://localhost:8501
-
-**Pages:**
-
-1. **Real-time Dashboard**: Live safety indices and map.
-2. **Trend Analysis**: Historical trends and statistics.
-3. **Sensitivity Analysis**:
-   - Select date range (Start/End Date).
-   - Adjust perturbation range (e.g., ±25%).
-   - View Stability Gauge, Heatmaps, and Trajectory plots.
-   - _Note: Calculations for long ranges (e.g., 30 days) are optimized to run in <2 seconds._
-
-### Container Management
-
-**Restart Data Collector:**
-
-```bash
-docker-compose restart data-collector
-```
-
-**Rebuild and Restart All Services:**
-
-```bash
-docker-compose up -d --build
-```
-
-**Stop All Services:**
-
-```bash
-docker-compose down
-```
-
-**Stop and Remove Data (CAUTION):**
-
-```bash
-docker-compose down -v
+python -m pytest tests/backend/test_sql_safety.py -q
 ```
 
 ---
 
-## Current System Metrics
+## Cost-Control Notes
 
-### Data Collection (as of last run)
-
-- **Total BSM Messages**: 1,678+
-- **Total PSM Messages**: 21
-- **MapData Messages**: 4
-- **Intersections Covered**: 4 (from MapData)
-- **Collection Interval**: 60 seconds
-- **Data Format**: Parquet (Snappy compression)
-
-### Safety Indices (Example)
-
-- **Intersection 0.0**:
-  - Safety Index: 33.44
-  - Range: 33.44 - 52.43
-  - Traffic Volume: 29 vehicles
-  - Time Intervals: 4 (15-minute aggregation)
-
-### Normalization Constants (Latest)
-
-- **I_max**: 1.0 (Maximum incident rate)
-- **V_max**: 182.0 (Maximum vehicle volume)
-- **σ_max**: 8.3 (Maximum speed variance)
-- **S_ref**: 10.4 (Reference speed)
+- Keep `vtsi-postgres` public IP disabled unless temporarily needed.
+- Duplicate Cloud SQL instance `vttsi` has been deleted.
+- Collector service can consume money without useful work; keep it disabled unless there is a specific data collection task.
+- Private IP itself does not have the same public IP reservation charge, but VPC/network resources and Cloud SQL instance runtime still have normal costs.
 
 ---
 
-## Service Endpoints
+## Common Checks
 
-### API Service (Port 8001)
-
-- **Base URL**: http://localhost:8001
-- **Health**: `GET /health`
-- **List Intersections**: `GET /api/v1/safety/index/`
-- **Get Intersection**: `GET /api/v1/safety/index/{id}`
-- **API Docs**: `GET /docs`
-
-### Database (Port 5433)
-
-- **Type**: PostgreSQL 15
-- **Host**: localhost:5433
-- **Database**: trafficsafety
-- **User**: trafficsafety
-- **Password**: trafficsafety_dev
-
-### Redis Cache (Port 6380)
-
-- **Host**: localhost:6380
-- **Use**: API response caching
-
----
-
-## Data Pipeline Workflow
-
-### 1. Initial Setup (One-time)
+### Backend API
 
 ```bash
-# Start all services
-docker-compose up -d
-
-# Wait for data collection (5-10 minutes to get sufficient data)
-# Monitor progress
-docker-compose logs -f data-collector
-
-# Run historical processing to compute normalization constants
-MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector python process_historical.py --days 1 --storage-path /app/data/parquet
+curl -s https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safety/index/
 ```
 
-### 2. Continuous Operation
-
-Once set up, the system runs automatically:
-
-1. **Data Collector**: Polls VCC API every 60 seconds
-2. **Raw Storage**: Saves BSM/PSM/MapData to Parquet
-3. **Real-time Processing**: Computes indices every collection cycle
-4. **API**: Serves latest indices via REST endpoints
-
-### 3. Periodic Maintenance
-
-**Daily**: Check data collection status
+### Intersection List
 
 ```bash
-docker-compose logs --tail=50 data-collector
+curl -s https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safety/index/intersections/list
 ```
 
-**Weekly**: Run historical processing to update normalization constants
+### Chat Tools
 
 ```bash
-MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector python process_historical.py --days 7 --storage-path /app/data/parquet
+curl -s https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/chat/tools
 ```
 
-**Monthly**: Review and archive old Parquet files if needed
+### Frontend
 
----
+Open:
 
-## Configuration
-
-### Environment Variables (.env)
-
-**VCC API Credentials:**
-
-```bash
-VCC_CLIENT_ID=course-cs6604-student-djjay
-VCC_CLIENT_SECRET=wHqQjvksKE6rYLYedkuIqewrFtEOpjHH
-VCC_BASE_URL=https://vcc.vtti.vt.edu
-```
-
-**Collection Settings:**
-
-```bash
-COLLECTION_INTERVAL=60              # Seconds between collections
-DEFAULT_LOOKBACK_DAYS=7             # Historical processing window
-EMPIRICAL_BAYES_K=50               # EB tuning parameter
-```
-
-**Storage:**
-
-```bash
-PARQUET_STORAGE_PATH=/app/data/parquet
-DATA_SOURCE=vcc                     # Use VCC data source
-REALTIME_ENABLED=true              # Enable real-time processing
-```
-
-### Adjusting Collection Frequency
-
-Edit `backend/.env`:
-
-```bash
-COLLECTION_INTERVAL=30   # Collect every 30 seconds
-```
-
-Then restart:
-
-```bash
-docker-compose restart data-collector
+```text
+https://safety-index-frontend-180117512369.europe-west1.run.app
 ```
 
 ---
 
-## Performance Characteristics
+## Known Warnings
 
-### Data Collection
+- `pytest-asyncio` warns about unset default fixture loop scope.
+- Pydantic V2 warns about deprecated `Field(..., env=...)` and `Field(..., example=...)` usage.
+- `npm install` reports 2 moderate audit findings; do not run `npm audit fix --force` without reviewing breaking dependency changes.
 
-- **Throughput**: ~20-50 BSM messages per minute
-- **Latency**: < 5 seconds per collection cycle
-- **Storage**: ~15KB per BSM batch (compressed Parquet)
-
-### Historical Processing
-
-- **Processing Time**: ~2-3 seconds for 1 day of data (1,600 messages)
-- **Memory Usage**: < 200MB
-- **Output**: Features, Indices, Normalization Constants
-
-### API Response Times
-
-- **List Intersections**: < 200ms (cached)
-- **Get Intersection**: < 100ms (cached)
-- **Health Check**: < 10ms
-
----
-
-## Storage Management
-
-### Disk Usage Estimates
-
-- **Raw BSM Data**: ~15KB per batch × 1,440 batches/day = ~21MB/day
-- **Raw PSM Data**: Minimal (few pedestrians)
-- **MapData**: ~5KB per batch (mostly static)
-- **Features/Indices**: ~10MB/day (aggregated)
-
-### Cleanup Strategy
-
-Parquet files are organized by date. To archive old data:
-
-```bash
-# Archive data older than 30 days
-MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector find /app/data/parquet/raw/bsm/ -name "*.parquet" -mtime +30 -exec rm {} \;
-```
-
----
-
-## Windows-Specific Notes
-
-### Git Bash Path Conversion
-
-Git Bash on Windows automatically converts Unix paths to Windows paths. This breaks Docker commands.
-
-**Solution**: Prefix commands with `MSYS_NO_PATHCONV=1`
-
-**Example:**
-
-```bash
-# ❌ Broken
-docker exec trafficsafety-collector ls /app/data/parquet
-
-# ✅ Fixed
-MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector ls /app/data/parquet
-```
-
-### Volume Mounting
-
-Docker volumes persist data between container restarts:
-
-```yaml
-volumes:
-  - parquet_data:/app/data/parquet # Named volume (persistent)
-```
-
-To view volume location:
-
-```bash
-docker volume inspect cs6604-trafficsafety_parquet_data
-```
-
----
-
-## Backup and Recovery
-
-### Backup Parquet Data
-
-```bash
-# Create backup directory
-mkdir -p backups/$(date +%Y%m%d)
-
-# Copy volume data (Windows)
-docker run --rm -v cs6604-trafficsafety_parquet_data:/data -v $(pwd)/backups/$(date +%Y%m%d):/backup alpine tar czf /backup/parquet-data.tar.gz -C /data .
-```
-
-### Restore from Backup
-
-```bash
-# Stop services
-docker-compose down
-
-# Restore data
-docker run --rm -v cs6604-trafficsafety_parquet_data:/data -v $(pwd)/backups/20251120:/backup alpine tar xzf /backup/parquet-data.tar.gz -C /data
-
-# Restart services
-docker-compose up -d
-```
-
----
-
-## Integration Points
-
-### Adding New Data Sources
-
-Currently supports VCC API. To add Trino:
-
-1. Set `DATA_SOURCE=both` in `.env`
-2. Configure Trino credentials
-3. Modify `intersection_service.py` to merge sources
-
-### WebSocket Streaming (Future)
-
-Real-time updates can be added via:
-
-```python
-# In main.py
-from fastapi import WebSocket
-
-@app.websocket("/ws/safety-indices")
-async def websocket_endpoint(websocket: WebSocket):
-    # Stream real-time indices
-    pass
-```
-
-### External Dashboards
-
-API supports CORS for external dashboards:
-
-```python
-# Already configured in main.py
-allow_origins=["*"]  # Adjust for production
-```
-
----
-
-## Support and Resources
-
-### Documentation
-
-- **API Docs**: http://localhost:8001/docs
-- **VCC API Spec**: `files/VCC_Public_API_v3.1.pdf`
-- **Sprint Plan**: `construction/sprint-plan.md`
-- **Troubleshooting**: `memory-bank/troubleshooting.md`
-
-### Key Files
-
-- **Data Collector**: `backend/data_collector.py`
-- **Historical Processor**: `backend/process_historical.py`
-- **Feature Engineering**: `backend/app/services/vcc_feature_engineering.py`
-- **Index Computation**: `backend/app/services/index_computation.py`
-- **Storage Service**: `backend/app/services/parquet_storage.py`
-
-### Logs Location
-
-```bash
-# Container logs
-docker-compose logs [service-name]
-
-# Inside container
-MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector ls -lh /app/
-```
-
----
-
-## Quick Reference Card
-
-| Action            | Command                                                                                                                         |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Start System      | `docker-compose up -d`                                                                                                          |
-| Stop System       | `docker-compose down`                                                                                                           |
-| View Logs         | `docker-compose logs -f data-collector`                                                                                         |
-| Process History   | `MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector python process_historical.py --days 1 --storage-path /app/data/parquet` |
-| Test API          | `curl http://localhost:8001/api/v1/safety/index/`                                                                               |
-| Check Data        | `MSYS_NO_PATHCONV=1 docker exec trafficsafety-collector ls -lh /app/data/parquet/raw/bsm/`                                      |
-| Restart Collector | `docker-compose restart data-collector`                                                                                         |
-| Rebuild All       | `docker-compose up -d --build`                                                                                                  |
-
----
-
-## SafetyChat Module — Key Facts
-
-| Item | Value |
-|---|---|
-| Service | `cs6604-trafficsafety` (Cloud Run, europe-west1) |
-| Live revision | `cs6604-trafficsafety-00130-kf8` |
-| Backend URL | `https://cs6604-trafficsafety-180117512369.europe-west1.run.app` |
-| Frontend URL | `https://safety-index-frontend-180117512369.europe-west1.run.app` |
-| LLM model | GPT-4o (`openai>=1.30.0`) |
-| OpenAI key | Secret Manager: `openai-api-key` |
-| Data range | `glebe-potomac` and others: 2025-07-22 → 2025-11-21 |
-| Clock note | Server time 2026; data ends 2025-11. All time queries anchor to `MAX(publish_timestamp)` |
-| Agentic loop | Max 6 LLM iterations per query |
-| Tools | 6: `get_safety_score`, `get_component_breakdown`, `get_historical_baseline`, `compare_intersections`, `get_trend_data`, `run_sql_query` |
-| Source | `backend/app/services/chat_service.py` |
-
-### Test SafetyChat via cURL
-```bash
-curl -s -X POST \
-  https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/chat/message \
-  -H 'Content-Type: application/json' \
-  -d '{"message": "What is the current safety score for Glebe-Potomac?", "conversation_id": "test-1"}'
-```
-
----
-
-**Last Updated**: 2026-05-01
-**System Version**: 0.2.0
-**Status**: Production-Ready ✅ | SafetyChat Live 🤖

@@ -81,10 +81,10 @@
   - Synthetic data generation for testing
   - Actionable recommendations for weight tuning
 - **Database Connection**:
-  - GCP Cloud SQL: `vtsi-postgres` (PostgreSQL 17.6)
-  - Location: europe-west1-d
-  - Database: `vtsi` with 8 tables including `vdot_crashes`
-  - Authentication: gcloud CLI with IP allowlisting
+  - GCP Cloud SQL: `vtsi-postgres` (PostgreSQL 17.9)
+  - Location: europe-west1
+  - Database: `vtsi`
+  - Production access: private IP from Cloud Run. Public IP is disabled for cost/security.
 - **Commits**: `be83944`, `9f7ab27`, `08fd4c6`
 
 ---
@@ -529,7 +529,7 @@ class DynamicFeatureEngine:
 #### 3.1 Architecture
 
 **Technology Stack**:
-- **Frontend**: React + TypeScript (or Streamlit for rapid prototyping)
+- **Frontend**: Vite React + TypeScript. Streamlit is legacy/reference only.
 - **Backend**: FastAPI with admin endpoints
 - **Visualization**: Plotly/Recharts for interactive charts
 - **State Management**: React Context or Zustand

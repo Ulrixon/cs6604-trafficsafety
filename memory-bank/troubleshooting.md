@@ -702,6 +702,102 @@ cat backend/.env (redact secrets!)
 
 ---
 
+## Current Cloud Run / Vite Issues
+
+### Problem: Frontend shows fallback sample data
+
+**Symptom:** The operations page says `Fallback sample data` instead of `Live backend data`.
+
+**Likely Causes:**
+
+- Frontend was built with the wrong `VITE_API_URL`.
+- Backend Cloud Run is returning 5xx or CORS/network errors.
+- Browser is loading an old frontend revision.
+
+**Checks:**
+
+```bash
+curl -s https://cs6604-trafficsafety-180117512369.europe-west1.run.app/health
+curl -s https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1/safety/index/intersections/list
+cd frontend && npm run test:e2e:cloud
+```
+
+**Fix:**
+
+Rebuild/redeploy frontend with:
+
+```bash
+VITE_API_URL=https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1
+```
+
+---
+
+### Problem: Network risk map has markers but no road/city background
+
+**Symptom:** Intersection dots render but OpenStreetMap tiles do not.
+
+**Likely Causes:**
+
+- Browser cannot reach `https://tile.openstreetmap.org`.
+- CSS layer dimensions changed.
+- Map tile code regressed in `frontend/src/App.tsx`.
+
+**Check:**
+
+```bash
+cd frontend
+npm run test:e2e:cloud
+```
+
+The Playwright map test verifies at least one tile image completes with non-zero natural dimensions and markers remain inside the map bounds.
+
+---
+
+### Problem: Backend cannot connect to Cloud SQL after public IP removal
+
+**Symptom:** Backend health shows degraded DB status or VTTI DB queries fail.
+
+**Current Expected State:**
+
+- Cloud SQL public IP is disabled.
+- Backend uses private IP `10.75.222.3`.
+- Cloud Run needs Direct VPC egress for private ranges.
+
+**Checks:**
+
+```bash
+gcloud run services describe cs6604-trafficsafety \
+  --region=europe-west1 \
+  --project=symbolic-cinema-305010
+
+gcloud sql instances describe vtsi-postgres \
+  --project=symbolic-cinema-305010
+```
+
+**Fix Direction:**
+
+Do not re-enable public IP as the first fix. Verify Cloud Run VPC egress and `VTTI_DB_HOST=10.75.222.3` first.
+
+---
+
+### Problem: Cloud tests do not run
+
+**Backend cloud tests are skipped by default.** Enable them:
+
+```bash
+RUN_CLOUD_TESTS=1 python -m pytest tests/cloud -q
+```
+
+**Playwright browser missing:**
+
+```bash
+cd frontend
+npx playwright install chromium
+npm run test:e2e:cloud
+```
+
+---
+
 ## SafetyChat / LLM Issues
 
 ### Problem: Safety score returns empty results for "current time"
@@ -710,7 +806,7 @@ cat backend/.env (redact secrets!)
 
 **Cause:** Server clock (2026) is ahead of latest data (2025-11-21). Defaulting to `now()` finds no rows.
 
-**Fix (already applied in rev 00130):** All time-anchored executors in `chat_service.py` query
+**Fix (already applied):** All time-anchored executors in `chat_service.py` query
 ```sql
 SELECT MAX(publish_timestamp) AS max_ts FROM "vehicle-count"
 ```
@@ -747,5 +843,5 @@ The `current_datetime_str` injected into the prompt shows the DB max timestamp w
 
 ---
 
-**Last Updated**: 2026-05-01
+**Last Updated**: 2026-05-27
 **For More Help**: See `operational-guide.md` or check project documentation

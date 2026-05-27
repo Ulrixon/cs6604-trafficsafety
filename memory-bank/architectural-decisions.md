@@ -644,7 +644,7 @@ These decisions will be reviewed:
 ## ADR-010: Tool-Augmented LLM for SafetyChat
 
 **Date:** 2026-05-01
-**Status:** Implemented & Deployed (rev 00130)
+**Status:** Implemented & Deployed
 **Decision Makers:** Traffic Safety Index Team
 
 ### Context
@@ -661,7 +661,7 @@ Implement SafetyChat using **OpenAI function-calling (tool-augmented LLM)**:
 ### Architecture
 
 ```
-User → Streamlit (SafetyChat page)
+User → Vite React dashboard SafetyChat dock
          ↓
     chat_service.py (FastAPI route)
          ↓ system prompt + 6 tools
@@ -733,6 +733,123 @@ All "current time" lookups in `chat_service.py` (and any future service) query `
 
 ---
 
-**Document Maintainers:** Traffic Safety Index Team
-**Last Updated:** 2026-05-01
+## ADR-012: Vite React as the Active Production Frontend
 
+**Date:** 2026-05-27  
+**Status:** Implemented
+
+### Context
+
+The project previously used Streamlit for dashboard workflows. The system now needs a more integrated operational dashboard combining safety index overview, map, trends, validation, sensitivity analysis, database exploration, and SafetyChat.
+
+### Decision
+
+Use the Vite React app in `frontend/` as the active production frontend. Keep Streamlit separated under `frontend/legacy-streamlit/` for reference only.
+
+### Consequences
+
+- Production Cloud Run frontend is `safety-index-frontend`.
+- Frontend deploys as a static Vite build served by nginx.
+- New UI work should target `frontend/src/App.tsx` and `frontend/src/styles.css`.
+- Do not add production features to Streamlit unless explicitly requested as legacy/reference work.
+
+---
+
+## ADR-013: Cloud SQL Private IP Only for Backend Database Access
+
+**Date:** 2026-05-27  
+**Status:** Implemented
+
+### Context
+
+Cloud SQL public IP reservation created recurring cost and exposed an unnecessary public network surface. Backend runs on Cloud Run in the same GCP project and can use private connectivity.
+
+### Decision
+
+Disable public IP on `vtsi-postgres` and connect the backend through private IP `10.75.222.3` with Cloud Run Direct VPC egress for private ranges.
+
+### Consequences
+
+- Public IP reservation billing is avoided.
+- Backend must keep private VPC egress configured.
+- Local public internet connections to Cloud SQL will not work without an alternate access path.
+- Do not restore public IP unless there is a temporary, documented operational need.
+- Duplicate Cloud SQL instance `vttsi` was deleted.
+
+---
+
+## ADR-014: Per-Instance Backend Caching Instead of Required Shared Redis
+
+**Date:** 2026-05-27  
+**Status:** Implemented
+
+### Context
+
+Several backend endpoints are called frequently from the dashboard and can be expensive because they compute safety indices, validation summaries, database explorer results, or status data. The user explicitly chose per-instance caching rather than requiring a shared Redis service.
+
+### Decision
+
+Keep the caching layer pluggable: use Redis if configured and reachable, otherwise use in-process memory cache per Cloud Run instance.
+
+### Consequences
+
+- No external Redis cost is required for the current deployment.
+- Cache hits are not shared across Cloud Run instances.
+- Cloud Run scale-out can reduce hit rate because each instance has its own cache.
+- `/health` reports cache backend status.
+
+---
+
+## ADR-015: SQLAlchemy for Local App DB Paths, Hardened Raw SQL for External Clients
+
+**Date:** 2026-05-27  
+**Status:** Implemented
+
+### Context
+
+Backend API paths had raw SQL usage. Local app database access can be represented with SQLAlchemy, but some external data paths use psycopg2 or Trino clients and are not SQLAlchemy ORM-managed.
+
+### Decision
+
+- Use SQLAlchemy declarative/table metadata for local app DB operations.
+- Remove `execute_raw_sql` from the local DB connection helper.
+- Use SQLAlchemy statements in `db_service.py` and analytics local DB paths.
+- For external VTTI psycopg2 paths, use bound parameters and `psycopg2.sql.Identifier` where identifiers are dynamic.
+- For Trino query builders, escape user-controlled string literals and avoid direct interpolation of user input.
+- Keep SafetyChat `run_sql_query` as a limited read-only SELECT tool with stricter validation.
+
+### Consequences
+
+- Local API DB paths are safer and easier to audit.
+- External clients still contain SQL strings, but user-controlled values are parameterized, allowlisted, or escaped.
+- `tests/backend/test_sql_safety.py` locks down the critical safety behaviors.
+
+---
+
+## ADR-016: Cloud Endpoint Tests as Explicit Smoke Tests
+
+**Date:** 2026-05-27  
+**Status:** Implemented
+
+### Context
+
+Local tests do not prove that the deployed Cloud Run frontend is wired to the deployed backend or that map tiles, UI layout, and API routes work in production.
+
+### Decision
+
+Add explicit cloud endpoint tests:
+
+- Backend Cloud Run pytest tests in `tests/cloud/`, skipped unless `RUN_CLOUD_TESTS=1`.
+- Frontend Playwright tests in `frontend/e2e/`.
+- Default URLs target the current production Cloud Run services and can be overridden with environment variables.
+
+### Consequences
+
+- Normal local test suite remains deterministic and does not require network.
+- Production smoke tests can be run before/after deploys.
+- UI tests verify live backend data, OSM map tiles, visible markers, major panel navigation, and top-level layout overlap.
+
+---
+
+**Document Maintainers:** Traffic Safety Index Team
+**Last Updated:** 2026-05-27

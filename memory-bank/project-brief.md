@@ -11,3 +11,14 @@ This solution serves multiple stakeholder groups across the transportation ecosy
 ## What does success look like?
 
 Success is defined as a fully operational API capable of collecting real-time traffic information from the VCC Public API, processing V2X messages through safety analysis algorithms, and updating intersection safety scores in real time. The system will continuously ingest data streams (BSM, SPAT, PSM), compute safety metrics based on traffic conflicts, signal compliance, and behavioral patterns, and expose these scores through a well-documented REST API. Success metrics include: reliable real-time data processing with minimal latency, accurate safety score computation validated against historical crash data, scalable architecture supporting all VCC intersections, and demonstrated integration by at least one downstream application (e.g., driver warning system, traffic management dashboard). The ultimate measure of success will be the system's ability to provide actionable intelligence that contributes to measurable improvements in intersection safety.
+
+## Current Production Shape
+
+As of 2026-05-27, the project has a deployed Cloud Run backend and a deployed Vite React dashboard:
+
+- Backend: `https://cs6604-trafficsafety-180117512369.europe-west1.run.app`
+- Frontend: `https://safety-index-frontend-180117512369.europe-west1.run.app`
+- Active frontend: Vite React in `frontend/`
+- Legacy frontend: Streamlit archived in `frontend/legacy-streamlit/`
+- Database: Cloud SQL `vtsi-postgres` over private IP only
+- Validation: local backend tests, cloud backend smoke tests, and Playwright cloud UI tests

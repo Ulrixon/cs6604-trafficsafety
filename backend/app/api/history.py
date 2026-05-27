@@ -18,6 +18,8 @@ from ..services.history_service import (
     get_aggregate_stats,
     get_all_intersections_history
 )
+from ..core.config import settings
+from ..core.redis_cache import response_cache
 
 logger = logging.getLogger(__name__)
 
@@ -93,11 +95,28 @@ def get_history(
         )
 
     try:
+        cache_key = response_cache.make_key(
+            "history-intersection",
+            intersection_id,
+            start_date.isoformat(),
+            end_date.isoformat(),
+            aggregation,
+        )
+        hit, cached = response_cache.get(cache_key, settings.SAFETY_TIME_CACHE_TTL_SECONDS)
+        if hit:
+            return cached
+
         history = get_intersection_history(
             intersection_id=intersection_id,
             start_date=start_date,
             end_date=end_date,
             aggregation=aggregation
+        )
+        response_cache.set(
+            cache_key,
+            history,
+            settings.SAFETY_TIME_CACHE_TTL_SECONDS,
+            cache_empty=True,
         )
         return history
 
@@ -138,10 +157,26 @@ def get_statistics(
         start_date = end_date - timedelta(days=days-1)
 
     try:
+        cache_key = response_cache.make_key(
+            "history-stats",
+            intersection_id,
+            start_date.isoformat(),
+            end_date.isoformat(),
+        )
+        hit, cached = response_cache.get(cache_key, settings.SAFETY_TIME_CACHE_TTL_SECONDS)
+        if hit:
+            return cached
+
         stats = get_aggregate_stats(
             intersection_id=intersection_id,
             start_date=start_date,
             end_date=end_date
+        )
+        response_cache.set(
+            cache_key,
+            stats,
+            settings.SAFETY_TIME_CACHE_TTL_SECONDS,
+            cache_empty=True,
         )
         return stats
 
@@ -187,10 +222,26 @@ def get_all_histories(
         )
 
     try:
+        cache_key = response_cache.make_key(
+            "history-all",
+            start_date.isoformat(),
+            end_date.isoformat(),
+            aggregation,
+        )
+        hit, cached = response_cache.get(cache_key, settings.SAFETY_TIME_CACHE_TTL_SECONDS)
+        if hit:
+            return cached
+
         histories = get_all_intersections_history(
             start_date=start_date,
             end_date=end_date,
             aggregation=aggregation
+        )
+        response_cache.set(
+            cache_key,
+            histories,
+            settings.SAFETY_TIME_CACHE_TTL_SECONDS,
+            cache_empty=True,
         )
         return histories
 

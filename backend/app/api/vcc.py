@@ -19,6 +19,7 @@ from ..services.vcc_realtime_streaming import vcc_streamer
 from ..services.vcc_realtime_processor import vcc_realtime_processor
 from ..services.vcc_client import vcc_client
 from ..core.config import settings
+from ..core.redis_cache import response_cache
 
 
 router = APIRouter(prefix="/vcc", tags=["VCC API"])
@@ -47,6 +48,11 @@ def get_vcc_status():
         Dictionary with VCC API status, configuration, and connection info
     """
     try:
+        cache_key = response_cache.make_key("vcc-status")
+        hit, cached = response_cache.get(cache_key, settings.VCC_CACHE_TTL_SECONDS)
+        if hit:
+            return cached
+
         # Test authentication
         token = vcc_client.get_access_token()
         auth_status = "authenticated" if token else "failed"
@@ -55,7 +61,7 @@ def get_vcc_status():
         mapdata = vcc_client.get_mapdata(decoded=True)
         mapdata_count = len(mapdata) if mapdata else 0
         
-        return {
+        payload = {
             "status": "connected" if token else "disconnected",
             "authentication": auth_status,
             "base_url": settings.VCC_BASE_URL,
@@ -64,6 +70,13 @@ def get_vcc_status():
             "mapdata_available": mapdata_count,
             "streaming_active": vcc_streamer.running if hasattr(vcc_streamer, 'running') else False
         }
+        response_cache.set(
+            cache_key,
+            payload,
+            settings.VCC_CACHE_TTL_SECONDS,
+            cache_empty=True,
+        )
+        return payload
     except Exception as e:
         return {
             "status": "error",
@@ -297,12 +310,24 @@ def get_mapdata(intersection_id: Optional[int] = None):
         List of MapData messages
     """
     try:
+        cache_key = response_cache.make_key("vcc-mapdata", intersection_id)
+        hit, cached = response_cache.get(cache_key, settings.VCC_CACHE_TTL_SECONDS)
+        if hit:
+            return cached
+
         mapdata = vcc_client.get_mapdata(intersection_id=intersection_id, decoded=True)
-        return {
+        payload = {
             "status": "success",
             "count": len(mapdata),
             "mapdata": mapdata
         }
+        response_cache.set(
+            cache_key,
+            payload,
+            settings.VCC_CACHE_TTL_SECONDS,
+            cache_empty=True,
+        )
+        return payload
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get MapData: {str(e)}")
 
@@ -316,21 +341,33 @@ def test_connection():
         Dictionary with connection test results
     """
     try:
+        cache_key = response_cache.make_key("vcc-test-connection")
+        hit, cached = response_cache.get(cache_key, settings.VCC_CACHE_TTL_SECONDS)
+        if hit:
+            return cached
+
         # Test authentication
         token = vcc_client.get_access_token()
         if not token:
-            return {
+            payload = {
                 "status": "failed",
                 "message": "Failed to obtain access token",
                 "authenticated": False
             }
+            response_cache.set(
+                cache_key,
+                payload,
+                settings.VCC_CACHE_TTL_SECONDS,
+                cache_empty=True,
+            )
+            return payload
         
         # Test API endpoints
         bsm = vcc_client.get_bsm_current()
         psm = vcc_client.get_psm_current()
         mapdata = vcc_client.get_mapdata(decoded=True)
         
-        return {
+        payload = {
             "status": "success",
             "authenticated": True,
             "endpoints": {
@@ -348,10 +385,16 @@ def test_connection():
                 }
             }
         }
+        response_cache.set(
+            cache_key,
+            payload,
+            settings.VCC_CACHE_TTL_SECONDS,
+            cache_empty=True,
+        )
+        return payload
     except Exception as e:
         return {
             "status": "error",
             "message": str(e),
             "authenticated": False
         }
-

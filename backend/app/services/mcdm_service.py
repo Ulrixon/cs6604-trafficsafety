@@ -154,73 +154,80 @@ class MCDMSafetyIndexService:
         start_ts = int(start_time.timestamp() * 1_000_000)
         end_ts = int(end_time.timestamp() * 1_000_000)
         bin_microseconds = bin_minutes * 60 * 1_000_000
+        query_params = {
+            "start_ts": start_ts,
+            "end_ts": end_ts,
+            "bin_us": bin_microseconds,
+        }
 
         # Collect vehicle count data (column is 'count', not 'vehicle_count')
-        vehicle_query = f"""
+        vehicle_query = """
         SELECT 
             intersection,
-            FLOOR(publish_timestamp / {bin_microseconds}) * {bin_microseconds} as time_bin,
+            FLOOR(publish_timestamp / %(bin_us)s) * %(bin_us)s as time_bin,
             SUM(count) as vehicle_count
         FROM "vehicle-count"
-        WHERE publish_timestamp >= {start_ts} AND publish_timestamp < {end_ts}
+        WHERE publish_timestamp >= %(start_ts)s AND publish_timestamp < %(end_ts)s
         GROUP BY intersection, time_bin
         """
-        vehicle_data = pd.DataFrame(self.client.execute_query(vehicle_query))
+        vehicle_data = pd.DataFrame(self.client.execute_query(vehicle_query, query_params))
 
         if len(vehicle_data) == 0:
             return pd.DataFrame()
 
         # Collect VRU count data (column is 'count', not 'vru_count')
-        vru_query = f"""
+        vru_query = """
         SELECT 
             intersection,
-            FLOOR(publish_timestamp / {bin_microseconds}) * {bin_microseconds} as time_bin,
+            FLOOR(publish_timestamp / %(bin_us)s) * %(bin_us)s as time_bin,
             SUM(count) as vru_count
         FROM "vru-count"
-        WHERE publish_timestamp >= {start_ts} AND publish_timestamp < {end_ts}
+        WHERE publish_timestamp >= %(start_ts)s AND publish_timestamp < %(end_ts)s
         GROUP BY intersection, time_bin
         """
-        vru_data = pd.DataFrame(self.client.execute_query(vru_query))
+        vru_data = pd.DataFrame(self.client.execute_query(vru_query, query_params))
 
         # Collect speed distribution data (column is 'speed_interval', use 'count')
         # Aggregate speed distribution by intersection/time_bin/speed_bin to
         # reduce rows and push work to the database.
-        speed_query = f"""
+        speed_query = """
         SELECT 
             intersection,
-            FLOOR(publish_timestamp / {bin_microseconds}) * {bin_microseconds} as time_bin,
+            FLOOR(publish_timestamp / %(bin_us)s) * %(bin_us)s as time_bin,
             speed_interval as speed_bin,
             SUM(count) as event_count
         FROM "speed-distribution"
-        WHERE publish_timestamp >= {start_ts} AND publish_timestamp < {end_ts}
+        WHERE publish_timestamp >= %(start_ts)s AND publish_timestamp < %(end_ts)s
         GROUP BY intersection, time_bin, speed_bin
         """
-        speed_data = pd.DataFrame(self.client.execute_query(speed_query))
+        speed_data = pd.DataFrame(self.client.execute_query(speed_query, query_params))
 
         # Collect incident data (use publish_timestamp, not timestamp)
-        incident_query = f"""
+        incident_query = """
         SELECT 
             intersection,
-            FLOOR(publish_timestamp / {bin_microseconds}) * {bin_microseconds} as time_bin,
+            FLOOR(publish_timestamp / %(bin_us)s) * %(bin_us)s as time_bin,
             COUNT(*) as incident_count
         FROM "safety-event"
-        WHERE publish_timestamp >= {start_ts} AND publish_timestamp < {end_ts}
+        WHERE publish_timestamp >= %(start_ts)s AND publish_timestamp < %(end_ts)s
         GROUP BY intersection, time_bin
         """
-        incident_data = pd.DataFrame(self.client.execute_query(incident_query))
+        incident_data = pd.DataFrame(self.client.execute_query(incident_query, query_params))
 
         # Collect near miss data (NM-VRU or NM-VV)
-        near_miss_query = f"""
+        near_miss_query = """
         SELECT 
             intersection,
-            FLOOR(publish_timestamp / {bin_microseconds}) * {bin_microseconds} as time_bin,
+            FLOOR(publish_timestamp / %(bin_us)s) * %(bin_us)s as time_bin,
             COUNT(*) as near_miss_count
         FROM "safety-event"
-        WHERE publish_timestamp >= {start_ts} AND publish_timestamp < {end_ts}
+        WHERE publish_timestamp >= %(start_ts)s AND publish_timestamp < %(end_ts)s
           AND event_type IN ('NM-VRU', 'NM-VV')
         GROUP BY intersection, time_bin
         """
-        near_miss_data = pd.DataFrame(self.client.execute_query(near_miss_query))
+        near_miss_data = pd.DataFrame(
+            self.client.execute_query(near_miss_query, query_params)
+        )
 
         # Process speed data
         speed_stats = self._process_speed_distribution(speed_data)

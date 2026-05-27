@@ -65,6 +65,26 @@ class Settings(BaseSettings):
         env="ANALYTICS_CACHE_TTL_SECONDS",
         description="TTL for analytics and validation responses",
     )
+    API_METADATA_CACHE_TTL_SECONDS: int = Field(
+        3600,
+        env="API_METADATA_CACHE_TTL_SECONDS",
+        description="TTL for static API metadata, schema, and documentation responses",
+    )
+    DB_EXPLORER_CACHE_TTL_SECONDS: int = Field(
+        300,
+        env="DB_EXPLORER_CACHE_TTL_SECONDS",
+        description="TTL for database explorer read responses",
+    )
+    VCC_CACHE_TTL_SECONDS: int = Field(
+        60,
+        env="VCC_CACHE_TTL_SECONDS",
+        description="TTL for VCC read-only status and map responses",
+    )
+    DEBUG_CACHE_TTL_SECONDS: int = Field(
+        60,
+        env="DEBUG_CACHE_TTL_SECONDS",
+        description="TTL for debug and diagnostic read responses",
+    )
 
     # Trino database configuration
     TRINO_HOST: str = "smart-cities-trino.pre-prod.cloud.vtti.vt.edu"

@@ -1,10 +1,26 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Dict, Any, Optional
+from psycopg2 import sql
+from ..core.config import settings
+from ..core.redis_cache import response_cache
 from ..services.db_client import get_db_client
 import logging
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _validate_identifier(value: str, allowed_values: set[str], label: str) -> str:
+    """
+    Validate an SQL identifier against database-discovered names.
+
+    SQL parameters cannot bind table or column names. These endpoints therefore
+    discover the allowed identifiers first and compose the final statement with
+    psycopg2.sql.Identifier after an exact allowlist check.
+    """
+    if value not in allowed_values:
+        raise HTTPException(status_code=404 if label == "table" else 400, detail=f"Invalid {label}: {value}")
+    return value
 
 
 @router.get("/tables", response_model=List[str])
@@ -13,6 +29,11 @@ async def get_tables():
     Get a list of all tables in the public schema.
     """
     try:
+        cache_key = response_cache.make_key("db-explorer-tables")
+        hit, cached = response_cache.get(cache_key, settings.DB_EXPLORER_CACHE_TTL_SECONDS)
+        if hit:
+            return cached
+
         client = get_db_client()
         query = """
             SELECT table_name 
@@ -21,7 +42,14 @@ async def get_tables():
             AND table_type = 'BASE TABLE';
         """
         results = client.execute_query(query)
-        return [row["table_name"] for row in results]
+        tables = [row["table_name"] for row in results]
+        response_cache.set(
+            cache_key,
+            tables,
+            settings.DB_EXPLORER_CACHE_TTL_SECONDS,
+            cache_empty=True,
+        )
+        return tables
     except Exception as e:
         logger.error(f"Error fetching tables: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -33,6 +61,11 @@ async def get_table_schema(table_name: str):
     Get the schema (columns and types) for a specific table.
     """
     try:
+        cache_key = response_cache.make_key("db-explorer-schema", table_name)
+        hit, cached = response_cache.get(cache_key, settings.DB_EXPLORER_CACHE_TTL_SECONDS)
+        if hit:
+            return cached
+
         client = get_db_client()
         # Validate table name to prevent SQL injection (basic check)
         # In a real app, we should verify against the list of known tables
@@ -48,6 +81,12 @@ async def get_table_schema(table_name: str):
         if not results:
             raise HTTPException(status_code=404, detail=f"Table {table_name} not found")
 
+        response_cache.set(
+            cache_key,
+            results,
+            settings.DB_EXPLORER_CACHE_TTL_SECONDS,
+            cache_empty=True,
+        )
         return results
     except HTTPException:
         raise
@@ -68,18 +107,33 @@ async def get_table_data(
     Get data from a specific table with pagination and optional simple filtering.
     """
     try:
+        cache_key = response_cache.make_key(
+            "db-explorer-data",
+            table_name,
+            limit,
+            offset,
+            filter_col,
+            filter_val,
+        )
+        hit, cached = response_cache.get(cache_key, settings.DB_EXPLORER_CACHE_TTL_SECONDS)
+        if hit:
+            return cached
+
         client = get_db_client()
 
         # Sanitize table name (basic check)
         # Ideally, check against a whitelist of existing tables
-        tables_query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
-        valid_tables = [t["table_name"] for t in client.execute_query(tables_query)]
-
-        if table_name not in valid_tables:
-            raise HTTPException(status_code=404, detail=f"Table {table_name} not found")
-
-        # Handle table names with hyphens by quoting them
-        quoted_table_name = f'"{table_name}"'
+        tables_query = """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = %s
+              AND table_type = %s
+        """
+        valid_tables = [
+            t["table_name"]
+            for t in client.execute_query(tables_query, ("public", "BASE TABLE"))
+        ]
+        safe_table_name = _validate_identifier(table_name, set(valid_tables), "table")
 
         if filter_col and filter_val:
             # Basic SQL injection prevention for column name: check if it exists in the table
@@ -89,15 +143,17 @@ async def get_table_data(
                 for c in client.execute_query(cols_query, (table_name,))
             ]
 
-            if filter_col not in valid_cols:
-                raise HTTPException(
-                    status_code=400, detail=f"Invalid filter column: {filter_col}"
-                )
+            safe_filter_col = _validate_identifier(filter_col, set(valid_cols), "column")
 
-            query = f'SELECT * FROM {quoted_table_name} WHERE "{filter_col}" = %s LIMIT %s OFFSET %s'
+            query = sql.SQL("SELECT * FROM {table} WHERE {column} = %s LIMIT %s OFFSET %s").format(
+                table=sql.Identifier(safe_table_name),
+                column=sql.Identifier(safe_filter_col),
+            )
             results = client.execute_query(query, (filter_val, limit, offset))
         else:
-            query = f"SELECT * FROM {quoted_table_name} LIMIT %s OFFSET %s"
+            query = sql.SQL("SELECT * FROM {table} LIMIT %s OFFSET %s").format(
+                table=sql.Identifier(safe_table_name),
+            )
             results = client.execute_query(query, (limit, offset))
 
         # Debug logging
@@ -118,6 +174,12 @@ async def get_table_data(
             results = processed_results
 
         # Handle datetime serialization if necessary (FastAPI usually handles this, but just in case)
+        response_cache.set(
+            cache_key,
+            results,
+            settings.DB_EXPLORER_CACHE_TTL_SECONDS,
+            cache_empty=True,
+        )
         return results
     except HTTPException:
         raise

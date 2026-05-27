@@ -10,11 +10,12 @@ from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict, Any
 import pandas as pd
 import numpy as np
-from sqlalchemy import text
+from sqlalchemy import func, select
 from math import radians, sin, cos, sqrt, atan2
 import psycopg2
 
 from ..db.connection import db_session
+from ..models.database import IntersectionModel, SafetyIndexRealtimeModel
 from ..schemas.analytics import (
     CorrelationMetrics,
     CrashDataPoint,
@@ -74,26 +75,22 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 def load_monitored_intersections() -> List[Dict[str, Any]]:
     """Load monitored intersection coordinates from local database."""
     try:
-        query = text("""
-            SELECT
-                id as intersection_id,
-                name,
-                latitude,
-                longitude
-            FROM intersections
-            ORDER BY id
-        """)
+        stmt = select(
+            IntersectionModel.id.label("intersection_id"),
+            IntersectionModel.name,
+            IntersectionModel.latitude,
+            IntersectionModel.longitude,
+        ).order_by(IntersectionModel.id.asc())
 
         with db_session() as session:
-            result = session.execute(query)
-            rows = result.fetchall()
+            rows = session.execute(stmt).mappings().all()
 
             return [
                 {
-                    'intersection_id': row[0],
-                    'name': row[1],
-                    'latitude': row[2],
-                    'longitude': row[3]
+                    'intersection_id': row["intersection_id"],
+                    'name': row["name"],
+                    'latitude': row["latitude"],
+                    'longitude': row["longitude"]
                 }
                 for row in rows
             ]
@@ -121,7 +118,7 @@ def load_crashes_from_gcp(
 
         conn = _connect_vtti_postgres()
 
-        query = f"""
+        query = """
             SELECT
                 document_nbr as crash_id,
                 crash_date,
@@ -142,13 +139,16 @@ def load_crashes_from_gcp(
               AND latitude IS NOT NULL
               AND longitude IS NOT NULL
             ORDER BY crash_date DESC, crash_time DESC
-            {f"LIMIT {limit}" if limit else ""}
         """
-
-        df = pd.read_sql_query(query, conn, params={
+        params = {
             'start_date': start_date,
-            'end_date': end_date
-        })
+            'end_date': end_date,
+        }
+        if limit:
+            query += " LIMIT %(limit)s"
+            params["limit"] = limit
+
+        df = pd.read_sql_query(query, conn, params=params)
         conn.close()
 
         if df.empty:
@@ -230,44 +230,36 @@ def load_safety_indices(
         start_dt = datetime.combine(start_date, datetime.min.time())
         end_dt = datetime.combine(end_date, datetime.max.time())
 
-        query_text = """
-            SELECT
-                timestamp,
-                intersection_id,
-                combined_index,
-                vru_index,
-                vehicle_index,
-                traffic_volume,
-                vru_count
-            FROM safety_indices_realtime
-            WHERE timestamp >= :start_date
-              AND timestamp <= :end_date
-        """
+        stmt = (
+            select(
+                SafetyIndexRealtimeModel.timestamp,
+                SafetyIndexRealtimeModel.intersection_id,
+                SafetyIndexRealtimeModel.combined_index,
+                SafetyIndexRealtimeModel.vru_index,
+                SafetyIndexRealtimeModel.vehicle_index,
+                SafetyIndexRealtimeModel.traffic_volume,
+                SafetyIndexRealtimeModel.vru_count,
+            )
+            .where(SafetyIndexRealtimeModel.timestamp >= start_dt)
+            .where(SafetyIndexRealtimeModel.timestamp <= end_dt)
+            .order_by(SafetyIndexRealtimeModel.timestamp.asc())
+        )
 
         if intersection_id is not None:
-            query_text += " AND intersection_id = :intersection_id"
-
-        query_text += " ORDER BY timestamp"
-
-        query = text(query_text)
+            stmt = stmt.where(SafetyIndexRealtimeModel.intersection_id == intersection_id)
 
         with db_session() as session:
-            params = {'start_date': start_dt, 'end_date': end_dt}
-            if intersection_id is not None:
-                params['intersection_id'] = intersection_id
-
-            result = session.execute(query, params)
-            rows = result.fetchall()
+            rows = session.execute(stmt).mappings().all()
 
             return [
                 {
-                    'timestamp': row[0],
-                    'intersection_id': row[1],
-                    'combined_index': float(row[2]) if row[2] is not None else 0.0,
-                    'vru_index': float(row[3]) if row[3] is not None else 0.0,
-                    'vehicle_index': float(row[4]) if row[4] is not None else 0.0,
-                    'traffic_volume': int(row[5]) if row[5] is not None else 0,
-                    'vru_count': int(row[6]) if row[6] is not None else 0
+                    'timestamp': row["timestamp"],
+                    'intersection_id': row["intersection_id"],
+                    'combined_index': float(row["combined_index"]) if row["combined_index"] is not None else 0.0,
+                    'vru_index': float(row["vru_index"]) if row["vru_index"] is not None else 0.0,
+                    'vehicle_index': float(row["vehicle_index"]) if row["vehicle_index"] is not None else 0.0,
+                    'traffic_volume': int(row["traffic_volume"]) if row["traffic_volume"] is not None else 0,
+                    'vru_count': int(row["vru_count"]) if row["vru_count"] is not None else 0
                 }
                 for row in rows
             ]
@@ -280,9 +272,9 @@ def load_safety_indices(
 def get_latest_safety_index_date_range(days: int = 30) -> tuple[date, date]:
     """Return a date window ending at the latest available safety-index row."""
     try:
-        query = text("SELECT MAX(timestamp) FROM safety_indices_realtime")
+        stmt = select(func.max(SafetyIndexRealtimeModel.timestamp))
         with db_session() as session:
-            latest = session.execute(query).scalar()
+            latest = session.execute(stmt).scalar()
         if latest is None:
             end_date = date.today()
         else:

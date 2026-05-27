@@ -14,6 +14,8 @@ import re
 from typing import Optional, Dict
 import logging
 
+from psycopg2 import sql
+
 logger = logging.getLogger(__name__)
 
 
@@ -170,7 +172,9 @@ def validate_intersection_in_tables(
     tables_with_full_name = ["vehicle-count", "vru-count", "speed-distribution"]
     for table in tables_with_full_name:
         try:
-            query = f'SELECT 1 FROM "{table}" WHERE intersection = %(name)s LIMIT 1'
+            query = sql.SQL(
+                "SELECT 1 FROM {table} WHERE intersection = %(name)s LIMIT 1"
+            ).format(table=sql.Identifier(table))
             result = db_client.execute_query(query, {"name": intersection_name})
             results[table] = len(result) > 0
         except Exception as e:
@@ -179,7 +183,9 @@ def validate_intersection_in_tables(
 
     # safety-event table uses short names (normalized form)
     try:
-        query = 'SELECT 1 FROM "safety-event" WHERE intersection = %(name)s LIMIT 1'
+        query = sql.SQL(
+            "SELECT 1 FROM {table} WHERE intersection = %(name)s LIMIT 1"
+        ).format(table=sql.Identifier("safety-event"))
         result = db_client.execute_query(query, {"name": short_name})
         results["safety-event"] = len(result) > 0
     except Exception as e:

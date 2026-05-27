@@ -23,6 +23,7 @@ from app.schemas.transparency import (
 from app.services.multi_source_collector import multi_source_collector
 from app.services.index_computation import compute_multi_source_safety_indices
 from app.core.config import settings
+from app.core.redis_cache import response_cache
 
 router = APIRouter(prefix="/safety/transparency", tags=["Safety Index Transparency"])
 logger = logging.getLogger(__name__)
@@ -203,7 +204,16 @@ async def get_safety_index_breakdown(
     try:
         # Use latest timestamp if not provided
         if timestamp is None:
-            timestamp = datetime.now()
+            timestamp = datetime.now().replace(second=0, microsecond=0)
+
+        cache_key = response_cache.make_key(
+            "transparency-breakdown",
+            intersection_id,
+            timestamp.isoformat(),
+        )
+        hit, cached = response_cache.get(cache_key, settings.SAFETY_TIME_CACHE_TTL_SECONDS)
+        if hit:
+            return cached
 
         # Calculate safety indices for a 15-minute window around the timestamp
         start_time = timestamp - timedelta(minutes=7)
@@ -288,6 +298,12 @@ async def get_safety_index_breakdown(
             data_quality="complete" if len(plugins) > 0 else "partial"
         )
 
+        response_cache.set(
+            cache_key,
+            breakdown,
+            settings.SAFETY_TIME_CACHE_TTL_SECONDS,
+            cache_empty=True,
+        )
         return breakdown
 
     except HTTPException:
@@ -311,7 +327,12 @@ async def get_formula_documentation():
     - How plugin scores are combined
     - Risk level thresholds
     """
-    return {
+    cache_key = response_cache.make_key("transparency-formula-documentation")
+    hit, cached = response_cache.get(cache_key, settings.API_METADATA_CACHE_TTL_SECONDS)
+    if hit:
+        return cached
+
+    documentation = {
         "formula_version": "2.0",
         "description": "Multi-source weighted safety index combining traffic and weather data",
 
@@ -360,3 +381,10 @@ async def get_formula_documentation():
             }
         ]
     }
+    response_cache.set(
+        cache_key,
+        documentation,
+        settings.API_METADATA_CACHE_TTL_SECONDS,
+        cache_empty=True,
+    )
+    return documentation

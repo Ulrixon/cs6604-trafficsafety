@@ -8,7 +8,7 @@ from typing import Optional
 import pandas as pd
 import numpy as np
 from .trino_client import trino_client
-from .data_collection import collect_baseline_events
+from .data_collection import collect_baseline_events, _trino_string_literal
 
 
 def calculate_heading_change_rate(heading_series):
@@ -44,7 +44,7 @@ def collect_bsm_features(
     where_clauses = ["publish_timestamp > 0", "publish_timestamp < 9999999999999999"]
 
     if intersection:
-        where_clauses.append(f"intersection = '{intersection}'")
+        where_clauses.append(f"intersection = {_trino_string_literal(intersection)}")
     if start_date:
         where_clauses.append(f"publish_timestamp >= {int(start_date.timestamp() * 1000000)}")
     if end_date:
@@ -96,7 +96,7 @@ def collect_psm_features(intersection: Optional[str] = None, start_date: Optiona
     """Extract VRU features from PSM data."""
     where_clauses = ["publish_timestamp > 0", "publish_timestamp < 9999999999999999"]
     if intersection:
-        where_clauses.append(f"intersection = '{intersection}'")
+        where_clauses.append(f"intersection = {_trino_string_literal(intersection)}")
     if start_date:
         where_clauses.append(f"publish_timestamp >= {int(start_date.timestamp() * 1000000)}")
     if end_date:

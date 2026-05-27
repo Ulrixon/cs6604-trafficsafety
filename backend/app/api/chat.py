@@ -15,6 +15,8 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from ..core.config import settings
+from ..core.redis_cache import response_cache
 from ..services.chat_service import run_chat, TOOLS
 
 router = APIRouter(prefix="/chat", tags=["SafetyChat"])
@@ -89,8 +91,6 @@ def chat(request: ChatRequest) -> ChatResponse:
         logger.error(f"SafetyChat error: {exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="SafetyChat encountered an internal error.") from exc
 
-    from ..core.config import settings
-
     return ChatResponse(reply=reply, model=settings.OPENAI_MODEL)
 
 
@@ -100,4 +100,16 @@ def list_tools() -> dict:
     Return the tool definitions available to the SafetyChat LLM.
     Useful for documentation and debugging.
     """
-    return {"tools": TOOLS}
+    cache_key = response_cache.make_key("chat-tools")
+    hit, cached = response_cache.get(cache_key, settings.API_METADATA_CACHE_TTL_SECONDS)
+    if hit:
+        return cached
+
+    payload = {"tools": TOOLS}
+    response_cache.set(
+        cache_key,
+        payload,
+        settings.API_METADATA_CACHE_TTL_SECONDS,
+        cache_empty=True,
+    )
+    return payload

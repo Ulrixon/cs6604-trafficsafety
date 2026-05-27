@@ -14,13 +14,25 @@ from datetime import datetime, date
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
 
-from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.db.connection import db_session, execute_raw_sql
+from app.db.connection import db_session
+from app.models.database import (
+    HighRiskIntersection,
+    IntersectionModel,
+    LatestSafetyIndex,
+    SafetyIndexRealtimeModel,
+    WeatherObservationModel,
+)
 from app.schemas.intersection import IntersectionSafetyIndex
 
 logger = logging.getLogger(__name__)
+
+
+def _rows_as_dicts(result) -> List[Dict[str, Any]]:
+    """Return SQLAlchemy RowMapping results as plain dictionaries."""
+    return [dict(row) for row in result.mappings().all()]
 
 
 @dataclass
@@ -65,39 +77,36 @@ def insert_safety_index(record: SafetyIndexRecord) -> bool:
         hour_of_day = record.hour_of_day if record.hour_of_day is not None else record.timestamp.hour
         day_of_week = record.day_of_week if record.day_of_week is not None else record.timestamp.weekday()
 
-        sql = text("""
-            INSERT INTO safety_indices_realtime (
-                intersection_id, timestamp, combined_index, combined_index_eb,
-                vru_index, vehicle_index, traffic_volume, vru_count,
-                hour_of_day, day_of_week
-            )
-            VALUES (
-                :intersection_id, :timestamp, :combined_index, :combined_index_eb,
-                :vru_index, :vehicle_index, :traffic_volume, :vru_count,
-                :hour_of_day, :day_of_week
-            )
-            ON CONFLICT (id, timestamp) DO UPDATE SET
-                combined_index = EXCLUDED.combined_index,
-                combined_index_eb = EXCLUDED.combined_index_eb,
-                vru_index = EXCLUDED.vru_index,
-                vehicle_index = EXCLUDED.vehicle_index,
-                traffic_volume = EXCLUDED.traffic_volume,
-                vru_count = EXCLUDED.vru_count
-        """)
+        values = {
+            "intersection_id": record.intersection_id,
+            "timestamp": record.timestamp,
+            "combined_index": record.combined_index,
+            "combined_index_eb": record.combined_index_eb,
+            "vru_index": record.vru_index,
+            "vehicle_index": record.vehicle_index,
+            "traffic_volume": record.traffic_volume,
+            "vru_count": record.vru_count,
+            "hour_of_day": hour_of_day,
+            "day_of_week": day_of_week,
+        }
+        stmt = pg_insert(SafetyIndexRealtimeModel).values(**values)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[
+                SafetyIndexRealtimeModel.id,
+                SafetyIndexRealtimeModel.timestamp,
+            ],
+            set_={
+                "combined_index": stmt.excluded.combined_index,
+                "combined_index_eb": stmt.excluded.combined_index_eb,
+                "vru_index": stmt.excluded.vru_index,
+                "vehicle_index": stmt.excluded.vehicle_index,
+                "traffic_volume": stmt.excluded.traffic_volume,
+                "vru_count": stmt.excluded.vru_count,
+            },
+        )
 
         with db_session() as session:
-            session.execute(sql, {
-                "intersection_id": record.intersection_id,
-                "timestamp": record.timestamp,
-                "combined_index": record.combined_index,
-                "combined_index_eb": record.combined_index_eb,
-                "vru_index": record.vru_index,
-                "vehicle_index": record.vehicle_index,
-                "traffic_volume": record.traffic_volume,
-                "vru_count": record.vru_count,
-                "hour_of_day": hour_of_day,
-                "day_of_week": day_of_week
-            })
+            session.execute(stmt)
 
         logger.debug(f"Inserted safety index for intersection {record.intersection_id} at {record.timestamp}")
         return True
@@ -130,26 +139,6 @@ def insert_safety_indices_batch(records: List[SafetyIndexRecord]) -> int:
         return 0
 
     success_count = 0
-    sql = text("""
-        INSERT INTO safety_indices_realtime (
-            intersection_id, timestamp, combined_index, combined_index_eb,
-            vru_index, vehicle_index, traffic_volume, vru_count,
-            hour_of_day, day_of_week
-        )
-        VALUES (
-            :intersection_id, :timestamp, :combined_index, :combined_index_eb,
-            :vru_index, :vehicle_index, :traffic_volume, :vru_count,
-            :hour_of_day, :day_of_week
-        )
-        ON CONFLICT (id, timestamp) DO UPDATE SET
-            combined_index = EXCLUDED.combined_index,
-            combined_index_eb = EXCLUDED.combined_index_eb,
-            vru_index = EXCLUDED.vru_index,
-            vehicle_index = EXCLUDED.vehicle_index,
-            traffic_volume = EXCLUDED.traffic_volume,
-            vru_count = EXCLUDED.vru_count
-    """)
-
     try:
         with db_session() as session:
             for record in records:
@@ -157,7 +146,7 @@ def insert_safety_indices_batch(records: List[SafetyIndexRecord]) -> int:
                     hour_of_day = record.hour_of_day if record.hour_of_day is not None else record.timestamp.hour
                     day_of_week = record.day_of_week if record.day_of_week is not None else record.timestamp.weekday()
 
-                    session.execute(sql, {
+                    values = {
                         "intersection_id": record.intersection_id,
                         "timestamp": record.timestamp,
                         "combined_index": record.combined_index,
@@ -167,8 +156,24 @@ def insert_safety_indices_batch(records: List[SafetyIndexRecord]) -> int:
                         "traffic_volume": record.traffic_volume,
                         "vru_count": record.vru_count,
                         "hour_of_day": hour_of_day,
-                        "day_of_week": day_of_week
-                    })
+                        "day_of_week": day_of_week,
+                    }
+                    stmt = pg_insert(SafetyIndexRealtimeModel).values(**values)
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=[
+                            SafetyIndexRealtimeModel.id,
+                            SafetyIndexRealtimeModel.timestamp,
+                        ],
+                        set_={
+                            "combined_index": stmt.excluded.combined_index,
+                            "combined_index_eb": stmt.excluded.combined_index_eb,
+                            "vru_index": stmt.excluded.vru_index,
+                            "vehicle_index": stmt.excluded.vehicle_index,
+                            "traffic_volume": stmt.excluded.traffic_volume,
+                            "vru_count": stmt.excluded.vru_count,
+                        },
+                    )
+                    session.execute(stmt)
                     success_count += 1
                 except Exception as e:
                     logger.error(f"Failed to insert record for intersection {record.intersection_id}: {e}")
@@ -196,26 +201,10 @@ def get_latest_safety_indices() -> List[IntersectionSafetyIndex]:
             print(f"{idx.intersection_name}: {idx.safety_index}")
         ```
     """
-    sql = """
-        SELECT
-            intersection_id,
-            intersection_name,
-            latitude,
-            longitude,
-            timestamp,
-            safety_index,
-            safety_index_eb,
-            vru_index,
-            vehicle_index,
-            traffic_volume,
-            vru_count,
-            risk_level
-        FROM v_latest_safety_indices
-        ORDER BY intersection_id
-    """
-
     try:
-        rows = execute_raw_sql(sql)
+        stmt = select(LatestSafetyIndex).order_by(LatestSafetyIndex.c.intersection_id)
+        with db_session() as session:
+            rows = _rows_as_dicts(session.execute(stmt))
         return [
             IntersectionSafetyIndex(
                 intersection_id=str(row["intersection_id"]),
@@ -242,26 +231,12 @@ def get_safety_index_by_intersection(intersection_id: int) -> Optional[Intersect
     Returns:
         IntersectionSafetyIndex or None if not found
     """
-    sql = """
-        SELECT
-            intersection_id,
-            intersection_name,
-            latitude,
-            longitude,
-            timestamp,
-            safety_index,
-            safety_index_eb,
-            vru_index,
-            vehicle_index,
-            traffic_volume,
-            vru_count,
-            risk_level
-        FROM v_latest_safety_indices
-        WHERE intersection_id = :id
-    """
-
     try:
-        rows = execute_raw_sql(sql, {"id": intersection_id})
+        stmt = select(LatestSafetyIndex).where(
+            LatestSafetyIndex.c.intersection_id == intersection_id
+        )
+        with db_session() as session:
+            rows = _rows_as_dicts(session.execute(stmt))
         if not rows:
             return None
 
@@ -295,31 +270,26 @@ def get_safety_indices_history(
     Returns:
         List of dictionaries with historical data
     """
-    sql = """
-        SELECT
-            timestamp,
-            combined_index AS safety_index,
-            combined_index_eb AS safety_index_eb,
-            vru_index,
-            vehicle_index,
-            traffic_volume,
-            vru_count,
-            hour_of_day,
-            day_of_week
-        FROM safety_indices_realtime
-        WHERE intersection_id = :id
-          AND timestamp >= :start_date
-          AND timestamp <= :end_date
-        ORDER BY timestamp ASC
-    """
-
     try:
-        rows = execute_raw_sql(sql, {
-            "id": intersection_id,
-            "start_date": start_date,
-            "end_date": end_date
-        })
-        return rows
+        stmt = (
+            select(
+                SafetyIndexRealtimeModel.timestamp,
+                SafetyIndexRealtimeModel.combined_index.label("safety_index"),
+                SafetyIndexRealtimeModel.combined_index_eb.label("safety_index_eb"),
+                SafetyIndexRealtimeModel.vru_index,
+                SafetyIndexRealtimeModel.vehicle_index,
+                SafetyIndexRealtimeModel.traffic_volume,
+                SafetyIndexRealtimeModel.vru_count,
+                SafetyIndexRealtimeModel.hour_of_day,
+                SafetyIndexRealtimeModel.day_of_week,
+            )
+            .where(SafetyIndexRealtimeModel.intersection_id == intersection_id)
+            .where(SafetyIndexRealtimeModel.timestamp >= start_date)
+            .where(SafetyIndexRealtimeModel.timestamp <= end_date)
+            .order_by(SafetyIndexRealtimeModel.timestamp.asc())
+        )
+        with db_session() as session:
+            return _rows_as_dicts(session.execute(stmt))
     except Exception as e:
         logger.error(f"Failed to get history for intersection {intersection_id}: {e}")
         return []
@@ -349,31 +319,31 @@ def upsert_intersection(
     Returns:
         True if successful, False otherwise
     """
-    sql = text("""
-        INSERT INTO intersections (id, name, latitude, longitude, lane_count, revision, metadata)
-        VALUES (:id, :name, :lat, :lon, :lane_count, :revision, CAST(:metadata AS jsonb))
-        ON CONFLICT (id) DO UPDATE SET
-            name = EXCLUDED.name,
-            latitude = EXCLUDED.latitude,
-            longitude = EXCLUDED.longitude,
-            lane_count = EXCLUDED.lane_count,
-            revision = EXCLUDED.revision,
-            metadata = EXCLUDED.metadata,
-            updated_at = NOW()
-    """)
-
     try:
-        import json
+        values = {
+            "id": intersection_id,
+            "name": name,
+            "latitude": latitude,
+            "longitude": longitude,
+            "lane_count": lane_count,
+            "revision": revision,
+            "metadata_json": metadata,
+        }
+        stmt = pg_insert(IntersectionModel).values(**values)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[IntersectionModel.id],
+            set_={
+                "name": stmt.excluded.name,
+                "latitude": stmt.excluded.latitude,
+                "longitude": stmt.excluded.longitude,
+                "lane_count": stmt.excluded.lane_count,
+                "revision": stmt.excluded.revision,
+                "metadata": stmt.excluded["metadata"],
+                "updated_at": func.now(),
+            },
+        )
         with db_session() as session:
-            session.execute(sql, {
-                "id": intersection_id,
-                "name": name,
-                "lat": latitude,
-                "lon": longitude,
-                "lane_count": lane_count,
-                "revision": revision,
-                "metadata": json.dumps(metadata) if metadata else None
-            })
+            session.execute(stmt)
 
         logger.info(f"Upserted intersection {intersection_id}: {name}")
         return True
@@ -399,17 +369,22 @@ def get_intersections_within_radius(
     Returns:
         List of intersections with distance information
     """
-    sql = """
-        SELECT * FROM get_intersections_within_radius(:lat, :lon, :radius)
-    """
-
     try:
-        rows = execute_raw_sql(sql, {
-            "lat": center_lat,
-            "lon": center_lon,
-            "radius": radius_meters
-        })
-        return rows
+        stmt = select(
+            func.get_intersections_within_radius(
+                center_lat,
+                center_lon,
+                radius_meters,
+            ).table_valued(
+                "id",
+                "name",
+                "latitude",
+                "longitude",
+                "distance_meters",
+            )
+        )
+        with db_session() as session:
+            return _rows_as_dicts(session.execute(stmt))
     except Exception as e:
         logger.error(f"Spatial query failed: {e}")
         return []
@@ -422,21 +397,12 @@ def get_high_risk_intersections() -> List[IntersectionSafetyIndex]:
     Returns:
         List of IntersectionSafetyIndex for high-risk intersections
     """
-    sql = """
-        SELECT
-            intersection_id,
-            intersection_name,
-            latitude,
-            longitude,
-            timestamp,
-            safety_index,
-            traffic_volume
-        FROM v_high_risk_intersections
-        ORDER BY safety_index DESC
-    """
-
     try:
-        rows = execute_raw_sql(sql)
+        stmt = select(HighRiskIntersection).order_by(
+            HighRiskIntersection.c.safety_index.desc()
+        )
+        with db_session() as session:
+            rows = _rows_as_dicts(session.execute(stmt))
         return [
             IntersectionSafetyIndex(
                 intersection_id=str(row["intersection_id"]),
@@ -496,49 +462,42 @@ def insert_weather_observation(record: WeatherObservationRecord) -> bool:
         ```
     """
     try:
-        sql = text("""
-            INSERT INTO weather_observations (
-                station_id, observation_time,
-                temperature_c, precipitation_mm, visibility_m,
-                wind_speed_ms, wind_direction_deg, weather_condition,
-                temperature_normalized, precipitation_normalized,
-                visibility_normalized, wind_speed_normalized
-            )
-            VALUES (
-                :station_id, :observation_time,
-                :temperature_c, :precipitation_mm, :visibility_m,
-                :wind_speed_ms, :wind_direction_deg, :weather_condition,
-                :temperature_normalized, :precipitation_normalized,
-                :visibility_normalized, :wind_speed_normalized
-            )
-            ON CONFLICT (station_id, observation_time) DO UPDATE SET
-                temperature_c = EXCLUDED.temperature_c,
-                precipitation_mm = EXCLUDED.precipitation_mm,
-                visibility_m = EXCLUDED.visibility_m,
-                wind_speed_ms = EXCLUDED.wind_speed_ms,
-                wind_direction_deg = EXCLUDED.wind_direction_deg,
-                weather_condition = EXCLUDED.weather_condition,
-                temperature_normalized = EXCLUDED.temperature_normalized,
-                precipitation_normalized = EXCLUDED.precipitation_normalized,
-                visibility_normalized = EXCLUDED.visibility_normalized,
-                wind_speed_normalized = EXCLUDED.wind_speed_normalized
-        """)
+        values = {
+            "station_id": record.station_id,
+            "observation_time": record.observation_time,
+            "temperature_c": record.temperature_c,
+            "precipitation_mm": record.precipitation_mm,
+            "visibility_m": record.visibility_m,
+            "wind_speed_ms": record.wind_speed_ms,
+            "wind_direction_deg": record.wind_direction_deg,
+            "weather_condition": record.weather_condition,
+            "temperature_normalized": record.temperature_normalized,
+            "precipitation_normalized": record.precipitation_normalized,
+            "visibility_normalized": record.visibility_normalized,
+            "wind_speed_normalized": record.wind_speed_normalized,
+        }
+        stmt = pg_insert(WeatherObservationModel).values(**values)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[
+                WeatherObservationModel.station_id,
+                WeatherObservationModel.observation_time,
+            ],
+            set_={
+                "temperature_c": stmt.excluded.temperature_c,
+                "precipitation_mm": stmt.excluded.precipitation_mm,
+                "visibility_m": stmt.excluded.visibility_m,
+                "wind_speed_ms": stmt.excluded.wind_speed_ms,
+                "wind_direction_deg": stmt.excluded.wind_direction_deg,
+                "weather_condition": stmt.excluded.weather_condition,
+                "temperature_normalized": stmt.excluded.temperature_normalized,
+                "precipitation_normalized": stmt.excluded.precipitation_normalized,
+                "visibility_normalized": stmt.excluded.visibility_normalized,
+                "wind_speed_normalized": stmt.excluded.wind_speed_normalized,
+            },
+        )
 
         with db_session() as session:
-            session.execute(sql, {
-                "station_id": record.station_id,
-                "observation_time": record.observation_time,
-                "temperature_c": record.temperature_c,
-                "precipitation_mm": record.precipitation_mm,
-                "visibility_m": record.visibility_m,
-                "wind_speed_ms": record.wind_speed_ms,
-                "wind_direction_deg": record.wind_direction_deg,
-                "weather_condition": record.weather_condition,
-                "temperature_normalized": record.temperature_normalized,
-                "precipitation_normalized": record.precipitation_normalized,
-                "visibility_normalized": record.visibility_normalized,
-                "wind_speed_normalized": record.wind_speed_normalized
-            })
+            session.execute(stmt)
 
         logger.debug(f"Inserted weather observation for station {record.station_id} at {record.observation_time}")
         return True
@@ -581,39 +540,11 @@ def insert_weather_observations_batch(records: List[WeatherObservationRecord]) -
         return 0
 
     success_count = 0
-    sql = text("""
-        INSERT INTO weather_observations (
-            station_id, observation_time,
-            temperature_c, precipitation_mm, visibility_m,
-            wind_speed_ms, wind_direction_deg, weather_condition,
-            temperature_normalized, precipitation_normalized,
-            visibility_normalized, wind_speed_normalized
-        )
-        VALUES (
-            :station_id, :observation_time,
-            :temperature_c, :precipitation_mm, :visibility_m,
-            :wind_speed_ms, :wind_direction_deg, :weather_condition,
-            :temperature_normalized, :precipitation_normalized,
-            :visibility_normalized, :wind_speed_normalized
-        )
-        ON CONFLICT (station_id, observation_time) DO UPDATE SET
-            temperature_c = EXCLUDED.temperature_c,
-            precipitation_mm = EXCLUDED.precipitation_mm,
-            visibility_m = EXCLUDED.visibility_m,
-            wind_speed_ms = EXCLUDED.wind_speed_ms,
-            wind_direction_deg = EXCLUDED.wind_direction_deg,
-            weather_condition = EXCLUDED.weather_condition,
-            temperature_normalized = EXCLUDED.temperature_normalized,
-            precipitation_normalized = EXCLUDED.precipitation_normalized,
-            visibility_normalized = EXCLUDED.visibility_normalized,
-            wind_speed_normalized = EXCLUDED.wind_speed_normalized
-    """)
-
     try:
         with db_session() as session:
             for record in records:
                 try:
-                    session.execute(sql, {
+                    values = {
                         "station_id": record.station_id,
                         "observation_time": record.observation_time,
                         "temperature_c": record.temperature_c,
@@ -625,8 +556,28 @@ def insert_weather_observations_batch(records: List[WeatherObservationRecord]) -
                         "temperature_normalized": record.temperature_normalized,
                         "precipitation_normalized": record.precipitation_normalized,
                         "visibility_normalized": record.visibility_normalized,
-                        "wind_speed_normalized": record.wind_speed_normalized
-                    })
+                        "wind_speed_normalized": record.wind_speed_normalized,
+                    }
+                    stmt = pg_insert(WeatherObservationModel).values(**values)
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=[
+                            WeatherObservationModel.station_id,
+                            WeatherObservationModel.observation_time,
+                        ],
+                        set_={
+                            "temperature_c": stmt.excluded.temperature_c,
+                            "precipitation_mm": stmt.excluded.precipitation_mm,
+                            "visibility_m": stmt.excluded.visibility_m,
+                            "wind_speed_ms": stmt.excluded.wind_speed_ms,
+                            "wind_direction_deg": stmt.excluded.wind_direction_deg,
+                            "weather_condition": stmt.excluded.weather_condition,
+                            "temperature_normalized": stmt.excluded.temperature_normalized,
+                            "precipitation_normalized": stmt.excluded.precipitation_normalized,
+                            "visibility_normalized": stmt.excluded.visibility_normalized,
+                            "wind_speed_normalized": stmt.excluded.wind_speed_normalized,
+                        },
+                    )
+                    session.execute(stmt)
                     success_count += 1
                 except Exception as e:
                     logger.error(f"Failed to insert weather record for station {record.station_id}: {e}")
@@ -665,34 +616,29 @@ def get_weather_observations(
         )
         ```
     """
-    sql = """
-        SELECT
-            station_id,
-            observation_time,
-            temperature_c,
-            precipitation_mm,
-            visibility_m,
-            wind_speed_ms,
-            wind_direction_deg,
-            weather_condition,
-            temperature_normalized,
-            precipitation_normalized,
-            visibility_normalized,
-            wind_speed_normalized
-        FROM weather_observations
-        WHERE station_id = :station_id
-          AND observation_time >= :start_time
-          AND observation_time <= :end_time
-        ORDER BY observation_time ASC
-    """
-
     try:
-        rows = execute_raw_sql(sql, {
-            "station_id": station_id,
-            "start_time": start_time,
-            "end_time": end_time
-        })
-        return rows
+        stmt = (
+            select(
+                WeatherObservationModel.station_id,
+                WeatherObservationModel.observation_time,
+                WeatherObservationModel.temperature_c,
+                WeatherObservationModel.precipitation_mm,
+                WeatherObservationModel.visibility_m,
+                WeatherObservationModel.wind_speed_ms,
+                WeatherObservationModel.wind_direction_deg,
+                WeatherObservationModel.weather_condition,
+                WeatherObservationModel.temperature_normalized,
+                WeatherObservationModel.precipitation_normalized,
+                WeatherObservationModel.visibility_normalized,
+                WeatherObservationModel.wind_speed_normalized,
+            )
+            .where(WeatherObservationModel.station_id == station_id)
+            .where(WeatherObservationModel.observation_time >= start_time)
+            .where(WeatherObservationModel.observation_time <= end_time)
+            .order_by(WeatherObservationModel.observation_time.asc())
+        )
+        with db_session() as session:
+            return _rows_as_dicts(session.execute(stmt))
     except Exception as e:
         logger.error(f"Failed to get weather observations for station {station_id}: {e}")
         return []

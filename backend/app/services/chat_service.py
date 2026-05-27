@@ -956,6 +956,7 @@ _SQL_BLOCK = re.compile(
     r"\b(insert|update|delete|drop|truncate|alter|create|grant|revoke|copy|vacuum|reindex)\b",
     re.IGNORECASE,
 )
+_SQL_COMMENT = re.compile(r"(--|/\*)")
 _MAX_SQL_ROWS = 100
 
 
@@ -966,12 +967,17 @@ def _execute_run_sql(args: dict) -> dict:
     # Safety: only allow SELECT / WITH (CTEs)
     if not re.match(r"^\s*(select|with)\b", sql, re.IGNORECASE):
         return {"error": "Only SELECT statements are permitted."}
+    if _SQL_COMMENT.search(sql):
+        return {"error": "SQL comments are not permitted."}
     if _SQL_BLOCK.search(sql):
         return {"error": "Statement contains a disallowed keyword."}
+    stripped_sql = sql.rstrip()
+    if ";" in stripped_sql.rstrip(";"):
+        return {"error": "Only a single SQL statement is permitted."}
 
     # Inject LIMIT if absent to cap results
     if not re.search(r"\blimit\b", sql, re.IGNORECASE):
-        sql = f"{sql.rstrip(';')} LIMIT {_MAX_SQL_ROWS}"
+        sql = f"{stripped_sql.rstrip(';')} LIMIT {_MAX_SQL_ROWS}"
 
     try:
         db = get_db_client()

@@ -12,7 +12,7 @@ import logging
 from contextlib import contextmanager
 from typing import Generator, Optional
 
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import QueuePool
@@ -89,7 +89,7 @@ def init_db(database_url: str, pool_size: int = 5, max_overflow: int = 10) -> No
     # Test connection
     try:
         with _engine.connect() as conn:
-            result = conn.execute(text("SELECT 1")).scalar()
+            result = conn.execute(select(1)).scalar()
             assert result == 1, "Database connection test failed"
         logger.info("Database connection successful")
     except Exception as e:
@@ -126,7 +126,7 @@ def get_db_session() -> Session:
         ```python
         session = get_db_session()
         try:
-            result = session.execute(text("SELECT * FROM intersections"))
+            result = session.execute(select(IntersectionModel))
             # ... process result ...
             session.commit()
         except Exception as e:
@@ -152,7 +152,7 @@ def db_session() -> Generator[Session, None, None]:
     Example:
         ```python
         with db_session() as session:
-            result = session.execute(text("SELECT * FROM intersections"))
+            result = session.execute(select(IntersectionModel))
             # ... process result ...
             # session.commit() is called automatically if no exception
         ```
@@ -196,13 +196,13 @@ def check_db_health() -> dict:
     try:
         with _engine.connect() as conn:
             # Check basic connectivity
-            conn.execute(text("SELECT 1"))
+            conn.execute(select(1))
 
             # Get PostGIS version
-            postgis_version = conn.execute(text("SELECT PostGIS_Version()")).scalar()
+            postgis_version = conn.execute(select(func.PostGIS_Version())).scalar()
 
             # Get current database name
-            database_name = conn.execute(text("SELECT current_database()")).scalar()
+            database_name = conn.execute(select(func.current_database())).scalar()
 
             # Get connection pool stats
             pool = _engine.pool
@@ -243,35 +243,6 @@ def close_db() -> None:
         _SessionLocal = None
 
 
-def execute_raw_sql(sql: str, params: Optional[dict] = None) -> list[dict]:
-    """
-    Execute raw SQL query and return results as list of dictionaries.
-
-    Args:
-        sql: SQL query string
-        params: Optional dictionary of query parameters
-
-    Returns:
-        List of dictionaries (one per row)
-
-    Example:
-        ```python
-        results = execute_raw_sql(
-            "SELECT * FROM intersections WHERE id = :id",
-            params={"id": 0}
-        )
-        ```
-    """
-    with db_session() as session:
-        result = session.execute(text(sql), params or {})
-
-        # Convert to list of dictionaries
-        columns = result.keys()
-        rows = [dict(zip(columns, row)) for row in result.fetchall()]
-
-        return rows
-
-
 # FastAPI dependency for injecting database sessions
 def get_db() -> Generator[Session, None, None]:
     """
@@ -283,7 +254,7 @@ def get_db() -> Generator[Session, None, None]:
 
         @app.get("/items")
         def read_items(db: Session = Depends(get_db)):
-            result = db.execute(text("SELECT * FROM items"))
+            result = db.execute(select(ItemModel))
             return result.fetchall()
         ```
     """

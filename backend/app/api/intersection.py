@@ -349,6 +349,11 @@ def debug_status():
     Debug endpoint to check database connectivity and data availability.
     """
     try:
+        cache_key = response_cache.make_key("safety-debug-status")
+        hit, cached = response_cache.get(cache_key, settings.DEBUG_CACHE_TTL_SECONDS)
+        if hit:
+            return cached
+
         db_client = get_db_client()
         mcdm_service = MCDMSafetyIndexService(db_client)
 
@@ -361,7 +366,7 @@ def debug_status():
             lookback_hours=24,
         )
 
-        return {
+        payload = {
             "status": "ok",
             "database_connected": True,
             "available_intersections_count": len(available_intersections),
@@ -369,6 +374,13 @@ def debug_status():
             "safety_scores_count": len(safety_scores) if safety_scores else 0,
             "sample_score": safety_scores[0] if safety_scores else None,
         }
+        response_cache.set(
+            cache_key,
+            payload,
+            settings.DEBUG_CACHE_TTL_SECONDS,
+            cache_empty=True,
+        )
+        return payload
     except Exception as e:
         logger.error(f"Debug status check failed: {e}", exc_info=True)
         return {
@@ -401,6 +413,17 @@ def debug_rt_si(
     """
     if end_time <= start_time:
         raise HTTPException(status_code=400, detail="end_time must be after start_time")
+
+    cache_key = response_cache.make_key(
+        "safety-debug-rt-si",
+        intersection,
+        start_time.isoformat(),
+        end_time.isoformat(),
+        bin_minutes,
+    )
+    hit, cached = response_cache.get(cache_key, settings.DEBUG_CACHE_TTL_SECONDS)
+    if hit:
+        return cached
 
     db_client = get_db_client()
     rt_si_service = RTSIService(db_client)
@@ -441,7 +464,7 @@ def debug_rt_si(
             realtime_intersection=realtime_name,
         )
 
-        return {
+        payload = {
             "status": "ok",
             "intersection": intersection,
             "crash_intersection_id": crash_id,
@@ -452,6 +475,13 @@ def debug_rt_si(
             "data_points": len(rt_si_results),
             "results": rt_si_results,
         }
+        response_cache.set(
+            cache_key,
+            payload,
+            settings.DEBUG_CACHE_TTL_SECONDS,
+            cache_empty=True,
+        )
+        return payload
     except Exception as e:
         logger.error(f"Error in debug_rt_si: {e}", exc_info=True)
         raise HTTPException(
@@ -584,9 +614,20 @@ def get_intersection(intersection_id: int):
     """
     Retrieve details for a single intersection by its ID.
     """
+    cache_key = response_cache.make_key("safety-intersection-detail", intersection_id)
+    hit, cached = response_cache.get(cache_key, settings.SAFETY_TIME_CACHE_TTL_SECONDS)
+    if hit:
+        return cached
+
     intersection = get_by_id(intersection_id)
     if not intersection:
         raise HTTPException(status_code=404, detail="Intersection not found")
+    response_cache.set(
+        cache_key,
+        intersection,
+        settings.SAFETY_TIME_CACHE_TTL_SECONDS,
+        cache_empty=True,
+    )
     return intersection
 
 

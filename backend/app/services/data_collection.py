@@ -18,6 +18,13 @@ SEVERITY_WEIGHTS = {
 }
 
 
+def _trino_string_literal(value: str) -> str:
+    """Return a safely quoted Trino string literal."""
+    if "\x00" in value:
+        raise ValueError("Trino string literals cannot contain null bytes")
+    return "'" + value.replace("'", "''") + "'"
+
+
 def collect_baseline_events(
     intersection: Optional[str] = None,
     start_date: Optional[datetime] = None,
@@ -41,7 +48,7 @@ def collect_baseline_events(
     where_clauses = ["time_at_site > 0", "time_at_site < 9999999999999999"]
 
     if intersection:
-        where_clauses.append(f"intersection = '{intersection}'")
+        where_clauses.append(f"intersection = {_trino_string_literal(intersection)}")
     if start_date:
         where_clauses.append(
             f"time_at_site >= {int(start_date.timestamp() * 1000000)}")
@@ -134,7 +141,7 @@ def collect_exposure_metrics(
                      "publish_timestamp < 9999999999999999"]
 
     if intersection:
-        where_clauses.append(f"intersection = '{intersection}'")
+        where_clauses.append(f"intersection = {_trino_string_literal(intersection)}")
     if start_date:
         where_clauses.append(
             f"publish_timestamp >= {int(start_date.timestamp() * 1000000)}")

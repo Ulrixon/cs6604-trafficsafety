@@ -145,12 +145,12 @@ class VTTIPostgresClient:
             finally:
                 cursor.close()
 
-    def execute_query(self, query: str, params: tuple = None) -> List[Dict[str, Any]]:
+    def execute_query(self, query: Any, params: Any = None) -> List[Dict[str, Any]]:
         """
         Execute a SELECT query and return results as list of dictionaries.
 
         Args:
-            query: SQL query string
+            query: SQL query string or psycopg2.sql Composable
             params: Query parameters (for parameterized queries)
 
         Returns:
@@ -162,7 +162,7 @@ class VTTIPostgresClient:
             # Convert RealDictRow to plain dict to avoid serialization issues
             return [dict(row) for row in results]
 
-    def execute_update(self, query: str, params: tuple = None) -> int:
+    def execute_update(self, query: str, params: Any = None) -> int:
         """
         Execute an INSERT, UPDATE, or DELETE query.
 

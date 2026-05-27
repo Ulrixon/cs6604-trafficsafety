@@ -190,6 +190,63 @@ function formatNumber(value: unknown, digits = 1) {
   });
 }
 
+function formatPercent(value: unknown, digits = 1) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "N/A";
+  return `${(numeric * 100).toLocaleString(undefined, {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits
+  })}%`;
+}
+
+function boolValue(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value > 0;
+  if (typeof value === "string") return ["true", "1", "yes", "y"].includes(value.toLowerCase());
+  return false;
+}
+
+function pearsonCorrelation(xs: number[], ys: number[]) {
+  const pairs = xs
+    .map((x, index) => ({ x, y: ys[index] }))
+    .filter((item) => Number.isFinite(item.x) && Number.isFinite(item.y));
+  if (pairs.length < 2) return null;
+  const meanX = pairs.reduce((sum, item) => sum + item.x, 0) / pairs.length;
+  const meanY = pairs.reduce((sum, item) => sum + item.y, 0) / pairs.length;
+  const numerator = pairs.reduce((sum, item) => sum + (item.x - meanX) * (item.y - meanY), 0);
+  const denomX = Math.sqrt(pairs.reduce((sum, item) => sum + (item.x - meanX) ** 2, 0));
+  const denomY = Math.sqrt(pairs.reduce((sum, item) => sum + (item.y - meanY) ** 2, 0));
+  const denominator = denomX * denomY;
+  return denominator > 0 ? numerator / denominator : null;
+}
+
+function averageRanks(values: number[]) {
+  const sorted = values
+    .map((value, index) => ({ value, index }))
+    .sort((a, b) => a.value - b.value);
+  const ranks = Array(values.length).fill(0);
+  let i = 0;
+  while (i < sorted.length) {
+    let j = i + 1;
+    while (j < sorted.length && sorted[j].value === sorted[i].value) j += 1;
+    const rank = (i + 1 + j) / 2;
+    for (let k = i; k < j; k += 1) ranks[sorted[k].index] = rank;
+    i = j;
+  }
+  return ranks;
+}
+
+function spearmanCorrelation(xs: number[], ys: number[]) {
+  const pairs = xs
+    .map((x, index) => ({ x, y: ys[index] }))
+    .filter((item) => Number.isFinite(item.x) && Number.isFinite(item.y));
+  if (pairs.length < 2) return null;
+  return pearsonCorrelation(
+    averageRanks(pairs.map((item) => item.x)),
+    averageRanks(pairs.map((item) => item.y))
+  );
+}
+
 function intersectionName(item: Intersection | TrendPoint | Record<string, unknown>) {
   return String(
     item.intersection_name ||
@@ -854,42 +911,152 @@ function CorrelationPanel({ data }: { data: Record<string, unknown> }) {
   );
 }
 
+function deriveValidationMetrics(
+  rows: Record<string, unknown>[],
+  threshold: number,
+  startDate: string,
+  endDate: string
+) {
+  const usableRows = rows.filter((row) => Number.isFinite(Number(row.safety_index)));
+  const scores = usableRows.map((row) => Number(row.safety_index));
+  const actuals = usableRows.map((row) => (boolValue(row.had_crash) || toNumber(row.crash_count, 0) > 0 ? 1 : 0));
+  const predictions = scores.map((score) => (score >= threshold ? 1 : 0));
+  const tp = predictions.filter((prediction, index) => prediction === 1 && actuals[index] === 1).length;
+  const fp = predictions.filter((prediction, index) => prediction === 1 && actuals[index] === 0).length;
+  const tn = predictions.filter((prediction, index) => prediction === 0 && actuals[index] === 0).length;
+  const fn = predictions.filter((prediction, index) => prediction === 0 && actuals[index] === 1).length;
+  const precision = tp + fp > 0 ? tp / (tp + fp) : null;
+  const recall = tp + fn > 0 ? tp / (tp + fn) : null;
+  const f1Score = precision !== null && recall !== null && precision + recall > 0 ? (2 * precision * recall) / (precision + recall) : null;
+  const total = tp + fp + tn + fn;
+  const crashIntervals = actuals.filter(Boolean).length;
+  const crashEvents = usableRows.reduce((sum, row) => sum + Math.max(toNumber(row.crash_count, 0), boolValue(row.had_crash) ? 1 : 0), 0);
+
+  return {
+    total_crashes: crashEvents,
+    crash_intervals: crashIntervals,
+    total_intervals: usableRows.length,
+    crash_rate: usableRows.length ? crashIntervals / usableRows.length : null,
+    threshold,
+    true_positives: tp,
+    false_positives: fp,
+    true_negatives: tn,
+    false_negatives: fn,
+    precision,
+    recall,
+    f1_score: f1Score,
+    accuracy: total ? (tp + tn) / total : null,
+    pearson_correlation: pearsonCorrelation(scores, actuals),
+    spearman_correlation: spearmanCorrelation(scores, actuals),
+    start_date: startDate,
+    end_date: endDate,
+    derived_from_rows: true
+  };
+}
+
+function hasUsableValidationMetrics(metrics: Record<string, unknown> | null) {
+  if (!metrics) return false;
+  return toNumber(metrics.total_intervals, 0) > 0 || toNumber(metrics.total_crashes, 0) > 0;
+}
+
+function validationSummary(metrics: Record<string, unknown>) {
+  const pearson = Number(metrics.pearson_correlation);
+  if (!Number.isFinite(pearson)) {
+    return {
+      tone: "warn" as const,
+      title: "Correlation unavailable",
+      detail: "The selected data has too little variation to compute a stable Pearson correlation."
+    };
+  }
+  if (pearson > 0.3) {
+    return {
+      tone: "good" as const,
+      title: "Strong positive relationship",
+      detail: "Higher safety index values align with observed crash intervals in this window."
+    };
+  }
+  if (pearson > 0.15) {
+    return {
+      tone: "warn" as const,
+      title: "Moderate relationship",
+      detail: "The signal is present, but formula weights may need tuning for this window."
+    };
+  }
+  return {
+    tone: "warn" as const,
+    title: "Weak relationship",
+    detail: "The selected window does not show a strong crash correlation. Check date coverage and threshold."
+  };
+}
+
 function AnalyticsPanel() {
   const today = new Date().toISOString().slice(0, 10);
   const prior = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const [startDate, setStartDate] = useState(prior);
-  const [endDate, setEndDate] = useState(today);
+  const [startDate, setStartDate] = useState("2025-11-01");
+  const [endDate, setEndDate] = useState("2025-11-23");
   const [threshold, setThreshold] = useState(60);
   const [radius, setRadius] = useState(500);
   const [metrics, setMetrics] = useState<Record<string, unknown> | null>(null);
   const [scatter, setScatter] = useState<Record<string, unknown>[]>([]);
   const [series, setSeries] = useState<Record<string, unknown>[]>([]);
   const [weather, setWeather] = useState<Record<string, unknown>[]>([]);
+  const [validationSource, setValidationSource] = useState<"backend" | "derived" | "none">("none");
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const run = async () => {
     setLoading(true);
     setStatus(null);
-    try {
-      const params = { start_date: startDate, end_date: endDate, proximity_radius: radius };
-      const [metricData, scatterData, timeData, weatherData] = await Promise.all([
-        fetchJson<Record<string, unknown>>("/analytics/correlation", { ...params, threshold }),
-        fetchJson<Record<string, unknown>[]>("/analytics/scatter-data", params),
-        fetchJson<Record<string, unknown>[]>("/analytics/time-series", params),
-        fetchJson<Record<string, unknown>[]>("/analytics/weather-impact", params)
-      ]);
-      setMetrics(metricData);
-      setScatter(scatterData);
-      setSeries(timeData);
-      setWeather(weatherData);
-      setStatus("Validation data loaded.");
-    } catch (err) {
-      setStatus(`Validation request failed: ${(err as Error).message}`);
-    } finally {
-      setLoading(false);
+    const params = { start_date: startDate, end_date: endDate, proximity_radius: radius };
+    const [metricResult, scatterResult, timeResult, weatherResult] = await Promise.allSettled([
+      fetchJson<Record<string, unknown>>("/analytics/correlation", { ...params, threshold }),
+      fetchJson<Record<string, unknown>[]>("/analytics/scatter-data", params),
+      fetchJson<Record<string, unknown>[]>("/analytics/time-series", params),
+      fetchJson<Record<string, unknown>[]>("/analytics/weather-impact", params)
+    ]);
+
+    const metricData = metricResult.status === "fulfilled" ? metricResult.value : null;
+    const scatterData = scatterResult.status === "fulfilled" ? scatterResult.value : [];
+    const timeData = timeResult.status === "fulfilled" ? timeResult.value : [];
+    const weatherData = weatherResult.status === "fulfilled" ? weatherResult.value : [];
+    const validationRows = scatterData.length ? scatterData : timeData;
+    const derivedMetrics = validationRows.length ? deriveValidationMetrics(validationRows, threshold, startDate, endDate) : null;
+    const useBackend = hasUsableValidationMetrics(metricData);
+    const nextMetrics = useBackend ? metricData : derivedMetrics;
+
+    setMetrics(nextMetrics);
+    setScatter(scatterData);
+    setSeries(timeData);
+    setWeather(weatherData);
+    setValidationSource(useBackend ? "backend" : derivedMetrics ? "derived" : "none");
+
+    const failures = [metricResult, scatterResult, timeResult, weatherResult].filter((result) => result.status === "rejected").length;
+    if (nextMetrics && validationRows.length && !useBackend) {
+      setStatus(`Validation metrics derived from ${validationRows.length} plotted rows because backend summary metrics were empty or unavailable.`);
+    } else if (nextMetrics) {
+      setStatus(failures ? `Validation loaded with ${failures} partial request failure(s).` : "Validation data loaded.");
+    } else if (failures) {
+      setStatus("Validation requests failed or returned no safety-index rows for this date range.");
+    } else {
+      setStatus("No validation rows returned. Try the demo data preset or widen the date range.");
+    }
+    setLoading(false);
+  };
+
+  const applyValidationPreset = (preset: "demo" | "recent" | "crash2024") => {
+    if (preset === "demo") {
+      setStartDate("2025-11-01");
+      setEndDate("2025-11-23");
+    } else if (preset === "recent") {
+      setStartDate(prior);
+      setEndDate(today);
+    } else {
+      setStartDate("2024-01-01");
+      setEndDate("2024-12-31");
     }
   };
+
+  const summary = metrics ? validationSummary(metrics) : null;
 
   return (
     <section className="stack">
@@ -904,6 +1071,17 @@ function AnalyticsPanel() {
           <InfoItem label="Risk threshold" value="Classifies high-risk intervals" detail="Used to compute precision, recall, F1, and confusion-matrix counts." />
           <InfoItem label="Proximity radius" value="Crash matching distance" detail="Crashes within the selected radius are treated as related to an intersection." />
           <InfoItem label="Correlations" value="Pearson and Spearman" detail="Validate whether safety scores increase with observed crash occurrence." />
+        </div>
+        <div className="preset-row" aria-label="Validation date presets">
+          <button className="secondary-button" type="button" onClick={() => applyValidationPreset("demo")}>
+            Demo data
+          </button>
+          <button className="secondary-button" type="button" onClick={() => applyValidationPreset("recent")}>
+            Last 30 days
+          </button>
+          <button className="secondary-button" type="button" onClick={() => applyValidationPreset("crash2024")}>
+            2024 crashes
+          </button>
         </div>
         <div className="form-grid">
           <label><span>Start date</span><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></label>
@@ -921,10 +1099,29 @@ function AnalyticsPanel() {
       {metrics && (
         <>
           <div className="metric-strip">
-            <MetricCard label="Total crashes" value={formatNumber(metrics.total_crashes, 0)} icon={AlertTriangle} tone="danger" />
-            <MetricCard label="Precision" value={formatNumber(metrics.precision, 3)} icon={Gauge} />
-            <MetricCard label="Recall" value={formatNumber(metrics.recall, 3)} icon={Activity} />
+            <MetricCard label="Crash events" value={formatNumber(metrics.total_crashes, 0)} icon={AlertTriangle} tone="danger" />
+            <MetricCard label="Intervals" value={formatNumber(metrics.total_intervals, 0)} icon={Database} />
+            <MetricCard label="Crash rate" value={formatPercent(metrics.crash_rate, 2)} icon={Activity} />
+            <MetricCard label="Precision" value={formatPercent(metrics.precision, 1)} icon={Gauge} />
+            <MetricCard label="Recall" value={formatPercent(metrics.recall, 1)} icon={Activity} />
             <MetricCard label="F1 score" value={formatNumber(metrics.f1_score, 3)} icon={ShieldCheck} />
+            <MetricCard label="Accuracy" value={formatPercent(metrics.accuracy, 1)} icon={ShieldCheck} />
+            <MetricCard label="Pearson r" value={formatNumber(metrics.pearson_correlation, 3)} icon={BarChart3} />
+            <MetricCard label="Spearman rho" value={formatNumber(metrics.spearman_correlation, 3)} icon={BarChart3} />
+          </div>
+          <div className="info-band">
+            <InfoItem
+              label="Metric source"
+              value={validationSource === "backend" ? "Backend summary" : validationSource === "derived" ? "Frontend derived" : "No data"}
+              detail={validationSource === "derived" ? "Computed from returned scatter/time-series rows so the panel does not collapse to placeholder zeros." : "Using the analytics summary returned by the backend."}
+              tone={validationSource === "backend" ? "good" : "warn"}
+            />
+            {summary && <InfoItem label="Interpretation" value={summary.title} detail={summary.detail} tone={summary.tone} />}
+            <InfoItem
+              label="Classification rule"
+              value={`High risk if index >= ${formatNumber(metrics.threshold, 0)}`}
+              detail={`${formatNumber(metrics.true_positives, 0)} TP, ${formatNumber(metrics.false_positives, 0)} FP, ${formatNumber(metrics.true_negatives, 0)} TN, ${formatNumber(metrics.false_negatives, 0)} FN`}
+            />
           </div>
           <div className="content-grid">
             <div className="panel span-6">
@@ -933,15 +1130,19 @@ function AnalyticsPanel() {
             </div>
             <div className="panel span-6">
               <h2>Safety index and crash event</h2>
-              <CrashScatter rows={scatter} />
+              <CrashScatter rows={scatter.length ? scatter : series} />
             </div>
             <div className="panel span-8">
               <h2>Time series with crash overlay</h2>
-              <MultiLineChart rows={series} xKey="timestamp" series={[{ key: "safety_index", label: "Safety index", color: "#2463eb" }]} />
+              <ValidationTimeSeries rows={series} />
             </div>
             <div className="panel span-4">
               <h2>Weather impact</h2>
               <SimpleBarChart rows={weather.slice(0, 10)} labelKey="condition" valueKey="crash_rate" />
+            </div>
+            <div className="panel span-12">
+              <h2>Validation data preview</h2>
+              <DataTable rows={(scatter.length ? scatter : series).slice(0, 50)} maxRows={50} />
             </div>
           </div>
         </>
@@ -1648,6 +1849,61 @@ function CrashScatter({ rows }: { rows: Record<string, unknown>[] }) {
         <text x="42" y="72" className="chart-label">Crash</text>
         <text x="42" y="178" className="chart-label">No crash</text>
       </svg>
+    </div>
+  );
+}
+
+function ValidationTimeSeries({ rows }: { rows: Record<string, unknown>[] }) {
+  const width = 760;
+  const height = 300;
+  const padding = { top: 18, right: 18, bottom: 46, left: 52 };
+  const values = rows.map((row) => Number(row.safety_index)).filter(Number.isFinite);
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 1);
+  const yScale = (value: number) =>
+    height - padding.bottom - ((value - min) / Math.max(max - min, 1)) * (height - padding.top - padding.bottom);
+  const xScale = (index: number) =>
+    padding.left + (index / Math.max(rows.length - 1, 1)) * (width - padding.left - padding.right);
+
+  if (!rows.length || !values.length) return <EmptyState icon={LineChart} title="No validation time series" />;
+
+  const path = rows
+    .map((row, index) => {
+      const value = Number(row.safety_index);
+      if (!Number.isFinite(value)) return null;
+      return `${index === 0 ? "M" : "L"}${xScale(index)},${yScale(value)}`;
+    })
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div className="chart-box">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img">
+        <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} className="axis" />
+        <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} className="axis" />
+        {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
+          const y = padding.top + tick * (height - padding.top - padding.bottom);
+          return <line key={tick} x1={padding.left} y1={y} x2={width - padding.right} y2={y} className="grid-line" />;
+        })}
+        <path d={path} fill="none" stroke="#2463eb" strokeWidth="3" strokeLinecap="round" />
+        {rows.map((row, index) => {
+          const value = Number(row.safety_index);
+          if (!Number.isFinite(value) || (!boolValue(row.had_crash) && toNumber(row.crash_count, 0) <= 0)) return null;
+          return (
+            <g key={`${row.timestamp}-${index}`}>
+              <circle cx={xScale(index)} cy={yScale(value)} r="7" fill="#d13f3f" stroke="#ffffff" strokeWidth="2" />
+              <line x1={xScale(index) - 5} y1={yScale(value) - 5} x2={xScale(index) + 5} y2={yScale(value) + 5} stroke="#ffffff" strokeWidth="2" />
+              <line x1={xScale(index) + 5} y1={yScale(value) - 5} x2={xScale(index) - 5} y2={yScale(value) + 5} stroke="#ffffff" strokeWidth="2" />
+            </g>
+          );
+        })}
+        <text x={padding.left} y={14} className="chart-label">{formatNumber(max)}</text>
+        <text x={padding.left} y={height - padding.bottom + 18} className="chart-label">{formatNumber(min)}</text>
+      </svg>
+      <div className="chart-legend">
+        <span><i style={{ background: "#2463eb" }} />Safety index</span>
+        <span><i style={{ background: "#d13f3f" }} />Crash interval</span>
+      </div>
     </div>
   );
 }

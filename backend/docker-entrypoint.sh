@@ -10,8 +10,8 @@ PORT=${PORT:-8080}
 # If running on Cloud Run, these will be set as environment variables
 # from Secret Manager bindings
 
-# Cloud SQL Instance Connection Name (for Cloud Run Unix socket connection)
-# If set, the app will connect via /cloudsql/INSTANCE_CONNECTION_NAME socket
+# Cloud SQL Instance Connection Name (for Unix socket connection)
+# If set, the app will connect via /cloudsql/INSTANCE_CONNECTION_NAME socket.
 # If not set, it will use TCP connection with VTTI_DB_HOST and VTTI_DB_PORT
 export VTTI_DB_INSTANCE_CONNECTION_NAME=${VTTI_DB_INSTANCE_CONNECTION_NAME:-""}
 
@@ -20,8 +20,9 @@ export VTTI_DB_NAME=${VTTI_DB_NAME:-"vtsi"}
 export VTTI_DB_USER=${VTTI_DB_USER:-"postgres"}
 export VTTI_DB_PASSWORD=${VTTI_DB_PASSWORD:-""}
 
-# TCP connection settings (used only if VTTI_DB_INSTANCE_CONNECTION_NAME is not set)
-export VTTI_DB_HOST=${VTTI_DB_HOST:-"34.140.49.230"}
+# TCP connection settings (used only if VTTI_DB_INSTANCE_CONNECTION_NAME is not set).
+# Cloud Run uses Direct VPC egress to reach this private Cloud SQL address.
+export VTTI_DB_HOST=${VTTI_DB_HOST:-"10.75.222.3"}
 export VTTI_DB_PORT=${VTTI_DB_PORT:-"5432"}
 
 # MCDM Configuration

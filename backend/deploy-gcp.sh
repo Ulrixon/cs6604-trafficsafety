@@ -30,6 +30,7 @@ echo "3. Deploying to Cloud Run with Secret Manager integration..."
 # Note: Using Cloud SQL instance connection name for Unix socket connection
 # Format: PROJECT_ID:REGION:INSTANCE_NAME
 CLOUD_SQL_INSTANCE="symbolic-cinema-305010:europe-west1:vtsi-postgres"
+PRIVATE_DB_HOST="10.75.222.3"
 
 gcloud run deploy ${SERVICE_NAME} \
   --image ${IMAGE_NAME}:latest \
@@ -43,10 +44,12 @@ gcloud run deploy ${SERVICE_NAME} \
   --timeout 300 \
   --max-instances 10 \
   --min-instances 0 \
-  --add-cloudsql-instances ${CLOUD_SQL_INSTANCE} \
+  --network default \
+  --subnet default \
+  --vpc-egress private-ranges-only \
   --set-env-vars "\
-VTTI_DB_INSTANCE_CONNECTION_NAME=${CLOUD_SQL_INSTANCE},\
-INSTANCE_CONNECTION_NAME=${CLOUD_SQL_INSTANCE},\
+VTTI_DB_HOST=${PRIVATE_DB_HOST},\
+VTTI_DB_PORT=5432,\
 VTTI_DB_NAME=vtsi,\
 MCDM_BIN_MINUTES=15,\
 MCDM_LOOKBACK_HOURS=24,\

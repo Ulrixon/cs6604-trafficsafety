@@ -1,12 +1,13 @@
 """Check vdot_crashes table schema"""
 
+import os
 import psycopg2
 
-DB_HOST = "34.140.49.230"
-DB_PORT = 5432
-DB_NAME = "vtsi"
-DB_USER = "jason"
-DB_PASSWORD = "*9ZS^l(HGq].BA]6"
+DB_HOST = os.getenv("VTTI_DB_HOST", "10.75.222.3")
+DB_PORT = int(os.getenv("VTTI_DB_PORT", "5432"))
+DB_NAME = os.getenv("VTTI_DB_NAME", "vtsi")
+DB_USER = os.getenv("VTTI_DB_USER", "jason")
+DB_PASSWORD = os.getenv("VTTI_DB_PASSWORD", "")
 
 conn = psycopg2.connect(
     host=DB_HOST,

@@ -6,6 +6,7 @@ for use in crash correlation analysis.
 """
 
 import sys
+import os
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
@@ -13,11 +14,11 @@ import psycopg2
 from typing import Optional
 
 # GCP Database connection details
-DB_HOST = "34.140.49.230"
-DB_PORT = 5432
-DB_NAME = "vtsi"
-DB_USER = "jason"
-DB_PASSWORD = "*9ZS^l(HGq].BA]6"
+DB_HOST = os.getenv("VTTI_DB_HOST", "10.75.222.3")
+DB_PORT = int(os.getenv("VTTI_DB_PORT", "5432"))
+DB_NAME = os.getenv("VTTI_DB_NAME", "vtsi")
+DB_USER = os.getenv("VTTI_DB_USER", "jason")
+DB_PASSWORD = os.getenv("VTTI_DB_PASSWORD", "")
 
 
 def load_vdot_crashes(

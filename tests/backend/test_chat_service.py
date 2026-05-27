@@ -7,6 +7,7 @@ Tests cover:
   - compare_intersections time anchoring + RT-SI (regression for UC1 bug)
   - get_safety_score RT-SI integration
 """
+import json
 from datetime import datetime, timedelta
 
 import pytest
@@ -602,3 +603,297 @@ class TestMorningBriefingOutput:
             assert "driven by" not in reply.lower()
             # raw figures are still surfaced, just not as a causal claim
             assert "1,089 vehicles" in reply
+
+
+# ---------------------------------------------------------------------------
+# run_sql_query — the SQL security guard (had ZERO coverage)
+# ---------------------------------------------------------------------------
+
+
+class TestRunSQLQuery:
+    """
+    run_sql_query is the only chat tool that runs arbitrary user-provided
+    SQL. Its security guard (must start with SELECT or WITH; blocklisted
+    DML keywords; auto-LIMIT) is the most important thing in this file to
+    have regression coverage on.
+    """
+
+    def _run(self, sql, rows=None, db_raises=None):
+        rows = [] if rows is None else rows
+        db = MagicMock()
+        if db_raises is not None:
+            db.execute_query.side_effect = db_raises
+        else:
+            db.execute_query.return_value = rows
+        with patch("app.services.chat_service.get_db_client", return_value=db):
+            from app.services.chat_service import _execute_run_sql
+            return _execute_run_sql({"sql": sql}), db
+
+    def test_select_query_executes_and_returns_rows(self):
+        result, db = self._run("SELECT id FROM t", rows=[{"id": 1}, {"id": 2}])
+        assert result["row_count"] == 2
+        assert result["rows"] == [{"id": 1}, {"id": 2}]
+        db.execute_query.assert_called_once()
+
+    def test_with_cte_is_allowed(self):
+        result, db = self._run("WITH cte AS (SELECT 1) SELECT * FROM cte", rows=[{"?column?": 1}])
+        assert "error" not in result
+        db.execute_query.assert_called_once()
+
+    def test_rejects_insert(self):
+        result, db = self._run("INSERT INTO t VALUES (1)")
+        assert "error" in result
+        db.execute_query.assert_not_called()
+
+    def test_rejects_update(self):
+        result, db = self._run("UPDATE t SET name='x'")
+        assert "error" in result
+        db.execute_query.assert_not_called()
+
+    def test_rejects_delete(self):
+        result, db = self._run("DELETE FROM t")
+        assert "error" in result
+        db.execute_query.assert_not_called()
+
+    def test_rejects_drop(self):
+        result, db = self._run("DROP TABLE t")
+        assert "error" in result
+        db.execute_query.assert_not_called()
+
+    def test_rejects_select_with_embedded_disallowed_keyword(self):
+        """Defense in depth: even a SELECT that hides a DROP is rejected."""
+        result, db = self._run("SELECT 1; DROP TABLE t")
+        assert "error" in result
+        db.execute_query.assert_not_called()
+
+    def test_limit_injected_when_absent(self):
+        _, db = self._run("SELECT id FROM t", rows=[{"id": 1}])
+        called_sql = db.execute_query.call_args[0][0]
+        assert "LIMIT 100" in called_sql
+
+    def test_user_limit_preserved(self):
+        _, db = self._run("SELECT id FROM t LIMIT 5", rows=[{"id": 1}])
+        called_sql = db.execute_query.call_args[0][0]
+        assert "LIMIT 100" not in called_sql
+        assert "LIMIT 5" in called_sql
+
+    def test_note_when_results_hit_cap(self):
+        result, _ = self._run("SELECT * FROM t",
+                              rows=[{"x": i} for i in range(100)])
+        assert result["row_count"] == 100
+        assert result["note"] and "capped" in result["note"]
+
+    def test_db_error_is_caught_and_returned(self):
+        result, _ = self._run("SELECT 1", db_raises=RuntimeError("connection lost"))
+        assert "error" in result
+        assert "connection lost" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# Tool dispatcher (had ZERO coverage)
+# ---------------------------------------------------------------------------
+
+
+class TestToolDispatcher:
+    """_dispatch_tool_call routes from a tool name + JSON args to the handler."""
+
+    def test_unknown_tool_returns_error(self):
+        from app.services.chat_service import _dispatch_tool_call
+        result = json.loads(_dispatch_tool_call("does_not_exist", "{}"))
+        assert "error" in result
+        assert "Unknown tool" in result["error"]
+
+    def test_malformed_json_args_become_empty_dict(self):
+        handler = MagicMock(return_value={"ok": True})
+        with patch.dict(
+            "app.services.chat_service._TOOL_HANDLERS",
+            {"get_safety_score": handler},
+        ):
+            from app.services.chat_service import _dispatch_tool_call
+            _dispatch_tool_call("get_safety_score", "{ not valid json")
+            handler.assert_called_once_with({})
+
+    def test_valid_args_passed_through_to_handler(self):
+        handler = MagicMock(return_value={"score": 42})
+        with patch.dict(
+            "app.services.chat_service._TOOL_HANDLERS",
+            {"compare_intersections": handler},
+        ):
+            from app.services.chat_service import _dispatch_tool_call
+            result = json.loads(_dispatch_tool_call(
+                "compare_intersections",
+                '{"metric": "mcdm", "top_n": 3}',
+            ))
+            handler.assert_called_once_with({"metric": "mcdm", "top_n": 3})
+            assert result == {"score": 42}
+
+
+# ---------------------------------------------------------------------------
+# compare_intersections — ranking / top_n coverage on the batched MCDM path
+# ---------------------------------------------------------------------------
+
+
+class TestCompareIntersectionsRanking:
+    """The batched-MCDM path's sort + top_n contract."""
+
+    def _setup_batch(self, latest_scores):
+        anchor_us = int(datetime(2025, 11, 1).timestamp() * 1_000_000)
+        db = MagicMock()
+        db.execute_query.return_value = [{"max_ts": anchor_us}]
+        ctx = (
+            patch("app.services.chat_service.get_db_client", return_value=db),
+            patch("app.services.chat_service.MCDMSafetyIndexService"),
+            patch("app.services.chat_service.RTSIService"),
+        )
+        return ctx, db
+
+    def test_sorts_descending_by_mcdm(self):
+        ctx, _ = self._setup_batch(None)
+        with ctx[0], ctx[1] as mcdm_cls, ctx[2]:
+            mcdm_cls.return_value.calculate_latest_safety_scores.return_value = [
+                {"intersection": "a", "mcdm_index": 30.0},
+                {"intersection": "b", "mcdm_index": 80.0},
+                {"intersection": "c", "mcdm_index": 50.0},
+            ]
+            from app.services.chat_service import _execute_compare_intersections
+            result = _execute_compare_intersections({"metric": "mcdm", "top_n": 5})
+            scores = [r["mcdm"] for r in result["rankings"]]
+            assert scores == [80.0, 50.0, 30.0]
+
+    def test_top_n_limits_results(self):
+        ctx, _ = self._setup_batch(None)
+        with ctx[0], ctx[1] as mcdm_cls, ctx[2]:
+            mcdm_cls.return_value.calculate_latest_safety_scores.return_value = [
+                {"intersection": f"s{i}", "mcdm_index": float(i * 10)}
+                for i in range(5)
+            ]
+            from app.services.chat_service import _execute_compare_intersections
+            result = _execute_compare_intersections({"metric": "mcdm", "top_n": 2})
+            assert len(result["rankings"]) == 2
+
+    def test_batch_path_skipped_for_blended_metric(self):
+        """The blended/rt_si metrics must take the non-batched (per-site
+        loop) path because their RT-SI uplift needs per-site computation."""
+        anchor_us = int(datetime(2025, 11, 1).timestamp() * 1_000_000)
+        db = MagicMock()
+        db.execute_query.return_value = [{"max_ts": anchor_us}]
+        with patch("app.services.chat_service.get_db_client", return_value=db), \
+             patch("app.services.chat_service.MCDMSafetyIndexService") as mcdm_cls, \
+             patch("app.services.chat_service.RTSIService"):
+            mcdm = mcdm_cls.return_value
+            mcdm.get_available_intersections.return_value = ["only"]
+            mcdm.calculate_safety_score_for_time.return_value = {"mcdm_index": 40.0}
+            from app.services.chat_service import _execute_compare_intersections
+            _execute_compare_intersections({"metric": "blended", "alpha": 0.7})
+            # blended path uses the per-site loop, not the batch call
+            mcdm.calculate_latest_safety_scores.assert_not_called()
+            mcdm.calculate_safety_score_for_time.assert_called()
+
+
+# ---------------------------------------------------------------------------
+# get_trend_data — direction logic (improving / worsening / stable)
+# ---------------------------------------------------------------------------
+
+
+class TestGetTrendDataDirection:
+    """Trend direction is one of the LLM's most user-visible classifications."""
+
+    def _trend_with(self, scores):
+        anchor_us = int(datetime(2025, 11, 1, 12, 0, 0).timestamp() * 1_000_000)
+        db = MagicMock()
+        db.execute_query.return_value = [{"max_ts": anchor_us}]
+        with patch("app.services.chat_service.get_db_client", return_value=db), \
+             patch("app.services.chat_service.MCDMSafetyIndexService") as mcdm_cls:
+            mcdm = mcdm_cls.return_value
+            mcdm.get_available_intersections.return_value = ["site"]
+            mcdm.calculate_safety_score_trend.return_value = [
+                {"time_bin": f"2025-11-{i + 1:02d}", "mcdm_index": s}
+                for i, s in enumerate(scores)
+            ]
+            from app.services.chat_service import _execute_get_trend_data
+            return _execute_get_trend_data({"intersection": "site"})
+
+    def test_direction_improving_when_recent_lower(self):
+        result = self._trend_with([60, 60, 60, 50, 50, 50])
+        assert "improving" in result["trend_direction"]
+
+    def test_direction_worsening_when_recent_higher(self):
+        result = self._trend_with([30, 30, 30, 60, 60, 60])
+        assert "worsening" in result["trend_direction"]
+
+    def test_direction_stable_when_within_threshold(self):
+        result = self._trend_with([50, 50, 50, 51, 51, 51])
+        assert result["trend_direction"] == "stable"
+
+
+# ---------------------------------------------------------------------------
+# Common error / not-found return paths across tools
+# ---------------------------------------------------------------------------
+
+
+class TestToolErrorPaths:
+    """Error & not-found returns are what the LLM sees on the unhappy paths."""
+
+    def test_get_safety_score_unknown_intersection_returns_error(self):
+        db = MagicMock()
+        with patch("app.services.chat_service.get_db_client", return_value=db), \
+             patch("app.services.chat_service.MCDMSafetyIndexService") as mcdm_cls, \
+             patch("app.services.chat_service.RTSIService"):
+            mcdm_cls.return_value.get_available_intersections.return_value = ["other_site"]
+            from app.services.chat_service import _execute_get_safety_score
+            result = _execute_get_safety_score({"intersection": "totally-fictional"})
+            assert "error" in result
+            assert "totally-fictional" in result["error"]
+
+    def test_get_safety_score_invalid_target_time_returns_error(self):
+        db = MagicMock()
+        with patch("app.services.chat_service.get_db_client", return_value=db), \
+             patch("app.services.chat_service.MCDMSafetyIndexService") as mcdm_cls, \
+             patch("app.services.chat_service.RTSIService"):
+            mcdm_cls.return_value.get_available_intersections.return_value = ["site"]
+            from app.services.chat_service import _execute_get_safety_score
+            result = _execute_get_safety_score(
+                {"intersection": "site", "target_time": "not-iso-at-all"}
+            )
+            assert "error" in result
+            assert "target_time" in result["error"]
+
+    def test_get_component_breakdown_unknown_intersection_returns_error(self):
+        db = MagicMock()
+        with patch("app.services.chat_service.get_db_client", return_value=db), \
+             patch("app.services.chat_service.MCDMSafetyIndexService") as mcdm_cls:
+            mcdm_cls.return_value.get_available_intersections.return_value = ["other"]
+            from app.services.chat_service import _execute_get_component_breakdown
+            result = _execute_get_component_breakdown({"intersection": "ghost"})
+            assert "error" in result
+
+    def test_get_historical_baseline_no_crash_id_returns_message(self):
+        """When the BSM intersection maps but has no linked crash record, the
+        tool returns a graceful message — not an error — and crash_intersection_id
+        is None so the LLM can explain there's no baseline."""
+        db = MagicMock()
+        with patch("app.services.chat_service.get_db_client", return_value=db), \
+             patch("app.services.chat_service.MCDMSafetyIndexService") as mcdm_cls, \
+             patch("app.services.chat_service.RTSIService"), \
+             patch("app.api.intersection.find_crash_intersection_for_bsm",
+                   return_value=[{"crash_intersection_id": None}]):
+            mcdm_cls.return_value.get_available_intersections.return_value = ["site"]
+            from app.services.chat_service import _execute_get_historical_baseline
+            result = _execute_get_historical_baseline({"intersection": "site"})
+            assert "message" in result
+            assert "No historical crash data" in result["message"]
+            assert result["crash_intersection_id"] is None
+
+    def test_get_trend_data_no_data_returns_message(self):
+        anchor_us = int(datetime(2025, 11, 1).timestamp() * 1_000_000)
+        db = MagicMock()
+        db.execute_query.return_value = [{"max_ts": anchor_us}]
+        with patch("app.services.chat_service.get_db_client", return_value=db), \
+             patch("app.services.chat_service.MCDMSafetyIndexService") as mcdm_cls:
+            mcdm = mcdm_cls.return_value
+            mcdm.get_available_intersections.return_value = ["site"]
+            mcdm.calculate_safety_score_trend.return_value = []
+            from app.services.chat_service import _execute_get_trend_data
+            result = _execute_get_trend_data({"intersection": "site"})
+            assert "message" in result
+            assert "No trend data" in result["message"]

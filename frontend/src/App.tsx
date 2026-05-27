@@ -1573,6 +1573,36 @@ function SingleTimeBreakdown({ data, alpha }: { data: Record<string, unknown>; a
   );
 }
 
+const MAP_TILE_SIZE = 256;
+const MAP_VIEW_WIDTH = 1000;
+const MAP_VIEW_HEIGHT = 560;
+
+function projectWebMercator(lat: number, lon: number, zoom: number) {
+  const sinLat = Math.sin((Math.max(Math.min(lat, 85.05112878), -85.05112878) * Math.PI) / 180);
+  const scale = MAP_TILE_SIZE * 2 ** zoom;
+  return {
+    x: ((lon + 180) / 360) * scale,
+    y: (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale
+  };
+}
+
+function chooseMapZoom(points: Intersection[]) {
+  if (points.length <= 1) return 15;
+
+  for (let zoom = 16; zoom >= 4; zoom -= 1) {
+    const projected = points.map((item) => projectWebMercator(toNumber(item.latitude), toNumber(item.longitude), zoom));
+    const xs = projected.map((item) => item.x);
+    const ys = projected.map((item) => item.y);
+    const width = Math.max(...xs) - Math.min(...xs);
+    const height = Math.max(...ys) - Math.min(...ys);
+    if (width <= MAP_VIEW_WIDTH * 0.78 && height <= MAP_VIEW_HEIGHT * 0.7) {
+      return zoom;
+    }
+  }
+
+  return 4;
+}
+
 function GeoPlot({
   intersections,
   selected,
@@ -1582,27 +1612,72 @@ function GeoPlot({
   selected: Intersection | null;
   onSelect: (item: Intersection) => void;
 }) {
-  const points = intersections.filter((item) => item.latitude && item.longitude);
-  const lats = points.map((item) => toNumber(item.latitude));
-  const lons = points.map((item) => toNumber(item.longitude));
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLon = Math.min(...lons);
-  const maxLon = Math.max(...lons);
+  const points = intersections.filter((item) => Number.isFinite(Number(item.latitude)) && Number.isFinite(Number(item.longitude)));
   const maxVolume = Math.max(...points.map((item) => toNumber(item.traffic_volume, 1)), 1);
 
   if (!points.length) {
     return <EmptyState icon={MapPinned} title="No geocoded intersections" />;
   }
 
+  const zoom = chooseMapZoom(points);
+  const projected = points.map((item) => ({
+    item,
+    pixel: projectWebMercator(toNumber(item.latitude), toNumber(item.longitude), zoom)
+  }));
+  const xs = projected.map((point) => point.pixel.x);
+  const ys = projected.map((point) => point.pixel.y);
+  const center = {
+    x: (Math.min(...xs) + Math.max(...xs)) / 2,
+    y: (Math.min(...ys) + Math.max(...ys)) / 2
+  };
+  const topLeft = {
+    x: center.x - MAP_VIEW_WIDTH / 2,
+    y: center.y - MAP_VIEW_HEIGHT / 2
+  };
+  const tileStartX = Math.floor(topLeft.x / MAP_TILE_SIZE);
+  const tileEndX = Math.floor((topLeft.x + MAP_VIEW_WIDTH) / MAP_TILE_SIZE);
+  const tileStartY = Math.floor(topLeft.y / MAP_TILE_SIZE);
+  const tileEndY = Math.floor((topLeft.y + MAP_VIEW_HEIGHT) / MAP_TILE_SIZE);
+  const tileCount = 2 ** zoom;
+  const tiles = [];
+
+  for (let tileX = tileStartX; tileX <= tileEndX; tileX += 1) {
+    for (let tileY = tileStartY; tileY <= tileEndY; tileY += 1) {
+      if (tileY < 0 || tileY >= tileCount) continue;
+      const wrappedX = ((tileX % tileCount) + tileCount) % tileCount;
+      tiles.push({
+        key: `${zoom}-${tileX}-${tileY}`,
+        src: `https://tile.openstreetmap.org/${zoom}/${wrappedX}/${tileY}.png`,
+        left: ((tileX * MAP_TILE_SIZE - topLeft.x) / MAP_VIEW_WIDTH) * 100,
+        top: ((tileY * MAP_TILE_SIZE - topLeft.y) / MAP_VIEW_HEIGHT) * 100
+      });
+    }
+  }
+
   return (
     <div className="geo-plot">
-      <div className="map-grid-lines" />
-      {points.map((item, index) => {
-        const lat = toNumber(item.latitude);
-        const lon = toNumber(item.longitude);
-        const x = ((lon - minLon) / Math.max(maxLon - minLon, 0.0001)) * 84 + 8;
-        const y = (1 - (lat - minLat) / Math.max(maxLat - minLat, 0.0001)) * 78 + 11;
+      <div className="map-tile-layer" aria-hidden="true">
+        {tiles.map((tile) => (
+          <img
+            key={tile.key}
+            className="map-tile"
+            src={tile.src}
+            alt=""
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            style={{
+              left: `${tile.left}%`,
+              top: `${tile.top}%`,
+              width: `${(MAP_TILE_SIZE / MAP_VIEW_WIDTH) * 100}%`,
+              height: `${(MAP_TILE_SIZE / MAP_VIEW_HEIGHT) * 100}%`
+            }}
+          />
+        ))}
+      </div>
+      <div className="map-road-overlay" />
+      {projected.map(({ item, pixel }, index) => {
+        const x = ((pixel.x - topLeft.x) / MAP_VIEW_WIDTH) * 100;
+        const y = ((pixel.y - topLeft.y) / MAP_VIEW_HEIGHT) * 100;
         const score = scoreOf(item);
         const risk = riskLevel(score);
         const radius = 10 + (toNumber(item.traffic_volume, 0) / maxVolume) * 20;
@@ -1624,6 +1699,7 @@ function GeoPlot({
           />
         );
       })}
+      <div className="map-attribution">© OpenStreetMap contributors</div>
     </div>
   );
 }

@@ -5,8 +5,8 @@ Provides validation metrics and visualizations for safety index effectiveness.
 """
 
 from fastapi import APIRouter, HTTPException, Query
-from datetime import date, datetime, timedelta
-from typing import List, Optional, Dict, Any
+from datetime import date, timedelta
+from typing import List, Optional
 import logging
 
 from ..schemas.analytics import (
@@ -19,6 +19,7 @@ from ..schemas.analytics import (
 from ..services.analytics_service import (
     get_correlation_metrics,
     get_crash_data_for_period,
+    get_latest_safety_index_date_range,
     get_scatter_plot_data,
     get_time_series_with_crashes,
     get_weather_impact_analysis
@@ -30,6 +31,18 @@ router = APIRouter(
     prefix="/analytics",
     tags=["Analytics & Validation"]
 )
+
+
+def _resolve_date_range(
+    start_date: Optional[date],
+    end_date: Optional[date],
+    default_days: int,
+) -> tuple[date, date]:
+    """Resolve missing dates against latest available safety-index data."""
+    _, latest_end = get_latest_safety_index_date_range(default_days)
+    resolved_end = end_date or latest_end
+    resolved_start = start_date or (resolved_end - timedelta(days=default_days))
+    return resolved_start, resolved_end
 
 
 @router.get("/correlation", response_model=CorrelationMetrics)
@@ -62,11 +75,7 @@ def get_correlation(
     Includes precision, recall, F1 score, and correlation coefficients.
     """
     try:
-        # Default date range
-        if not end_date:
-            end_date = date.today()
-        if not start_date:
-            start_date = end_date - timedelta(days=30)
+        start_date, end_date = _resolve_date_range(start_date, end_date, 30)
 
         metrics = get_correlation_metrics(
             start_date=start_date,
@@ -107,10 +116,7 @@ def get_crashes(
     Get crash data near monitored intersections for the specified period.
     """
     try:
-        if not end_date:
-            end_date = date.today()
-        if not start_date:
-            start_date = end_date - timedelta(days=7)
+        start_date, end_date = _resolve_date_range(start_date, end_date, 7)
 
         crashes = get_crash_data_for_period(
             start_date=start_date,
@@ -138,10 +144,7 @@ def get_scatter_data(
     Returns time-binned data showing safety index values and whether crashes occurred.
     """
     try:
-        if not end_date:
-            end_date = date.today()
-        if not start_date:
-            start_date = end_date - timedelta(days=30)
+        start_date, end_date = _resolve_date_range(start_date, end_date, 30)
 
         data = get_scatter_plot_data(
             start_date=start_date,
@@ -172,10 +175,7 @@ def get_time_series(
     Shows how safety indices change over time with crash occurrences marked.
     """
     try:
-        if not end_date:
-            end_date = date.today()
-        if not start_date:
-            start_date = end_date - timedelta(days=7)
+        start_date, end_date = _resolve_date_range(start_date, end_date, 7)
 
         data = get_time_series_with_crashes(
             start_date=start_date,
@@ -201,10 +201,7 @@ def get_weather_analysis(
     Get weather impact analysis showing crash rates by weather condition.
     """
     try:
-        if not end_date:
-            end_date = date.today()
-        if not start_date:
-            start_date = end_date - timedelta(days=30)
+        start_date, end_date = _resolve_date_range(start_date, end_date, 30)
 
         data = get_weather_impact_analysis(
             start_date=start_date,

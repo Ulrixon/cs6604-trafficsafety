@@ -261,6 +261,130 @@ def load_safety_indices(
         return []
 
 
+def get_latest_safety_index_date_range(days: int = 30) -> tuple[date, date]:
+    """Return a date window ending at the latest available safety-index row."""
+    try:
+        query = text("SELECT MAX(timestamp) FROM safety_indices_realtime")
+        with db_session() as session:
+            latest = session.execute(query).scalar()
+        if latest is None:
+            end_date = date.today()
+        else:
+            end_date = latest.date() if hasattr(latest, "date") else latest
+        return end_date - timedelta(days=days), end_date
+    except Exception as e:
+        logger.warning(f"Failed to resolve latest safety-index date range: {e}")
+        end_date = date.today()
+        return end_date - timedelta(days=days), end_date
+
+
+def _safe_divide(numerator: float, denominator: float) -> Optional[float]:
+    return numerator / denominator if denominator else None
+
+
+def _safe_correlation(x: np.ndarray, y: np.ndarray) -> Optional[float]:
+    if len(x) < 2 or len(y) < 2:
+        return None
+    if np.std(x) == 0 or np.std(y) == 0:
+        return None
+    corr = float(np.corrcoef(x, y)[0, 1])
+    return corr if np.isfinite(corr) else None
+
+
+def _safe_spearman(x: np.ndarray, y: np.ndarray) -> Optional[float]:
+    if len(x) < 2 or len(y) < 2:
+        return None
+    if np.std(x) == 0 or np.std(y) == 0:
+        return None
+    try:
+        from scipy.stats import spearmanr
+        corr, _ = spearmanr(x, y)
+        return float(corr) if np.isfinite(corr) else None
+    except ImportError:
+        logger.warning("scipy is not installed; Spearman correlation unavailable")
+        return None
+
+
+def _empty_correlation_metrics(
+    start_date: date,
+    end_date: date,
+    threshold: float,
+    data_status: str,
+    warnings: List[str],
+) -> CorrelationMetrics:
+    return CorrelationMetrics(
+        total_crashes=0,
+        total_intervals=0,
+        crash_rate=0.0,
+        threshold=threshold,
+        true_positives=0,
+        false_positives=0,
+        true_negatives=0,
+        false_negatives=0,
+        precision=None,
+        recall=None,
+        f1_score=None,
+        accuracy=0.0,
+        pearson_correlation=None,
+        spearman_correlation=None,
+        data_status=data_status,
+        warnings=warnings,
+        index_interval_count=0,
+        crash_event_count=0,
+        overlap_interval_count=0,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+def _build_validation_frame(
+    indices: List[Dict[str, Any]],
+    crashes: List[Dict[str, Any]],
+) -> pd.DataFrame:
+    """Merge safety-index intervals with crash counts by time bin and intersection."""
+    if not indices:
+        return pd.DataFrame()
+
+    df_indices = pd.DataFrame(indices)
+    df_indices["time_bin"] = pd.to_datetime(df_indices["timestamp"]).dt.floor("15min")
+    df_indices["intersection_id"] = pd.to_numeric(
+        df_indices["intersection_id"], errors="coerce"
+    ).astype("Int64")
+    df_indices = (
+        df_indices.groupby(["time_bin", "intersection_id"], as_index=False)
+        .agg(
+            timestamp=("timestamp", "min"),
+            combined_index=("combined_index", "mean"),
+            vru_index=("vru_index", "mean"),
+            vehicle_index=("vehicle_index", "mean"),
+        )
+    )
+
+    if crashes:
+        df_crashes = pd.DataFrame(crashes)
+        df_crashes["time_bin"] = pd.to_datetime(df_crashes["timestamp"]).dt.floor("15min")
+        df_crashes["intersection_id"] = pd.to_numeric(
+            df_crashes["nearest_intersection_id"], errors="coerce"
+        ).astype("Int64")
+        crash_counts = (
+            df_crashes.dropna(subset=["intersection_id"])
+            .groupby(["time_bin", "intersection_id"])
+            .size()
+            .reset_index(name="crash_count")
+        )
+    else:
+        crash_counts = pd.DataFrame({
+            "time_bin": pd.Series(dtype="datetime64[ns]"),
+            "intersection_id": pd.Series(dtype="Int64"),
+            "crash_count": pd.Series(dtype="int64"),
+        })
+
+    merged = df_indices.merge(crash_counts, on=["time_bin", "intersection_id"], how="left")
+    merged["crash_count"] = merged["crash_count"].fillna(0).astype(int)
+    merged["had_crash"] = merged["crash_count"] > 0
+    return merged
+
+
 def get_correlation_metrics(
     start_date: date,
     end_date: date,
@@ -270,97 +394,63 @@ def get_correlation_metrics(
     """
     Compute correlation metrics between safety indices and crashes.
     """
+    warnings: List[str] = []
     try:
-        # Load crashes and safety indices
         crashes = load_crashes_from_gcp(start_date, end_date, proximity_radius)
         indices = load_safety_indices(start_date, end_date)
 
-        if not crashes or not indices:
-            # Return empty metrics if no data
-            return CorrelationMetrics(
-                total_crashes=0,
-                total_intervals=0,
-                crash_rate=0.0,
-                threshold=threshold,
-                true_positives=0,
-                false_positives=0,
-                true_negatives=0,
-                false_negatives=0,
-                precision=0.0,
-                recall=0.0,
-                f1_score=0.0,
-                accuracy=0.0,
-                pearson_correlation=0.0,
-                spearman_correlation=0.0,
+        if not indices:
+            return _empty_correlation_metrics(
                 start_date=start_date,
-                end_date=end_date
+                end_date=end_date,
+                threshold=threshold,
+                data_status="no_index_data",
+                warnings=["No safety-index intervals were found for the selected date range."],
             )
 
-        # Convert to DataFrames
-        df_crashes = pd.DataFrame(crashes)
-        df_indices = pd.DataFrame(indices)
+        if not crashes:
+            warnings.append("No crashes were found within the selected radius and date range; metrics are based on no-crash intervals.")
 
-        # Create time bins (15-minute intervals)
-        df_crashes['time_bin'] = pd.to_datetime(df_crashes['timestamp']).dt.floor('15min')
-        df_indices['time_bin'] = pd.to_datetime(df_indices['timestamp']).dt.floor('15min')
+        valid_data = _build_validation_frame(indices, crashes)
+        valid_data = valid_data[valid_data["combined_index"].notna()].copy()
 
-        # Count crashes per time bin
-        crash_counts = df_crashes.groupby('time_bin').size().reset_index(name='crash_count')
+        if valid_data.empty:
+            return _empty_correlation_metrics(
+                start_date=start_date,
+                end_date=end_date,
+                threshold=threshold,
+                data_status="no_overlap",
+                warnings=["Safety-index and crash data did not overlap after time/intersection matching."],
+            )
 
-        # Create full time series
-        start_dt = datetime.combine(start_date, datetime.min.time())
-        end_dt = datetime.combine(end_date, datetime.max.time())
-        all_bins = pd.DataFrame({
-            'time_bin': pd.date_range(start=start_dt, end=end_dt, freq='15min')
-        })
+        y_true = valid_data["had_crash"].astype(int).values
+        y_pred = (valid_data["combined_index"] >= threshold).astype(int).values
 
-        # Merge everything
-        merged = all_bins.merge(crash_counts, on='time_bin', how='left')
-        merged['crash_count'] = merged['crash_count'].fillna(0)
-        merged['had_crash'] = (merged['crash_count'] > 0).astype(int)
-
-        # Merge with safety indices
-        merged = merged.merge(
-            df_indices[['time_bin', 'combined_index']],
-            on='time_bin',
-            how='left'
-        )
-
-        # Filter to rows with both crash data and index data
-        valid_data = merged[merged['combined_index'].notna()].copy()
-
-        if len(valid_data) == 0:
-            raise ValueError("No overlapping data between crashes and safety indices")
-
-        # Binary classification
-        y_true = valid_data['had_crash'].values
-        y_pred = (valid_data['combined_index'] >= threshold).astype(int).values
-
-        # Confusion matrix
         tp = int(np.sum((y_pred == 1) & (y_true == 1)))
         fp = int(np.sum((y_pred == 1) & (y_true == 0)))
         tn = int(np.sum((y_pred == 0) & (y_true == 0)))
         fn = int(np.sum((y_pred == 0) & (y_true == 1)))
 
-        # Metrics
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+        precision = _safe_divide(tp, tp + fp)
+        recall = _safe_divide(tp, tp + fn)
+        f1 = (
+            2 * (precision * recall) / (precision + recall)
+            if precision is not None and recall is not None and (precision + recall) > 0
+            else None
+        )
         accuracy = (tp + tn) / (tp + fp + tn + fn) if (tp + fp + tn + fn) > 0 else 0.0
+        pearson = _safe_correlation(valid_data["combined_index"].values, y_true)
+        spearman = _safe_spearman(valid_data["combined_index"].values, y_true)
 
-        # Correlation
-        pearson = float(np.corrcoef(valid_data['combined_index'], y_true)[0, 1])
+        if pearson is None:
+            warnings.append("Pearson correlation is unavailable because safety scores or crash labels have insufficient variation.")
+        if spearman is None:
+            warnings.append("Spearman correlation is unavailable because safety scores or crash labels have insufficient variation or scipy is unavailable.")
 
-        # Spearman correlation (requires scipy)
-        try:
-            from scipy.stats import spearmanr
-            spearman, _ = spearmanr(valid_data['combined_index'], y_true)
-            spearman = float(spearman)
-        except ImportError:
-            spearman = 0.0
+        crash_event_count = int(valid_data["crash_count"].sum())
 
         return CorrelationMetrics(
-            total_crashes=int(y_true.sum()),
+            total_crashes=crash_event_count,
             total_intervals=len(valid_data),
             crash_rate=float(y_true.mean()),
             threshold=threshold,
@@ -374,13 +464,24 @@ def get_correlation_metrics(
             accuracy=accuracy,
             pearson_correlation=pearson,
             spearman_correlation=spearman,
+            data_status="ok" if crashes else "no_crash_data",
+            warnings=warnings,
+            index_interval_count=len(indices),
+            crash_event_count=crash_event_count,
+            overlap_interval_count=len(valid_data),
             start_date=start_date,
             end_date=end_date
         )
 
     except Exception as e:
         logger.error(f"Failed to compute correlation metrics: {e}")
-        raise
+        return _empty_correlation_metrics(
+            start_date=start_date,
+            end_date=end_date,
+            threshold=threshold,
+            data_status="error",
+            warnings=[str(e)],
+        )
 
 
 def get_crash_data_for_period(
@@ -406,22 +507,7 @@ def get_scatter_plot_data(
     if not indices:
         return []
 
-    df_indices = pd.DataFrame(indices)
-    df_crashes = pd.DataFrame(crashes) if crashes else pd.DataFrame()
-
-    # Create time bins
-    df_indices['time_bin'] = pd.to_datetime(df_indices['timestamp']).dt.floor('15min')
-
-    if not df_crashes.empty:
-        df_crashes['time_bin'] = pd.to_datetime(df_crashes['timestamp']).dt.floor('15min')
-        crash_counts = df_crashes.groupby('time_bin').size().reset_index(name='crash_count')
-    else:
-        crash_counts = pd.DataFrame(columns=['time_bin', 'crash_count'])
-
-    # Merge
-    merged = df_indices.merge(crash_counts, on='time_bin', how='left')
-    merged['crash_count'] = merged['crash_count'].fillna(0)
-    merged['had_crash'] = merged['crash_count'] > 0
+    merged = _build_validation_frame(indices, crashes)
 
     result = []
     for _, row in merged.iterrows():
@@ -449,26 +535,13 @@ def get_time_series_with_crashes(
     if not indices:
         return []
 
-    df_indices = pd.DataFrame(indices)
-    df_crashes = pd.DataFrame(crashes) if crashes else pd.DataFrame()
+    if intersection_id is not None and crashes:
+        crashes = [
+            crash for crash in crashes
+            if crash.get('nearest_intersection_id') == intersection_id
+        ]
 
-    # Filter crashes by intersection if specified
-    if intersection_id is not None and not df_crashes.empty:
-        df_crashes = df_crashes[df_crashes['nearest_intersection_id'] == intersection_id]
-
-    # Create time bins
-    df_indices['time_bin'] = pd.to_datetime(df_indices['timestamp']).dt.floor('15min')
-
-    if not df_crashes.empty:
-        df_crashes['time_bin'] = pd.to_datetime(df_crashes['timestamp']).dt.floor('15min')
-        crash_counts = df_crashes.groupby('time_bin').size().reset_index(name='crash_count')
-    else:
-        crash_counts = pd.DataFrame(columns=['time_bin', 'crash_count'])
-
-    # Merge
-    merged = df_indices.merge(crash_counts, on='time_bin', how='left')
-    merged['crash_count'] = merged['crash_count'].fillna(0)
-    merged['had_crash'] = merged['crash_count'] > 0
+    merged = _build_validation_frame(indices, crashes)
 
     result = []
     for _, row in merged.iterrows():

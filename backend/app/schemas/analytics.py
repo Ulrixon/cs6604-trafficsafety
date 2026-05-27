@@ -2,9 +2,9 @@
 Pydantic schemas for analytics endpoints.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime, date
-from typing import Optional
+from typing import List, Optional
 
 
 class CorrelationMetrics(BaseModel):
@@ -19,14 +19,21 @@ class CorrelationMetrics(BaseModel):
     false_positives: int
     true_negatives: int
     false_negatives: int
-    precision: float
-    recall: float
-    f1_score: float
+    precision: Optional[float] = None
+    recall: Optional[float] = None
+    f1_score: Optional[float] = None
     accuracy: float
 
     # Correlation coefficients
-    pearson_correlation: float
-    spearman_correlation: float
+    pearson_correlation: Optional[float] = None
+    spearman_correlation: Optional[float] = None
+
+    # Data quality / provenance
+    data_status: str = "ok"
+    warnings: List[str] = Field(default_factory=list)
+    index_interval_count: int = 0
+    crash_event_count: int = 0
+    overlap_interval_count: int = 0
 
     # Weather impact
     weather_crash_multiplier: Optional[float] = None

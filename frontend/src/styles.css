@@ -479,23 +479,37 @@ button:disabled {
   min-height: 420px;
   overflow: hidden;
   border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(36, 99, 235, 0.12), rgba(43, 138, 87, 0.08)),
-    #eef3f7;
+  background: #dbe5ec;
   border: 1px solid var(--line);
 }
 
-.map-grid-lines {
+.map-tile-layer,
+.map-road-overlay {
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(rgba(16, 24, 39, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(16, 24, 39, 0.08) 1px, transparent 1px);
-  background-size: 56px 56px;
+}
+
+.map-tile-layer {
+  z-index: 0;
+}
+
+.map-tile {
+  position: absolute;
+  display: block;
+  user-select: none;
+}
+
+.map-road-overlay {
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(23, 32, 51, 0.05)),
+    radial-gradient(circle at 20% 18%, rgba(36, 99, 235, 0.08), transparent 26%);
 }
 
 .map-marker {
   position: absolute;
+  z-index: 2;
   transform: translate(-50%, -50%);
   border: 2px solid rgba(255, 255, 255, 0.94);
   border-radius: 999px;
@@ -509,6 +523,19 @@ button:disabled {
 .map-marker.active {
   transform: translate(-50%, -50%) scale(1.18);
   box-shadow: 0 0 0 6px rgba(36, 99, 235, 0.18), 0 10px 22px rgba(16, 24, 39, 0.25);
+}
+
+.map-attribution {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  z-index: 3;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #334155;
+  font-size: 0.68rem;
+  line-height: 1.2;
 }
 
 .controls-panel label,

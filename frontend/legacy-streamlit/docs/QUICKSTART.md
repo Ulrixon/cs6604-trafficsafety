@@ -183,7 +183,7 @@ api_url = st.secrets["API_URL"]
 1. Push to GitHub
 2. Go to share.streamlit.io
 3. Connect repository
-4. Set main file: `frontend/app/views/main.py`
+4. Set main file: `frontend/legacy-streamlit/app/views/main.py`
 
 ### Docker
 

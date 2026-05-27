@@ -76,7 +76,7 @@ GET /safety/index/?include_rtsi=true
 
 ### Updated: `fetch_latest_blended_scores(alpha)`
 
-**File**: `frontend/app/services/api_client.py`
+**File**: `frontend/legacy-streamlit/app/services/api_client.py`
 
 **New Strategy**:
 

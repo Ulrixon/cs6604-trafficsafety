@@ -34,4 +34,4 @@ npm run preview -- --port 8080
 - Database: raw table/schema explorer with quick charts.
 - SafetyChat: always-available assistant docked beside the dashboard.
 
-The previous Streamlit implementation remains in `frontend/app` and `frontend/pages` for reference during migration.
+The previous Streamlit implementation is isolated under `frontend/legacy-streamlit/` for reference during migration.

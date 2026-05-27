@@ -30,7 +30,7 @@ if rt_si_result is not None:  # ✅ Properly handles 0.0
 
 ### 2. Wrong API Endpoint in Dashboard (Frontend)
 
-**Location**: `frontend/app/services/api_client.py`
+**Location**: `frontend/legacy-streamlit/app/services/api_client.py`
 
 **Problem**: Called `/time/specific` instead of `/safety/index/time/specific`
 
@@ -50,7 +50,7 @@ f"{api_base}/safety/index/time/specific"
 
 ### 3. Optimized Dashboard Data Fetching
 
-**Location**: `frontend/app/services/api_client.py` - `fetch_latest_blended_scores()`
+**Location**: `frontend/legacy-streamlit/app/services/api_client.py` - `fetch_latest_blended_scores()`
 
 **Enhancement**: Implemented smart endpoint selection based on alpha value
 
@@ -114,7 +114,7 @@ else:
    - Line 166: `if rt_si_result:` → `if rt_si_result is not None:`
    - Line 277: `if rt_si_result:` → `if rt_si_result is not None:`
 
-2. **frontend/app/services/api_client.py**
+2. **frontend/legacy-streamlit/app/services/api_client.py**
    - `fetch_latest_blended_scores()`: Complete rewrite with smart endpoint selection
    - Added alpha=0.0 optimization using `/safety/index/`
    - Fixed endpoint path from `/time/specific` to `/safety/index/time/specific`

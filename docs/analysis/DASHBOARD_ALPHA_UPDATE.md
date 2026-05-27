@@ -6,7 +6,7 @@ Added alpha blending functionality to the Dashboard (Page 0) to display real-tim
 
 ## Changes Made
 
-### 1. Dashboard Page (`frontend/pages/0_🏠_Dashboard.py`)
+### 1. Dashboard Page (`frontend/legacy-streamlit/pages/0_🏠_Dashboard.py`)
 
 #### Added Alpha Slider (Sidebar):
 
@@ -49,7 +49,7 @@ alpha = st.slider(
 - Displays current alpha value
 - Shows "RT-SI + MCDM" methodology
 
-### 2. API Client (`frontend/app/services/api_client.py`)
+### 2. API Client (`frontend/legacy-streamlit/app/services/api_client.py`)
 
 #### New Function: `fetch_latest_blended_scores(alpha)`
 
@@ -77,7 +77,7 @@ def fetch_latest_blended_scores(alpha: float = 0.7):
 - Uses retry logic for failed requests
 - Falls back to sample data if API unavailable
 
-### 3. Components (`frontend/app/views/components.py`)
+### 3. Components (`frontend/legacy-streamlit/app/views/components.py`)
 
 #### Updated `render_kpi_cards()`:
 

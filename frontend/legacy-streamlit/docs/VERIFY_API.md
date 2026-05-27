@@ -141,7 +141,7 @@ Temporarily add logging to see API calls:
 
 ### Quick Edit:
 
-Open `frontend/app/services/api_client.py` and add at line 87:
+Open `frontend/legacy-streamlit/app/services/api_client.py` and add at line 87:
 
 ```python
 @st.cache_data(ttl=API_CACHE_TTL, show_spinner=False)

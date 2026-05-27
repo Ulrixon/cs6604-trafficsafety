@@ -288,7 +288,7 @@ MAP_TILES = "CartoDB positron"
 # Push to GitHub, then:
 1. Go to share.streamlit.io
 2. Connect repository
-3. Set main file: frontend/app/views/main.py
+3. Set main file: frontend/legacy-streamlit/app/views/main.py
 4. Deploy!
 ```
 

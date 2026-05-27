@@ -45,7 +45,7 @@ vehicle_index: Optional[float]         # Vehicle sub-index
 final_safety_index: Optional[float]    # Blended final index
 ```
 
-### 3. Frontend UI (`frontend/pages/1_📈_Trend_Analysis.py`)
+### 3. Frontend UI (`frontend/legacy-streamlit/pages/1_📈_Trend_Analysis.py`)
 
 #### New Features:
 

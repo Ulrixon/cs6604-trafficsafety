@@ -1,42 +1,52 @@
-# Virginia Transportation Safety Index (VTSI)  
+# Virginia Transportation Safety Index
 
-<img src="https://upload.wikimedia.org/wikipedia/commons/6/60/Virginia_Tech_Hokies_logo.svg" alt="VT Logo" width="140" align="right">
+Traffic safety dashboard and API for real-time intersection risk analysis. The current frontend is a Vite React dashboard backed by the FastAPI service in `backend/`.
 
----
+## Current Layout
 
-📄 [**Project Proposal**](files/proposal_cusati_chuang_Uhunmwangho.pdf)
+- `backend/` - FastAPI backend, data services, collectors, and Cloud Run deployment scripts.
+- `frontend/` - active Vite React frontend and Cloud Run container config.
+- `frontend/legacy-streamlit/` - archived Streamlit frontend kept separate for reference.
+- `docs/` - project documentation grouped by topic.
+- `data/`, `files/`, `construction/`, `memory-bank/` - datasets, report assets, planning notes, and project history.
 
----
+## Run Locally
 
-## 🚦 Project Overview  
+Backend:
 
-The **Virginia Transportation Safety Index (VTSI)** project develops a dynamic, data-driven safety scoring system for intersections and roadway segments across Virginia.  
-We combine crash data, traffic volumes, and severity weighting to provide **real-time, actionable insights** for improving roadway safety.
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
 
-<img src="https://cci.vtti.vt.edu/wp-content/uploads/2022/01/smart_intersection.jpg" alt="Traffic Intersection" width="600px">
+Frontend:
 
----
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## 📊 Key Data Sources  
+Open `http://localhost:5173`. The frontend defaults to `http://localhost:8000/api/v1`; override with `frontend/.env`:
 
-Our system integrates multiple open and institutional datasets:  
+```bash
+VITE_API_URL=http://localhost:8000/api/v1
+```
 
-- **VDOT Crash Data** – detailed crash records including severity, time, location, and contributing factors.  
-- **Traffic Volume Data (AADT)** – exposure measures to normalize crash counts.  
-- **VTTI Smart Intersections** – real-time data on vehicle and pedestrian movement in Northern Virginia.  
-- **WMATA Transit Data** – ridership and scheduling information for multimodal safety analysis.  
-- **Weather & Social Media Feeds** – supplemental contextual signals for risk assessment.  
+## Deploy
 
----
+The repository has Cloud Build triggers for both backend and frontend on pushes to `main`.
 
-## 👥 Team Members  
+Frontend trigger builds `frontend/Dockerfile`, produces the Vite static app, serves it with nginx on port `8080`, and updates Cloud Run service `safety-index-frontend`.
 
-| Picture | Name | Department | Email |
-|---------|------|------------|-------|
-| <img src="images/jason.jpg" width="120px" style="border-radius:50%;"> | **Jason Cusati** | Computer Science, Virginia Tech, Blacksburg, VA | [djjay@vt.edu](mailto:djjay@vt.edu) |
-| <img src="images/chengshun.jpg" width="120px" style="border-radius:50%;"> | **Cheng-Shun Chuang** | Computer Science, Virginia Tech, Alexandria, VA | [cchengshun@vt.edu](mailto:cchengshun@vt.edu) |
-| <img src="images/victory.jpg" width="120px" style="border-radius:50%;"> | **Victory Uhunmwangho** | Computer Science, Virginia Tech, Blacksburg, VA | [victoryu@vt.edu](mailto:victoryu@vt.edu) |
+Manual frontend deploy:
 
----
+```bash
+cd frontend
+./deploy-gcp.sh
+```
 
-<link rel="stylesheet" href="style.css">
+## Docs
+
+Start with [docs/README.md](docs/README.md) for the organized documentation index.

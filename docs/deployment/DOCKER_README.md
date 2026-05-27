@@ -10,6 +10,7 @@ The Docker deployment includes:
 2. **Backend API** - FastAPI service exposing safety index endpoints
 3. **Data Collector** - Continuous service collecting VCC data and computing safety indices
 4. **Redis** - Caching layer for improved performance (optional)
+5. **Frontend Dashboard** - Vite React app served by nginx
 
 ## Prerequisites
 
@@ -61,10 +62,10 @@ You should see:
 
 ```bash
 # Health check
-curl http://localhost:8000/health
+curl http://localhost:8001/health
 
 # Get safety indices (after collector runs)
-curl http://localhost:8000/api/v1/intersections/safety-indices
+curl http://localhost:8001/api/v1/safety/index/
 ```
 
 ## Configuration
@@ -281,7 +282,8 @@ docker-compose exec -T db psql -U trafficsafety < backup.sql
 ## Resources
 
 - VCC API Documentation: `files/VCC_Public_API_v3.1.pdf`
-- Backend API Documentation: http://localhost:8000/docs (when running)
+- Backend API Documentation: http://localhost:8001/docs (when running through root Docker Compose)
+- Frontend dashboard: http://localhost:5173
 - Project Documentation: `README.md`
 
 ## Support

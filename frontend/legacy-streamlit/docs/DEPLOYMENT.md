@@ -410,7 +410,7 @@ heroku open
    - Click "New app"
    - Select repository: `Ulrixon/cs6604-trafficsafety`
    - Set branch: `frontend` (or your branch)
-   - Set main file path: `frontend/app/views/main.py`
+   - Set main file path: `frontend/legacy-streamlit/app/views/main.py`
    - Click "Deploy"
 
 3. **Configure Secrets** (if needed)

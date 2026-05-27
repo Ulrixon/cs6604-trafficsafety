@@ -69,7 +69,7 @@ This document summarizes the complete implementation of traffic camera integrati
 **Commits:** `bbeb67f`
 
 **Deliverables:**
-- ✓ `render_camera_buttons()` component: `frontend/app/views/components.py`
+- ✓ `render_camera_buttons()` component: `frontend/legacy-streamlit/app/views/components.py`
 - ✓ Styled button links with hover effects
 - ✓ Icon selection based on source
 - ✓ Responsive design
@@ -95,7 +95,7 @@ This document summarizes the complete implementation of traffic camera integrati
 **Commits:** `bbeb67f`
 
 **Deliverables:**
-- ✓ Enhanced `create_popup_html()`: `frontend/app/controllers/map_controller.py`
+- ✓ Enhanced `create_popup_html()`: `frontend/legacy-streamlit/app/controllers/map_controller.py`
 - ✓ Draggable popups enabled
 - ✓ Camera links embedded in popups
 - ✓ Responsive popup sizing
@@ -567,7 +567,7 @@ python backend/scripts/populate_camera_urls.py --add \
     --label "Test Link"
 
 # 4. Open frontend
-streamlit run frontend/pages/0_🏠_Dashboard.py
+streamlit run frontend/legacy-streamlit/pages/0_🏠_Dashboard.py
 
 # 5. Click intersection 0, verify camera button appears
 ```

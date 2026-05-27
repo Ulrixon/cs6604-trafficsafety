@@ -146,6 +146,7 @@ button {
 .workspace {
   min-width: 0;
   padding: 24px;
+  overflow: hidden;
 }
 
 .topbar {
@@ -229,6 +230,7 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 16px;
+  min-width: 0;
 }
 
 .overview-grid {
@@ -237,31 +239,38 @@ button:disabled {
 
 .span-4 {
   grid-column: span 4;
+  min-width: 0;
 }
 
 .span-5 {
   grid-column: span 5;
+  min-width: 0;
 }
 
 .span-6 {
   grid-column: span 6;
+  min-width: 0;
 }
 
 .span-7 {
   grid-column: span 7;
+  min-width: 0;
 }
 
 .span-8 {
   grid-column: span 8;
+  min-width: 0;
 }
 
 .span-12 {
   grid-column: span 12;
+  min-width: 0;
 }
 
 .stack {
   display: grid;
   gap: 16px;
+  min-width: 0;
 }
 
 .panel,
@@ -274,6 +283,7 @@ button:disabled {
 
 .panel {
   padding: 18px;
+  min-width: 0;
 }
 
 .panel-header {
@@ -295,8 +305,9 @@ button:disabled {
 
 .metric-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
+  min-width: 0;
 }
 
 .metric-card {
@@ -324,6 +335,99 @@ button:disabled {
   grid-column: 1 / -1;
   font-size: 1.65rem;
   line-height: 1;
+}
+
+.info-band,
+.explain-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.info-item {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.info-item.good {
+  border-color: #b7dfc7;
+  background: #f1fbf5;
+}
+
+.info-item.warn {
+  border-color: #edcf94;
+  background: #fff8e8;
+}
+
+.info-item span,
+.methodology-list span,
+.assistant-note span {
+  color: var(--muted);
+}
+
+.info-item > span {
+  display: block;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.info-item strong {
+  display: block;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+  font-size: 0.96rem;
+}
+
+.info-item p {
+  margin: 6px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.methodology-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.methodology-list {
+  display: grid;
+  gap: 10px;
+}
+
+.methodology-list div,
+.subpanel {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.methodology-list strong,
+.methodology-list span,
+.assistant-note strong,
+.assistant-note span {
+  display: block;
+}
+
+.methodology-list span,
+.assistant-note span {
+  margin-top: 4px;
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.subpanel h3 {
+  margin-bottom: 10px;
+}
+
+.subpanel .kv-grid {
+  grid-template-columns: 1fr;
 }
 
 .notice {
@@ -371,6 +475,7 @@ button:disabled {
 
 .geo-plot {
   position: relative;
+  width: 100%;
   min-height: 420px;
   overflow: hidden;
   border-radius: 8px;
@@ -455,6 +560,10 @@ select {
 
 .selected-panel {
   min-height: 300px;
+}
+
+.selected-panel .kv-grid {
+  grid-template-columns: 1fr;
 }
 
 .details {
@@ -543,6 +652,8 @@ select {
 }
 
 .table-wrap {
+  width: 100%;
+  max-width: 100%;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -551,7 +662,7 @@ select {
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 640px;
+  min-width: 560px;
   font-size: 0.88rem;
 }
 
@@ -612,6 +723,18 @@ tbody tr:hover,
   grid-template-columns: repeat(4, minmax(150px, 1fr));
   align-items: end;
   gap: 12px;
+}
+
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.preset-row .secondary-button {
+  min-height: 34px;
+  padding: 6px 10px;
 }
 
 .chart-box {
@@ -748,7 +871,7 @@ tbody tr:hover,
 
 .chat-dock {
   display: grid;
-  grid-template-rows: auto auto 1fr auto auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
   gap: 14px;
   padding: 20px;
   background: #ffffff;
@@ -787,6 +910,13 @@ tbody tr:hover,
 .prompt-grid button:hover {
   border-color: #c7d8ff;
   background: #edf3ff;
+}
+
+.assistant-note {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f6f8fb;
 }
 
 .chat-messages {

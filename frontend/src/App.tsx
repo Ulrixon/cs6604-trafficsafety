@@ -51,6 +51,11 @@ type TrendPoint = {
   final_safety_index?: number | null;
   rt_si_score?: number | null;
   mcdm_index?: number | null;
+  vru_index?: number | null;
+  vehicle_index?: number | null;
+  raw_crash_rate?: number | null;
+  eb_crash_rate?: number | null;
+  uplift_factor?: number | null;
   vehicle_count?: number | null;
   incident_count?: number | null;
   near_miss_count?: number | null;
@@ -130,6 +135,7 @@ const examplePrompts = [
   "Why is the Glebe-Potomac score elevated?",
   "What is driving risk at E. Broad & N. Washington?",
   "Compare all intersections by VRU count.",
+  "What is the historical crash baseline for Birch & Broad?",
   "Which intersection has the lowest risk for emergency vehicle routing?"
 ];
 
@@ -149,6 +155,11 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
     }
   });
   return url.toString();
+}
+
+function formatDateTimeLocal(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 async function fetchJson<T>(path: string, params?: Record<string, string | number | boolean | undefined>): Promise<T> {
@@ -211,6 +222,7 @@ function App() {
   const [selected, setSelected] = useState<Intersection | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dataSource, setDataSource] = useState<"live" | "fallback">("live");
 
   const loadIntersections = async () => {
     setLoading(true);
@@ -221,12 +233,18 @@ function App() {
         include_mcdm: true,
         bin_minutes: 15
       });
-      const normalized = Array.isArray(data) && data.length ? data : fallbackIntersections;
+      const hasLiveData = Array.isArray(data) && data.length > 0;
+      const normalized = hasLiveData ? data : fallbackIntersections;
       setIntersections(normalized);
       setSelected((current) => current || normalized[0] || null);
+      setDataSource(hasLiveData ? "live" : "fallback");
+      if (!hasLiveData) {
+        setError("Backend returned no intersections. Showing fallback sample data until live safety data is available.");
+      }
     } catch (err) {
       setIntersections(fallbackIntersections);
       setSelected((current) => current || fallbackIntersections[0]);
+      setDataSource("fallback");
       setError(`Using fallback sample data. Backend request failed: ${(err as Error).message}`);
     } finally {
       setLoading(false);
@@ -304,6 +322,7 @@ function App() {
             intersections={intersections}
             selected={selected}
             onSelect={setSelected}
+            dataSource={dataSource}
           />
         )}
         {view === "trends" && <TrendPanel alpha={alpha} />}
@@ -322,13 +341,15 @@ function OverviewPanel({
   loading,
   intersections,
   selected,
-  onSelect
+  onSelect,
+  dataSource
 }: {
   alpha: number;
   loading: boolean;
   intersections: Intersection[];
   selected: Intersection | null;
   onSelect: (intersection: Intersection) => void;
+  dataSource: "live" | "fallback";
 }) {
   const [query, setQuery] = useState("");
   const [scoreRange, setScoreRange] = useState<[number, number]>([0, 100]);
@@ -353,7 +374,10 @@ function OverviewPanel({
     const avgRtSi =
       filtered.reduce((sum, item) => sum + toNumber(item.rt_si_score ?? item.rt_si_index, 0), 0) /
       Math.max(filtered.length, 1);
-    return { avgScore, highRisk, totalVolume, avgRtSi };
+    const avgMcdm = filtered.reduce((sum, item) => sum + toNumber(item.mcdm_index, 0), 0) / Math.max(filtered.length, 1);
+    const geocoded = filtered.filter((item) => Number.isFinite(Number(item.latitude)) && Number.isFinite(Number(item.longitude))).length;
+    const noData = filtered.filter((item) => String(item.index_type || "").toLowerCase().includes("no data")).length;
+    return { avgScore, highRisk, totalVolume, avgRtSi, avgMcdm, geocoded, noData };
   }, [filtered]);
 
   return (
@@ -364,6 +388,25 @@ function OverviewPanel({
           <MetricCard label="High-risk sites" value={stats.highRisk} icon={AlertTriangle} tone="danger" />
           <MetricCard label="Traffic volume" value={stats.totalVolume.toLocaleString()} icon={Activity} />
           <MetricCard label="Avg RT-SI" value={formatNumber(stats.avgRtSi)} icon={Layers} />
+        </div>
+
+        <div className="info-band">
+          <InfoItem
+            label="Data status"
+            value={dataSource === "live" ? "Live backend data" : "Fallback sample data"}
+            detail={`${filtered.length} visible, ${stats.geocoded} geocoded, ${stats.noData} no-data records`}
+            tone={dataSource === "live" ? "good" : "warn"}
+          />
+          <InfoItem
+            label="Blend formula"
+            value={`Final = ${alpha.toFixed(1)} x RT-SI + ${(1 - alpha).toFixed(1)} x MCDM`}
+            detail="Higher safety index means higher operational risk."
+          />
+          <InfoItem
+            label="Method coverage"
+            value={`Avg MCDM ${formatNumber(stats.avgMcdm)} | Avg RT-SI ${formatNumber(stats.avgRtSi)}`}
+            detail="MCDM captures long-term priority; RT-SI captures current traffic conditions."
+          />
         </div>
 
         <div className="panel">
@@ -435,6 +478,8 @@ function OverviewPanel({
           </label>
         </div>
 
+        <MethodologyPanel alpha={alpha} />
+
         <div className="panel selected-panel">
           <div className="panel-header compact">
             <div>
@@ -479,6 +524,8 @@ function TrendPanel({ alpha }: { alpha: number }) {
   const [binMinutes, setBinMinutes] = useState(15);
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
   const [specificPoint, setSpecificPoint] = useState<Record<string, unknown> | null>(null);
+  const [correlationAnalysis, setCorrelationAnalysis] = useState<Record<string, unknown> | null>(null);
+  const [metadata, setMetadata] = useState<Record<string, unknown> | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -495,7 +542,11 @@ function TrendPanel({ alpha }: { alpha: number }) {
     setLoading(true);
     setStatus(null);
     try {
-      const response = await fetchJson<{ time_series?: TrendPoint[] } | TrendPoint[]>("/safety/index/time/range", {
+      const response = await fetchJson<{
+        time_series?: TrendPoint[];
+        correlation_analysis?: Record<string, unknown>;
+        metadata?: Record<string, unknown>;
+      } | TrendPoint[]>("/safety/index/time/range", {
         intersection,
         start_time: startTime,
         end_time: endTime,
@@ -505,13 +556,24 @@ function TrendPanel({ alpha }: { alpha: number }) {
       });
       const rows = Array.isArray(response) ? response : response.time_series || [];
       setTrendData(rows.map((row) => ({ ...row, final_safety_index: blendScore(row.mcdm_index, row.rt_si_score, alpha) })));
+      setCorrelationAnalysis(Array.isArray(response) ? null : response.correlation_analysis || null);
+      setMetadata(Array.isArray(response) ? null : response.metadata || null);
       setStatus(`Loaded ${rows.length} trend points for ${intersection}.`);
     } catch (err) {
       setTrendData([]);
+      setCorrelationAnalysis(null);
+      setMetadata(null);
       setStatus(`Trend request failed: ${(err as Error).message}`);
     } finally {
       setLoading(false);
     }
+  };
+
+  const applyPreset = (hours: number) => {
+    const start = new Date(startTime);
+    if (Number.isNaN(start.getTime())) return;
+    const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
+    setEndTime(formatDateTimeLocal(end));
   };
 
   const loadSpecific = async () => {
@@ -539,7 +601,34 @@ function TrendPanel({ alpha }: { alpha: number }) {
     const incidents = trendData.reduce((sum, row) => sum + toNumber(row.incident_count, 0), 0);
     const nearMisses = trendData.reduce((sum, row) => sum + toNumber(row.near_miss_count, 0), 0);
     const avgFinal = trendData.reduce((sum, row) => sum + scoreOf(row), 0) / Math.max(trendData.length, 1);
-    return { totalVehicles, incidents, nearMisses, avgFinal };
+    const avgRtSi = trendData.reduce((sum, row) => sum + toNumber(row.rt_si_score, 0), 0) / Math.max(trendData.length, 1);
+    const avgMcdm = trendData.reduce((sum, row) => sum + toNumber(row.mcdm_index, 0), 0) / Math.max(trendData.length, 1);
+    return { totalVehicles, incidents, nearMisses, avgFinal, avgRtSi, avgMcdm };
+  }, [trendData]);
+
+  const normalizedRows = useMemo(() => {
+    const keys = [
+      "mcdm_index",
+      "rt_si_score",
+      "vehicle_count",
+      "incident_count",
+      "near_miss_count",
+      "vru_count",
+      "avg_speed",
+      "speed_variance"
+    ];
+    const maxByKey = Object.fromEntries(keys.map((key) => [
+      key,
+      Math.max(...trendData.map((row) => Math.abs(toNumber(row[key]))), 0)
+    ]));
+    return trendData.map((row) => {
+      const next: Record<string, unknown> = { time_bin: row.time_bin || row.timestamp };
+      keys.forEach((key) => {
+        const max = maxByKey[key] || 0;
+        next[`${key}_normalized`] = max > 0 ? (toNumber(row[key]) / max) * 100 : 0;
+      });
+      return next;
+    });
   }, [trendData]);
 
   return (
@@ -583,6 +672,13 @@ function TrendPanel({ alpha }: { alpha: number }) {
             Load time bin
           </button>
         </div>
+        <div className="preset-row" aria-label="Quick time range presets">
+          {[2, 6, 12, 24].map((hours) => (
+            <button key={hours} className="secondary-button" type="button" onClick={() => applyPreset(hours)}>
+              {hours}h
+            </button>
+          ))}
+        </div>
         {status && <div className="notice">{status}</div>}
       </div>
 
@@ -590,6 +686,8 @@ function TrendPanel({ alpha }: { alpha: number }) {
         <>
           <div className="metric-strip">
             <MetricCard label="Avg final index" value={formatNumber(summary.avgFinal)} icon={Gauge} />
+            <MetricCard label="Avg RT-SI" value={formatNumber(summary.avgRtSi)} icon={Layers} />
+            <MetricCard label="Avg MCDM" value={formatNumber(summary.avgMcdm)} icon={ShieldCheck} />
             <MetricCard label="Vehicles" value={summary.totalVehicles.toLocaleString()} icon={Activity} />
             <MetricCard label="Incidents" value={summary.incidents.toLocaleString()} icon={AlertTriangle} tone="danger" />
             <MetricCard label="Near misses" value={summary.nearMisses.toLocaleString()} icon={Layers} />
@@ -623,16 +721,72 @@ function TrendPanel({ alpha }: { alpha: number }) {
               />
             </div>
             <div className="panel span-6">
+              <h2>Speed factors</h2>
+              <MultiLineChart
+                rows={trendData}
+                xKey="time_bin"
+                series={[
+                  { key: "avg_speed", label: "Average speed", color: "#c2410c" },
+                  { key: "speed_variance", label: "Speed variance", color: "#7c3aed" }
+                ]}
+              />
+            </div>
+            <div className="panel span-6">
+              <h2>RT-SI sub-indices</h2>
+              <MultiLineChart
+                rows={trendData}
+                xKey="time_bin"
+                series={[
+                  { key: "rt_si_score", label: "RT-SI", color: "#d13f3f" },
+                  { key: "vru_index", label: "VRU index", color: "#8f5fbf" },
+                  { key: "vehicle_index", label: "Vehicle index", color: "#bf7a16" }
+                ]}
+              />
+            </div>
+            <div className="panel span-6">
               <h2>MCDM methods</h2>
               <MultiLineChart
                 rows={trendData}
                 xKey="time_bin"
                 series={[
+                  { key: "mcdm_index", label: "MCDM index", color: "#111827" },
                   { key: "saw_score", label: "SAW", color: "#0f766e" },
                   { key: "edas_score", label: "EDAS", color: "#7c3aed" },
                   { key: "codas_score", label: "CODAS", color: "#c2410c" }
                 ]}
               />
+            </div>
+            <div className="panel span-12">
+              <h2>All variables normalized</h2>
+              <p>Each metric is scaled to its own maximum so trends can be compared on one 0-100 chart.</p>
+              <MultiLineChart
+                rows={normalizedRows}
+                xKey="time_bin"
+                series={[
+                  { key: "mcdm_index_normalized", label: "MCDM", color: "#2463eb" },
+                  { key: "rt_si_score_normalized", label: "RT-SI", color: "#d13f3f" },
+                  { key: "vehicle_count_normalized", label: "Vehicles", color: "#2b8a57" },
+                  { key: "incident_count_normalized", label: "Incidents", color: "#bf3f3f" },
+                  { key: "near_miss_count_normalized", label: "Near misses", color: "#bf7a16" },
+                  { key: "vru_count_normalized", label: "VRU", color: "#277da1" },
+                  { key: "avg_speed_normalized", label: "Avg speed", color: "#c2410c" },
+                  { key: "speed_variance_normalized", label: "Speed variance", color: "#7c3aed" }
+                ]}
+              />
+            </div>
+            {correlationAnalysis ? (
+              <div className="panel span-12">
+                <CorrelationPanel data={correlationAnalysis} />
+              </div>
+            ) : trendData.length >= 3 ? (
+              <div className="notice span-12">
+                Correlation analysis was requested but not returned. The backend may lack enough valid variables for this time range.
+              </div>
+            ) : null}
+            <div className="panel span-12">
+              <h2>Trend data preview</h2>
+              <p>{metadata ? `Backend metadata: ${JSON.stringify(metadata)}` : "Raw time-series fields returned by the safety API."}</p>
+              <DataTable rows={trendData} maxRows={20} />
             </div>
           </div>
         </>
@@ -640,11 +794,63 @@ function TrendPanel({ alpha }: { alpha: number }) {
 
       {specificPoint && (
         <div className="panel">
-          <h2>Single time-bin detail</h2>
-          <KeyValueGrid data={specificPoint} />
+          <div className="panel-header">
+            <div>
+              <h2>Single time-bin detail</h2>
+              <p>{String(specificPoint.intersection || intersection)} at {String(specificPoint.time_bin || startTime)}</p>
+            </div>
+          </div>
+          <SingleTimeBreakdown data={specificPoint} alpha={alpha} />
         </div>
       )}
     </section>
+  );
+}
+
+function CorrelationPanel({ data }: { data: Record<string, unknown> }) {
+  const summary = (data.summary || {}) as Record<string, unknown>;
+  const variableCorrelations = (data.variable_correlations || {}) as Record<string, any>;
+  const rows = Object.values(variableCorrelations).map((item: any) => ({
+    "Variable 1": item.variable_1,
+    "Variable 2": item.variable_2,
+    "Pearson r": item.pearson?.correlation,
+    "Pearson p": item.pearson?.p_value,
+    "Pearson significant": item.pearson?.significant ? "Yes" : "No",
+    "Spearman rho": item.spearman?.correlation,
+    "Spearman p": item.spearman?.p_value,
+    "Spearman significant": item.spearman?.significant ? "Yes" : "No",
+    N: item.n_samples,
+    Description: item.description
+  })).sort((a, b) => Math.abs(toNumber(b["Pearson r"])) - Math.abs(toNumber(a["Pearson r"])));
+
+  const strengthRows = rows.slice(0, 12).map((row) => ({
+    label: `${row["Variable 1"]} / ${row["Variable 2"]}`,
+    value: Math.abs(toNumber(row["Pearson r"]))
+  }));
+
+  return (
+    <div className="stack">
+      <div>
+        <h2>Correlation analysis</h2>
+        <p>Pearson and Spearman relationships between returned trend variables.</p>
+      </div>
+      <div className="metric-strip">
+        <MetricCard label="Variables" value={formatNumber(summary.total_variables, 0)} icon={Database} />
+        <MetricCard label="Correlations" value={formatNumber(summary.total_correlations, 0)} icon={BarChart3} />
+        <MetricCard label="Strong" value={formatNumber(summary.strong_correlations, 0)} icon={AlertTriangle} tone="danger" />
+        <MetricCard label="Moderate" value={formatNumber(summary.moderate_correlations, 0)} icon={Activity} />
+      </div>
+      <div className="content-grid">
+        <div className="span-5">
+          <h3>Top relationship strength</h3>
+          <SimpleBarChart rows={strengthRows} labelKey="label" valueKey="value" />
+        </div>
+        <div className="span-7">
+          <h3>Correlation table</h3>
+          <DataTable rows={rows} maxRows={20} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -693,6 +899,11 @@ function AnalyticsPanel() {
             <h2>Analytics and validation</h2>
             <p>Compare safety index thresholds against crash proximity and weather patterns.</p>
           </div>
+        </div>
+        <div className="explain-grid">
+          <InfoItem label="Risk threshold" value="Classifies high-risk intervals" detail="Used to compute precision, recall, F1, and confusion-matrix counts." />
+          <InfoItem label="Proximity radius" value="Crash matching distance" detail="Crashes within the selected radius are treated as related to an intersection." />
+          <InfoItem label="Correlations" value="Pearson and Spearman" detail="Validate whether safety scores increase with observed crash occurrence." />
         </div>
         <div className="form-grid">
           <label><span>Start date</span><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></label>
@@ -796,6 +1007,11 @@ function SensitivityPanel() {
             <h2>Sensitivity analysis</h2>
             <p>Validate that RT-SI rankings stay stable under parameter perturbation.</p>
           </div>
+        </div>
+        <div className="explain-grid">
+          <InfoItem label="Baseline" value="Standard RT-SI parameters" detail="Scores from the unmodified model become the comparison reference." />
+          <InfoItem label="Perturbation" value="Random parameter variation" detail="Tests beta, scaling, shrinkage, and VRU/vehicle blend robustness." />
+          <InfoItem label="Robustness target" value="Stable ranking and tiers" detail="High Spearman rho and low tier changes indicate reliable prioritization." />
         </div>
         <div className="form-grid">
           <label><span>Intersection</span><select value={intersection} onChange={(e) => setIntersection(e.target.value)}>{intersections.map((name) => <option key={name}>{name}</option>)}</select></label>
@@ -987,11 +1203,16 @@ function ChatDock({ alpha }: { alpha: number }) {
       </div>
 
       <div className="prompt-grid">
-        {examplePrompts.slice(0, 4).map((prompt) => (
+        {examplePrompts.map((prompt) => (
           <button key={prompt} type="button" onClick={() => void send(prompt)}>
             {prompt}
           </button>
         ))}
+      </div>
+
+      <div className="assistant-note">
+        <strong>Grounding</strong>
+        <span>SafetyChat sends conversation history to the VTTSI backend and includes alpha={alpha.toFixed(1)} for blended score calculations.</span>
       </div>
 
       <div className="chat-messages">
@@ -1045,6 +1266,112 @@ function MetricCard({
   );
 }
 
+function InfoItem({
+  label,
+  value,
+  detail,
+  tone
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone?: "good" | "warn";
+}) {
+  return (
+    <div className={tone ? `info-item ${tone}` : "info-item"}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{detail}</p>
+    </div>
+  );
+}
+
+function MethodologyPanel({ alpha }: { alpha: number }) {
+  return (
+    <div className="panel methodology-panel">
+      <div>
+        <h2>Index guide</h2>
+        <p>How to read the dashboard values.</p>
+      </div>
+      <div className="methodology-list">
+        <div>
+          <strong>Blended safety index</strong>
+          <span>{alpha.toFixed(1)} x RT-SI + {(1 - alpha).toFixed(1)} x MCDM. Higher values mean more dangerous intersections.</span>
+        </div>
+        <div>
+          <strong>RT-SI</strong>
+          <span>Real-time safety index from current traffic, speed patterns, conflicts, and Empirical Bayes stabilization.</span>
+        </div>
+        <div>
+          <strong>MCDM</strong>
+          <span>Long-term prioritization using CRITIC weighting plus SAW, EDAS, and CODAS method scores.</span>
+        </div>
+        <div>
+          <strong>Risk tiers</strong>
+          <span>Low under 60, medium from 60 to 75, high at 75 and above.</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SingleTimeBreakdown({ data, alpha }: { data: Record<string, unknown>; alpha: number }) {
+  const finalIndex = blendScore(data.mcdm_index ?? data.safety_score, data.rt_si_score, alpha);
+  return (
+    <div className="stack">
+      <div className="metric-strip">
+        <MetricCard label="Final safety index" value={formatNumber(finalIndex, 2)} icon={Gauge} />
+        <MetricCard label="RT-SI score" value={formatNumber(data.rt_si_score, 2)} icon={Layers} />
+        <MetricCard label="MCDM index" value={formatNumber(data.mcdm_index, 2)} icon={ShieldCheck} />
+        <MetricCard label="RT-SI weight" value={`${Math.round(alpha * 100)}%`} icon={SlidersHorizontal} />
+      </div>
+
+      <div className="content-grid">
+        <div className="subpanel span-4">
+          <h3>Traffic metrics</h3>
+          <KeyValueGrid
+            data={{
+              "Vehicle count": data.vehicle_count,
+              "VRU count": data.vru_count,
+              Incidents: data.incident_count,
+              "Near misses": data.near_miss_count,
+              "Average speed": data.avg_speed === undefined ? "N/A" : `${formatNumber(data.avg_speed, 1)} mph`,
+              "Speed variance": formatNumber(data.speed_variance, 1)
+            }}
+          />
+        </div>
+        <div className="subpanel span-4">
+          <h3>RT-SI sub-indices</h3>
+          <KeyValueGrid
+            data={{
+              "VRU index": formatNumber(data.vru_index, 4),
+              "Vehicle index": formatNumber(data.vehicle_index, 4),
+              "Raw crash rate": formatNumber(data.raw_crash_rate, 4),
+              "EB crash rate": formatNumber(data.eb_crash_rate, 4),
+              "Uplift factor": formatNumber(data.uplift_factor, 4)
+            }}
+          />
+        </div>
+        <div className="subpanel span-4">
+          <h3>MCDM methods</h3>
+          <KeyValueGrid
+            data={{
+              "SAW score": formatNumber(data.saw_score, 2),
+              "EDAS score": formatNumber(data.edas_score, 2),
+              "CODAS score": formatNumber(data.codas_score, 2),
+              "Blend formula": `${alpha.toFixed(1)} x RT-SI + ${(1 - alpha).toFixed(1)} x MCDM`
+            }}
+          />
+        </div>
+        <div className="subpanel span-12">
+          <h3>Raw API fields</h3>
+          <DataTable rows={[data]} maxRows={1} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GeoPlot({
   intersections,
   selected,
@@ -1077,7 +1404,7 @@ function GeoPlot({
         const y = (1 - (lat - minLat) / Math.max(maxLat - minLat, 0.0001)) * 78 + 11;
         const score = scoreOf(item);
         const risk = riskLevel(score);
-        const radius = 14 + (toNumber(item.traffic_volume, 0) / maxVolume) * 22;
+        const radius = 10 + (toNumber(item.traffic_volume, 0) / maxVolume) * 20;
         const active = selected?.intersection_id === item.intersection_id;
         return (
           <button

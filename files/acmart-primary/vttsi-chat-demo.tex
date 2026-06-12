@@ -60,18 +60,22 @@
 \begin{abstract}
 We present \textbf{VTTSI-Chat}, a cloud-native agentic GeoAI system that
 pairs the Virginia Tech Transportation Safety Index (VTTSI)---a hybrid
-Real-Time Safety Index (RT--SI) and CRITIC-weighted MCDM pipeline---with a
-\textbf{SafetyChat} conversational module powered by a tool-augmented GPT-4o.
+Real-Time Safety Index (RT--SI) and CRITIC-weighted MCDM pipeline---with an
+integrated Vite React dashboard and a \textbf{SafetyChat} conversational
+module powered by a tool-augmented GPT-4o.
 VTTSI fuses seven years of VDOT crash records via Empirical Bayes
 stabilization with live J2735 connected-vehicle telemetry stored in a
 PostGIS spatial database, producing interpretable 0--100 safety scores at
 15-minute resolution across 18 geospatially registered intersections in
 Falls Church, VA (three currently streaming live telemetry; the remaining
 fifteen are wired into the pipeline and awaiting sensor activation).
-SafetyChat exposes six typed API tools to the LLM, grounding all natural
-language responses in live geospatial data and enabling TMC operators,
-planners, and emergency responders to query causal safety narratives through
-ordinary conversation.
+The production dashboard combines live KPI cards, an OpenStreetMap risk map,
+analytics/validation, sensitivity analysis, a database explorer, and the
+chat interface in one operational workspace.
+SafetyChat exposes six typed API tools to the LLM, including a guarded
+read-only SQL tool, grounding all natural language responses in live
+geospatial data and enabling TMC operators, planners, and emergency
+responders to query causal safety narratives through ordinary conversation.
 A live deployment at
 \url{https://safety-index-frontend-180117512369.europe-west1.run.app/}
 demonstrates four end-to-end use cases and is available for interactive
@@ -111,7 +115,7 @@ exploration at the conference.
 
 \keywords{agentic GeoAI, traffic safety, spatio-temporal safety index,
   natural language interface, MCDM, Empirical Bayes, connected vehicles,
-  PostGIS, tool-augmented LLM}
+  PostGIS, Vite dashboard, tool-augmented LLM}
 
 \maketitle
 
@@ -160,10 +164,21 @@ spatial safety data.
   this demo paper; the blue/green/yellow left pathway shows the existing
   safety-index pipeline.}
 \label{fig:architecture}
+\Description{Layered architecture connecting web users to a Vite React
+dashboard, FastAPI safety and chat APIs, MCDM, RT-SI and chat services,
+OpenAI function calling, Cloud SQL PostGIS tables, and external VTTI/VDOT
+data sources.}
 \end{figure*}
 
-The VTTSI backend (FastAPI on Google Cloud Run) computes two complementary
-safety indices every 15 minutes.
+The VTTSI production deployment consists of a Vite React frontend served from
+Google Cloud Run, a FastAPI backend on Cloud Run, and Cloud SQL for
+PostgreSQL/PostGIS.
+The backend computes two complementary safety indices every 15 minutes and
+exposes them through typed REST endpoints consumed by both dashboard panels
+and SafetyChat tools.
+Frequently requested read endpoints use per-instance caching with a graceful
+in-memory fallback, reducing repeated dashboard and chat lookups without
+introducing an external cache dependency.
 Six real-time tables stream from the VTTI Trino connected-vehicle system into
 Cloud SQL PostGIS: \texttt{bsm} (J2735 Basic Safety Messages: position,
 speed, braking), \texttt{psm} (Personal Safety Messages from VRUs),
@@ -242,14 +257,18 @@ $(lat_i, lon_i)$ and an axis-aligned bounding box $B_i$
 ($\delta\!\approx\!0.001^{\circ}$, $\approx$111\,m) in PostGIS.
 The one-time spatial join materialises per-site counts $C_{i,s}$ (Eq.~(1))
 as a static lookup table.
-The Streamlit Dashboard polls \texttt{/api/v1/safety/index} every five
-minutes and recolors each \texttt{folium.CircleMarker}---\textcolor{green!60!black}{green}
-($\mathrm{SI}<60$), \textcolor{orange!80!black}{amber} (60--75),
-\textcolor{red}{red} ($>75$)---with radius proportional to traffic volume,
+The Vite dashboard polls \texttt{/api/v1/safety/index} and renders an
+OpenStreetMap-backed risk map with geocoded intersection markers.
+Marker color encodes risk tier---\textcolor{green!60!black}{green}
+(low), \textcolor{orange!80!black}{amber} (medium), and
+\textcolor{red}{red} (high)---while marker size tracks traffic volume,
 giving operators a dual spatial encoding of risk and exposure.
 An interactive $\alpha$-blending slider lets operators shift the final index
-between the historical-risk (RT--SI) and operational-anomaly (MCDM) poles
-in real time (Figure~\ref{fig:demo-screenshots}a).
+between the historical-risk (RT--SI) and operational-anomaly (MCDM) poles in
+real time.
+The same workspace exposes trend analysis, crash-proximity validation,
+sensitivity analysis, database exploration, and a persistent SafetyChat dock
+(Figure~\ref{fig:demo-screenshots}).
 
 % ─────────────────────────────────────────────────────────
 \section{SafetyChat: LLM-Powered Explanation Module}
@@ -275,7 +294,11 @@ component;
 (5)~\texttt{get\_trend\_data} --- 7--30 day MCDM trend with sampled
 snapshots;
 (6)~\texttt{run\_sql\_query} --- read-only ad-hoc SQL over the PostGIS
-database, write-guarded.
+database, guarded against write/DDL keywords, SQL comments, and multiple
+statements.
+Backend service paths that query the local application database use
+SQLAlchemy statements/models where available; external VTTI and Trino query
+paths use parameter binding, allowlisted identifiers, or literal escaping.
 
 Table~\ref{tbl:comparison} positions VTTSI-Chat against related systems.
 
@@ -313,10 +336,35 @@ The live demo runs against the production VTTSI deployment monitoring 18
 intersections in Falls Church, VA (three currently streaming live
 connected-vehicle telemetry; the remaining fifteen are spatially registered
 and pipelined but awaiting sensor activation).
-Conference attendees interact directly with the SafetyChat interface via
-a browser, typing natural language queries and observing LLM tool-call traces
-in real time alongside the companion Streamlit geospatial dashboard.
+Conference attendees interact directly with the Vite dashboard in a browser:
+the operations view shows live KPIs, the network risk map, selected-site
+details, and a priority queue, while the right-side SafetyChat dock remains
+available across analysis panels.
 Four canonical use cases guide the session.
+
+\begin{figure*}[t]
+\centering
+\begin{minipage}[t]{0.48\textwidth}
+  \includegraphics[width=\textwidth]{vite-dashboard-chat.png}\\[-0.2ex]
+  {\small\textit{(a) Integrated Vite dashboard: KPI cards, OpenStreetMap
+  network risk map, selected-site details, priority queue, $\alpha$-blend
+  control, and persistent SafetyChat dock.}}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}
+  \includegraphics[width=\textwidth]{vite-validation.png}\\[-0.2ex]
+  {\small\textit{(b) Validation panel: crash matching radius, risk threshold,
+  Pearson/Spearman correlation checks, and direct access to SafetyChat in the
+  same operational workspace.}}
+\end{minipage}
+\caption{Live VTTSI-Chat demonstration after the Vite migration:
+  (a)~integrated operations dashboard with map and chat combined;
+  (b)~analytics/validation workflow retained inside the same interface.}
+\label{fig:demo-screenshots}
+\Description{Two screenshots of the deployed Vite dashboard. The first shows
+KPI cards, an OpenStreetMap risk map, an alpha blend control, selected-site
+details, a priority queue, and SafetyChat. The second shows the validation
+panel with risk threshold and crash matching controls next to SafetyChat.}
+\end{figure*}
 
 \subsection{UC1: TMC Operator Morning Briefing}
 \textit{Query:} \emph{``Give me a morning safety briefing for all
@@ -325,7 +373,7 @@ SafetyChat chains \texttt{compare\_intersections} and
 \texttt{get\_component\_breakdown} for the two highest-ranked sites,
 delivering a situational-awareness narrative identifying peak-risk windows
 and dominant criteria (e.g., speed variance, VRU counts).
-Where the Streamlit dashboard requires navigating multiple spatial charts,
+Where a dashboard alone requires navigating multiple spatial charts,
 SafetyChat synthesizes multi-intersection data into a single paragraph.
 If the LLM backend is unavailable, this use case degrades gracefully to a
 deterministic briefing computed directly from the latest safety scores, so
@@ -354,26 +402,21 @@ mean/max/min MCDM scores into plain-language risk levels with a trend
 direction indicator, making geospatial safety data accessible to
 non-technical stakeholders.
 
-\begin{figure*}[t]
-\centering
-\begin{minipage}[t]{0.48\textwidth}
-  \includegraphics[height=1.6in,keepaspectratio,width=\textwidth]{../screenshot_dashboard.png}\\[-0.2ex]
-  {\small\textit{(a) Dashboard: interactive Folium map with 18 monitored
-  intersections (Falls Church, VA), real-time KPI cards (Avg Index 1.8,
-  0 High-Risk sites, 2.0\,K traffic volume), and $\alpha$-blending slider.}}
-\end{minipage}\hfill
-\begin{minipage}[t]{0.48\textwidth}
-  \includegraphics[height=1.6in,keepaspectratio,width=\textwidth]{../screenshot_safetychat_uc3_clean.png}\\[-0.2ex]
-  {\small\textit{(b) SafetyChat (UC3): emergency routing query---GPT-4o
-  calls \texttt{compare\_intersections} and returns Birch \& W.\,Broad as
-  the safest crossing (blended score 0.0) for immediate vehicle dispatch.}}
-\end{minipage}
-\caption{Live VTTSI-Chat demonstration: (a)~geospatial dashboard providing
-  system-wide situational awareness; (b)~SafetyChat natural-language response
-  grounding an emergency routing recommendation in live blended safety
-  indices.}
-\label{fig:demo-screenshots}
-\end{figure*}
+\subsection{Operational Hardening and Test Coverage}
+
+The current implementation includes regression tests for both local and
+cloud-deployed behavior.
+Backend tests cover the chat tool dispatcher, the guarded SQL tool,
+SQL-injection regressions, cache behavior, configuration, and API service
+paths.
+Cloud smoke tests exercise health, OpenAPI, safety-index retrieval,
+intersection catalog, range queries, and chat tools against the production
+Cloud Run endpoint.
+Playwright cloud UI tests verify that the Vite dashboard loads live backend
+data, the OpenStreetMap tile layer and markers render, top-level UI regions
+do not overlap, and all major panels remain reachable.
+The latest local backend suite contains 73 passing tests, while the cloud
+test sets contain 7 backend smoke tests and 4 frontend UI tests.
 
 \begin{table}[t]
 \centering

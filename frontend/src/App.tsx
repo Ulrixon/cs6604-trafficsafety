@@ -1001,13 +1001,14 @@ function AnalyticsPanel() {
   const [series, setSeries] = useState<Record<string, unknown>[]>([]);
   const [weather, setWeather] = useState<Record<string, unknown>[]>([]);
   const [validationSource, setValidationSource] = useState<"backend" | "derived" | "none">("none");
+  const [demoMode, setDemoMode] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const run = async () => {
     setLoading(true);
     setStatus(null);
-    const params = { start_date: startDate, end_date: endDate, proximity_radius: radius };
+    const params = { start_date: startDate, end_date: endDate, proximity_radius: radius, demo: demoMode };
     const [metricResult, scatterResult, timeResult, weatherResult] = await Promise.allSettled([
       fetchJson<Record<string, unknown>>("/analytics/correlation", { ...params, threshold }),
       fetchJson<Record<string, unknown>[]>("/analytics/scatter-data", params),
@@ -1031,7 +1032,9 @@ function AnalyticsPanel() {
     setValidationSource(useBackend ? "backend" : derivedMetrics ? "derived" : "none");
 
     const failures = [metricResult, scatterResult, timeResult, weatherResult].filter((result) => result.status === "rejected").length;
-    if (nextMetrics && validationRows.length && !useBackend) {
+    if (demoMode && nextMetrics) {
+      setStatus(`Demo validation generated ${validationRows.length} rows across the selected range.`);
+    } else if (nextMetrics && validationRows.length && !useBackend) {
       setStatus(`Validation metrics derived from ${validationRows.length} plotted rows because backend summary metrics were empty or unavailable.`);
     } else if (nextMetrics) {
       setStatus(failures ? `Validation loaded with ${failures} partial request failure(s).` : "Validation data loaded.");
@@ -1043,20 +1046,29 @@ function AnalyticsPanel() {
     setLoading(false);
   };
 
+  useEffect(() => {
+    void run();
+  }, []);
+
   const applyValidationPreset = (preset: "demo" | "recent" | "crash2024") => {
     if (preset === "demo") {
       setStartDate("2025-11-01");
       setEndDate("2025-11-23");
+      setDemoMode(true);
     } else if (preset === "recent") {
       setStartDate(prior);
       setEndDate(today);
+      setDemoMode(false);
     } else {
       setStartDate("2024-01-01");
       setEndDate("2024-12-31");
+      setDemoMode(false);
     }
   };
 
   const summary = metrics ? validationSummary(metrics) : null;
+  const metricStatus = String(metrics?.data_status || "");
+  const metricWarnings = Array.isArray(metrics?.warnings) ? metrics.warnings.filter(Boolean).join(" ") : "";
 
   return (
     <section className="stack">
@@ -1084,8 +1096,8 @@ function AnalyticsPanel() {
           </button>
         </div>
         <div className="form-grid">
-          <label><span>Start date</span><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></label>
-          <label><span>End date</span><input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} /></label>
+          <label><span>Start date</span><input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setDemoMode(false); }} /></label>
+          <label><span>End date</span><input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setDemoMode(false); }} /></label>
           <label><span>Risk threshold</span><input type="number" value={threshold} min="0" max="100" onChange={(e) => setThreshold(Number(e.target.value))} /></label>
           <label><span>Radius meters</span><input type="number" value={radius} min="100" step="100" onChange={(e) => setRadius(Number(e.target.value))} /></label>
           <button className="primary-button" type="button" onClick={() => void run()} disabled={loading}>
@@ -1112,9 +1124,9 @@ function AnalyticsPanel() {
           <div className="info-band">
             <InfoItem
               label="Metric source"
-              value={validationSource === "backend" ? "Backend summary" : validationSource === "derived" ? "Frontend derived" : "No data"}
-              detail={validationSource === "derived" ? "Computed from returned scatter/time-series rows so the panel does not collapse to placeholder zeros." : "Using the analytics summary returned by the backend."}
-              tone={validationSource === "backend" ? "good" : "warn"}
+              value={metricStatus === "demo" ? "Generated demo data" : validationSource === "backend" ? "Backend summary" : validationSource === "derived" ? "Frontend derived" : "No data"}
+              detail={metricStatus === "demo" ? metricWarnings || "Generated from deterministic demo validation rows." : validationSource === "derived" ? "Computed from returned scatter/time-series rows so the panel does not collapse to placeholder zeros." : "Using the analytics summary returned by the backend."}
+              tone={validationSource === "backend" || metricStatus === "demo" ? "good" : "warn"}
             />
             {summary && <InfoItem label="Interpretation" value={summary.title} detail={summary.detail} tone={summary.tone} />}
             <InfoItem

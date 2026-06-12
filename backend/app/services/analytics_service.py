@@ -27,6 +27,57 @@ from ..schemas.analytics import (
 logger = logging.getLogger(__name__)
 
 
+DEMO_VALIDATION_INTERSECTIONS = [
+    {
+        "intersection_id": 101,
+        "name": "birch_st-w_broad_st",
+        "latitude": 38.893545860190606,
+        "longitude": -77.18864276028934,
+        "risk_bias": 20.0,
+    },
+    {
+        "intersection_id": 105,
+        "name": "e_broad_st-n_washington_st",
+        "latitude": 38.88223323981943,
+        "longitude": -77.17108624034019,
+        "risk_bias": 17.0,
+    },
+    {
+        "intersection_id": 107,
+        "name": "glebe-potomac",
+        "latitude": 38.83269441895485,
+        "longitude": -77.04779677097797,
+        "risk_bias": 8.0,
+    },
+    {
+        "intersection_id": 111,
+        "name": "n_maple_ave-w_broad_st",
+        "latitude": 38.883190450004506,
+        "longitude": -77.17257386986567,
+        "risk_bias": 12.0,
+    },
+    {
+        "intersection_id": 116,
+        "name": "s_west_st-w_broad_st",
+        "latitude": 38.89085382989225,
+        "longitude": -77.18444008981216,
+        "risk_bias": 15.0,
+    },
+    {
+        "intersection_id": 118,
+        "name": "w_annandale_rd-w_broad_st",
+        "latitude": 38.88476273999137,
+        "longitude": -77.1749917802795,
+        "risk_bias": 10.0,
+    },
+]
+
+DEMO_VALIDATION_WARNING = (
+    "Demo validation data was generated deterministically because the persisted "
+    "safety-index interval table has no rows for the public demo window."
+)
+
+
 def _connect_vtti_postgres():
     """Connect to VTTI PostgreSQL, preferring Cloud SQL Unix sockets on Cloud Run."""
     database = os.getenv("VTTI_DB_NAME", "vtsi")
@@ -286,6 +337,114 @@ def get_latest_safety_index_date_range(days: int = 30) -> tuple[date, date]:
         return end_date - timedelta(days=days), end_date
 
 
+def _generate_demo_validation_inputs(
+    start_date: date,
+    end_date: date,
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Generate deterministic demo validation rows.
+
+    The public demo can compute live/current scores on demand, but the analytics
+    endpoints need persisted interval rows. When that table is empty, explicit
+    demo mode uses these labeled rows so the validation UI can show the complete
+    workflow without pretending the data came from production persistence.
+    """
+    if end_date < start_date:
+        return [], []
+
+    indices: List[Dict[str, Any]] = []
+    crashes: List[Dict[str, Any]] = []
+    days = (end_date - start_date).days + 1
+    weather_cycle = ["Clear", "Clear", "Rain", "Cloudy", "Wet pavement"]
+
+    for day_index in range(days):
+        current_day = start_date + timedelta(days=day_index)
+        day_wave = float(np.sin(day_index * 0.72) * 5.5)
+        for hour in (8, 10, 12, 14, 16, 18):
+            hour_pressure = {
+                8: 3.0,
+                10: -2.0,
+                12: 5.0,
+                14: 9.0,
+                16: 16.0,
+                18: 12.0,
+            }[hour]
+            timestamp = datetime.combine(
+                current_day,
+                datetime.min.time(),
+            ).replace(hour=hour)
+
+            for intersection_index, intersection in enumerate(
+                DEMO_VALIDATION_INTERSECTIONS
+            ):
+                periodic = ((day_index + intersection_index * 2 + hour) % 5) * 2.1
+                score = (
+                    31.0
+                    + intersection["risk_bias"]
+                    + hour_pressure
+                    + day_wave
+                    + periodic
+                )
+                combined_index = float(max(0.0, min(100.0, score)))
+                vru_index = float(max(0.0, min(100.0, combined_index * 0.55 + periodic)))
+                vehicle_index = float(
+                    max(0.0, min(100.0, combined_index * 0.72 + hour_pressure))
+                )
+
+                indices.append(
+                    {
+                        "timestamp": timestamp,
+                        "intersection_id": intersection["intersection_id"],
+                        "combined_index": combined_index,
+                        "vru_index": vru_index,
+                        "vehicle_index": vehicle_index,
+                        "traffic_volume": int(
+                            420
+                            + intersection_index * 95
+                            + max(hour_pressure, 0) * 34
+                            + day_index * 7
+                        ),
+                        "vru_count": int(max(0, vru_index // 8)),
+                    }
+                )
+
+                crash_signal = combined_index + ((day_index + hour) % 4) * 3
+                has_crash = crash_signal >= 68 and (
+                    (day_index + intersection_index + hour // 2) % 4 in {0, 1}
+                )
+                if has_crash:
+                    crash_count = 2 if combined_index >= 82 else 1
+                    for crash_number in range(crash_count):
+                        offset = 0.00035 * (crash_number + 1)
+                        crashes.append(
+                            {
+                                "crash_id": (
+                                    f"DEMO-{current_day:%Y%m%d}-"
+                                    f"{intersection['intersection_id']}-{hour}-"
+                                    f"{crash_number + 1}"
+                                ),
+                                "timestamp": timestamp + timedelta(minutes=3 + crash_number),
+                                "latitude": intersection["latitude"] + offset,
+                                "longitude": intersection["longitude"] - offset,
+                                "severity": "Injury" if combined_index >= 78 else "PDO",
+                                "nearest_intersection_id": intersection[
+                                    "intersection_id"
+                                ],
+                                "nearest_intersection_name": intersection["name"],
+                                "distance_to_intersection": 55.0
+                                + crash_number * 22.0,
+                                "weather": weather_cycle[
+                                    (day_index + intersection_index + hour) %
+                                    len(weather_cycle)
+                                ],
+                                "total_injured": 1 if combined_index >= 78 else 0,
+                                "total_killed": 0,
+                            }
+                        )
+
+    return indices, crashes
+
+
 def _safe_divide(numerator: float, denominator: float) -> Optional[float]:
     return numerator / denominator if denominator else None
 
@@ -397,23 +556,33 @@ def get_correlation_metrics(
     start_date: date,
     end_date: date,
     threshold: float = 60.0,
-    proximity_radius: float = 500.0
+    proximity_radius: float = 500.0,
+    demo: bool = False,
 ) -> CorrelationMetrics:
     """
     Compute correlation metrics between safety indices and crashes.
     """
     warnings: List[str] = []
     try:
-        crashes = load_crashes_from_gcp(start_date, end_date, proximity_radius)
-        indices = load_safety_indices(start_date, end_date)
+        if demo:
+            indices, crashes = _generate_demo_validation_inputs(
+                start_date,
+                end_date,
+            )
+            warnings.append(DEMO_VALIDATION_WARNING)
+        else:
+            crashes = load_crashes_from_gcp(start_date, end_date, proximity_radius)
+            indices = load_safety_indices(start_date, end_date)
 
         if not indices:
             return _empty_correlation_metrics(
                 start_date=start_date,
                 end_date=end_date,
                 threshold=threshold,
-                data_status="no_index_data",
-                warnings=["No safety-index intervals were found for the selected date range."],
+                data_status="no_index_data" if not demo else "demo_empty",
+                warnings=warnings + [
+                    "No safety-index intervals were found for the selected date range."
+                ],
             )
 
         if not crashes:
@@ -472,7 +641,7 @@ def get_correlation_metrics(
             accuracy=accuracy,
             pearson_correlation=pearson,
             spearman_correlation=spearman,
-            data_status="ok" if crashes else "no_crash_data",
+            data_status="demo" if demo else ("ok" if crashes else "no_crash_data"),
             warnings=warnings,
             index_interval_count=len(indices),
             crash_event_count=crash_event_count,
@@ -496,21 +665,30 @@ def get_crash_data_for_period(
     start_date: date,
     end_date: date,
     proximity_radius: float = 500.0,
-    limit: int = 1000
+    limit: int = 1000,
+    demo: bool = False,
 ) -> List[CrashDataPoint]:
     """Get crash data for visualization."""
-    crashes = load_crashes_from_gcp(start_date, end_date, proximity_radius, limit)
+    if demo:
+        _, crashes = _generate_demo_validation_inputs(start_date, end_date)
+        crashes = crashes[:limit]
+    else:
+        crashes = load_crashes_from_gcp(start_date, end_date, proximity_radius, limit)
     return [CrashDataPoint(**crash) for crash in crashes]
 
 
 def get_scatter_plot_data(
     start_date: date,
     end_date: date,
-    proximity_radius: float = 500.0
+    proximity_radius: float = 500.0,
+    demo: bool = False,
 ) -> List[ScatterDataPoint]:
     """Get data for scatter plot: Safety Index vs Crash Occurrence."""
-    crashes = load_crashes_from_gcp(start_date, end_date, proximity_radius)
-    indices = load_safety_indices(start_date, end_date)
+    if demo:
+        indices, crashes = _generate_demo_validation_inputs(start_date, end_date)
+    else:
+        crashes = load_crashes_from_gcp(start_date, end_date, proximity_radius)
+        indices = load_safety_indices(start_date, end_date)
 
     if not indices:
         return []
@@ -534,11 +712,20 @@ def get_time_series_with_crashes(
     start_date: date,
     end_date: date,
     intersection_id: Optional[int] = None,
-    proximity_radius: float = 500.0
+    proximity_radius: float = 500.0,
+    demo: bool = False,
 ) -> List[TimeSeriesPoint]:
     """Get time series data with crash overlay."""
-    crashes = load_crashes_from_gcp(start_date, end_date, proximity_radius)
-    indices = load_safety_indices(start_date, end_date, intersection_id)
+    if demo:
+        indices, crashes = _generate_demo_validation_inputs(start_date, end_date)
+        if intersection_id is not None:
+            indices = [
+                row for row in indices
+                if row.get("intersection_id") == intersection_id
+            ]
+    else:
+        crashes = load_crashes_from_gcp(start_date, end_date, proximity_radius)
+        indices = load_safety_indices(start_date, end_date, intersection_id)
 
     if not indices:
         return []
@@ -569,11 +756,15 @@ def get_time_series_with_crashes(
 def get_weather_impact_analysis(
     start_date: date,
     end_date: date,
-    proximity_radius: float = 500.0
+    proximity_radius: float = 500.0,
+    demo: bool = False,
 ) -> List[WeatherImpact]:
     """Analyze crash rates by weather condition."""
-    crashes = load_crashes_from_gcp(start_date, end_date, proximity_radius)
-    indices = load_safety_indices(start_date, end_date)
+    if demo:
+        indices, crashes = _generate_demo_validation_inputs(start_date, end_date)
+    else:
+        crashes = load_crashes_from_gcp(start_date, end_date, proximity_radius)
+        indices = load_safety_indices(start_date, end_date)
 
     if not crashes or not indices:
         return []

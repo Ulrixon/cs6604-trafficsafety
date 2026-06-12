@@ -1,7 +1,7 @@
 # Active Context
 
 **Last Updated**: 2026-05-27  
-**Status**: Production Cloud Run system active | Vite frontend live | FastAPI backend live | Cloud SQL private IP only | per-instance cache enabled
+**Status**: Production Cloud Run system active | Vite frontend live | FastAPI backend live | Cloud SQL private backend path + restricted public IP | per-instance cache enabled
 
 ---
 
@@ -23,10 +23,11 @@
 - Machine: `db-f1-micro`
 - Database: `vtsi`
 - Backend connection mode: private IP `10.75.222.3`
-- Public IP: disabled to avoid public IP reservation billing.
+- Public IP: enabled for external project access, primary IP `35.190.202.90`.
+- Authorized public network currently retained: `68.91.149.114`.
 - Duplicate instance `vttsi`: deleted.
 - Backend Cloud Run uses Direct VPC egress for private ranges and connects with `VTTI_DB_HOST=10.75.222.3`.
-- Do not reintroduce Cloud SQL public IP unless there is a clear, temporary operational need.
+- Do not broaden Cloud SQL authorized networks. Prefer a fixed egress IP or Cloud SQL Auth Proxy/Connector from external projects.
 
 ### Caching
 
@@ -113,8 +114,8 @@ Latest verified result against deployed backend: `7 passed`.
 ### 6. Cloud Cost Controls
 
 - Duplicate Cloud SQL instance `vttsi` removed.
-- Public IP disabled on `vtsi-postgres`.
-- Backend wired to private IP through VPC egress.
+- Public IP re-enabled on `vtsi-postgres` for external project access while preserving restricted authorized networks.
+- Backend remains wired to private IP through VPC egress.
 - Collector service should remain off unless explicitly needed because it can consume Cloud Run cost without useful work.
 
 ---
@@ -163,6 +164,7 @@ npm run build
 - Backend API base: `https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1`
 - Frontend URL: `https://safety-index-frontend-180117512369.europe-west1.run.app`
 - Cloud SQL private host: `10.75.222.3`
+- Cloud SQL public host: `35.190.202.90`
 
 ---
 
@@ -187,6 +189,5 @@ npx playwright install chromium
 1. Keep the production frontend on Vite and avoid adding new Streamlit production features.
 2. If changing backend endpoints, update both local unit tests and cloud smoke tests.
 3. If changing map rendering, run `npm run test:e2e:cloud` and inspect map tile/marker assertions.
-4. If changing database connectivity, preserve private-IP Cloud SQL access and avoid restoring public IP.
+4. If changing database connectivity, preserve private-IP Cloud SQL access for the backend and keep public authorized networks narrow.
 5. Consider a follow-up cleanup for Pydantic V2 warnings and npm audit findings.
-

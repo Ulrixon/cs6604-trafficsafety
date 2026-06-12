@@ -124,6 +124,9 @@ test("dashboard navigation reaches all major cloud-backed panels", async ({ page
   await page.getByRole("button", { name: "Validation" }).click();
   await expect(page.getByRole("heading", { name: "Analytics and validation" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Run validation" })).toBeEnabled();
+  await expect(page.getByText(/Demo validation generated|Generated demo data/)).toBeVisible({
+    timeout: 45_000
+  });
 
   await page.getByRole("button", { name: "Sensitivity" }).click();
   await expect(page.getByRole("heading", { name: "Sensitivity analysis" })).toBeVisible();

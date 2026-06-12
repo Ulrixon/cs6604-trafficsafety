@@ -1,7 +1,7 @@
 # Operational Guide - Traffic Safety Index System
 
 **Last Updated**: 2026-05-27  
-**Status**: Cloud Run production active | Vite frontend active | FastAPI backend active | Cloud SQL private IP only
+**Status**: Cloud Run production active | Vite frontend active | FastAPI backend active | Cloud SQL private backend path + restricted public IP
 
 ---
 
@@ -23,7 +23,8 @@ Cloud Run: cs6604-trafficsafety
 Cloud SQL: vtsi-postgres
     - PostgreSQL 17.9
     - Private IP: 10.75.222.3
-    - Public IP: disabled
+    - Public IP: 35.190.202.90
+    - Public access restricted by authorized networks
 ```
 
 Legacy Streamlit is retained only at `frontend/legacy-streamlit/` for reference.
@@ -48,7 +49,8 @@ Legacy Streamlit is retained only at `frontend/legacy-streamlit/` for reference.
 ## Cloud SQL Operating Rules
 
 - Use private IP `10.75.222.3` from Cloud Run.
-- Public IP is disabled to avoid reservation billing.
+- Public IP is enabled for external project access. Current public host: `35.190.202.90`.
+- Keep authorized networks narrow. Current retained authorized network: `68.91.149.114`.
 - Backend must keep VPC egress configured for private ranges.
 - Do not set `INSTANCE_CONNECTION_NAME` for socket mode unless intentionally reverting the connection strategy.
 - Backend should use literal DB user env binding and secret-backed DB password. Do not expose password values in logs or docs.
@@ -218,7 +220,8 @@ python -m pytest tests/backend/test_sql_safety.py -q
 
 ## Cost-Control Notes
 
-- Keep `vtsi-postgres` public IP disabled unless temporarily needed.
+- `vtsi-postgres` public IP is currently enabled for external project access; this can restore public IP billing.
+- Keep public authorized networks restricted. Do not use `0.0.0.0/0`.
 - Duplicate Cloud SQL instance `vttsi` has been deleted.
 - Collector service can consume money without useful work; keep it disabled unless there is a specific data collection task.
 - Private IP itself does not have the same public IP reservation charge, but VPC/network resources and Cloud SQL instance runtime still have normal costs.
@@ -260,4 +263,3 @@ https://safety-index-frontend-180117512369.europe-west1.run.app
 - `pytest-asyncio` warns about unset default fixture loop scope.
 - Pydantic V2 warns about deprecated `Field(..., env=...)` and `Field(..., example=...)` usage.
 - `npm install` reports 2 moderate audit findings; do not run `npm audit fix --force` without reviewing breaking dependency changes.
-

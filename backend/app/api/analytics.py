@@ -68,6 +68,10 @@ def get_correlation(
         ge=100,
         le=10000,
         description="Maximum distance from intersection in meters (default: 500m)"
+    ),
+    demo: bool = Query(
+        False,
+        description="Generate labeled demo validation data when persisted intervals are unavailable"
     )
 ) -> CorrelationMetrics:
     """
@@ -84,6 +88,7 @@ def get_correlation(
             end_date.isoformat(),
             threshold,
             proximity_radius,
+            demo,
         )
         hit, cached = response_cache.get(
             cache_key, settings.ANALYTICS_CACHE_TTL_SECONDS
@@ -95,7 +100,8 @@ def get_correlation(
             start_date=start_date,
             end_date=end_date,
             threshold=threshold,
-            proximity_radius=proximity_radius
+            proximity_radius=proximity_radius,
+            demo=demo,
         )
 
         response_cache.set(
@@ -130,6 +136,10 @@ def get_crashes(
         ge=1,
         le=10000,
         description="Maximum number of crashes to return"
+    ),
+    demo: bool = Query(
+        False,
+        description="Generate labeled demo crash events"
     )
 ) -> List[CrashDataPoint]:
     """
@@ -143,6 +153,7 @@ def get_crashes(
             end_date.isoformat(),
             proximity_radius,
             limit,
+            demo,
         )
         hit, cached = response_cache.get(
             cache_key, settings.ANALYTICS_CACHE_TTL_SECONDS
@@ -154,7 +165,8 @@ def get_crashes(
             start_date=start_date,
             end_date=end_date,
             proximity_radius=proximity_radius,
-            limit=limit
+            limit=limit,
+            demo=demo,
         )
 
         response_cache.set(
@@ -174,7 +186,11 @@ def get_crashes(
 def get_scatter_data(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
-    proximity_radius: float = Query(500.0)
+    proximity_radius: float = Query(500.0),
+    demo: bool = Query(
+        False,
+        description="Generate labeled demo validation rows"
+    )
 ) -> List[ScatterDataPoint]:
     """
     Get data for scatter plot: Safety Index vs Crash Occurrence.
@@ -188,6 +204,7 @@ def get_scatter_data(
             start_date.isoformat(),
             end_date.isoformat(),
             proximity_radius,
+            demo,
         )
         hit, cached = response_cache.get(
             cache_key, settings.ANALYTICS_CACHE_TTL_SECONDS
@@ -198,7 +215,8 @@ def get_scatter_data(
         data = get_scatter_plot_data(
             start_date=start_date,
             end_date=end_date,
-            proximity_radius=proximity_radius
+            proximity_radius=proximity_radius,
+            demo=demo,
         )
 
         response_cache.set(
@@ -222,7 +240,11 @@ def get_time_series(
         None,
         description="Filter by specific intersection (optional)"
     ),
-    proximity_radius: float = Query(500.0)
+    proximity_radius: float = Query(500.0),
+    demo: bool = Query(
+        False,
+        description="Generate labeled demo validation rows"
+    )
 ) -> List[TimeSeriesPoint]:
     """
     Get time series data with safety indices and crash overlay.
@@ -237,6 +259,7 @@ def get_time_series(
             end_date.isoformat(),
             intersection_id,
             proximity_radius,
+            demo,
         )
         hit, cached = response_cache.get(
             cache_key, settings.ANALYTICS_CACHE_TTL_SECONDS
@@ -248,7 +271,8 @@ def get_time_series(
             start_date=start_date,
             end_date=end_date,
             intersection_id=intersection_id,
-            proximity_radius=proximity_radius
+            proximity_radius=proximity_radius,
+            demo=demo,
         )
 
         response_cache.set(
@@ -268,7 +292,11 @@ def get_time_series(
 def get_weather_analysis(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
-    proximity_radius: float = Query(500.0)
+    proximity_radius: float = Query(500.0),
+    demo: bool = Query(
+        False,
+        description="Generate labeled demo weather-impact rows"
+    )
 ) -> List[WeatherImpact]:
     """
     Get weather impact analysis showing crash rates by weather condition.
@@ -280,6 +308,7 @@ def get_weather_analysis(
             start_date.isoformat(),
             end_date.isoformat(),
             proximity_radius,
+            demo,
         )
         hit, cached = response_cache.get(
             cache_key, settings.ANALYTICS_CACHE_TTL_SECONDS
@@ -290,7 +319,8 @@ def get_weather_analysis(
         data = get_weather_impact_analysis(
             start_date=start_date,
             end_date=end_date,
-            proximity_radius=proximity_radius
+            proximity_radius=proximity_radius,
+            demo=demo,
         )
 
         response_cache.set(

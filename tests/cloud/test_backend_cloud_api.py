@@ -115,6 +115,37 @@ def test_time_range_endpoint_returns_structured_payload(http: requests.Session):
     assert data["metadata"]["bin_minutes"] == 15
 
 
+def test_demo_validation_endpoint_returns_rows(http: requests.Session):
+    metrics = get_json(
+        http,
+        f"{API_URL}/analytics/correlation",
+        params={
+            "start_date": "2025-11-01",
+            "end_date": "2025-11-03",
+            "threshold": 60,
+            "proximity_radius": 500,
+            "demo": "true",
+        },
+    )
+    scatter = get_json(
+        http,
+        f"{API_URL}/analytics/scatter-data",
+        params={
+            "start_date": "2025-11-01",
+            "end_date": "2025-11-03",
+            "proximity_radius": 500,
+            "demo": "true",
+        },
+    )
+
+    assert metrics["data_status"] == "demo"
+    assert metrics["total_intervals"] > 0
+    assert metrics["total_crashes"] > 0
+    assert isinstance(scatter, list)
+    assert len(scatter) > 0
+    assert any(row["had_crash"] for row in scatter)
+
+
 def test_chat_tools_endpoint_is_available_without_openai_call(http: requests.Session):
     data = get_json(http, f"{API_URL}/chat/tools")
 

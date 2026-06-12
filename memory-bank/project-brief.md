@@ -20,5 +20,5 @@ As of 2026-05-27, the project has a deployed Cloud Run backend and a deployed Vi
 - Frontend: `https://safety-index-frontend-180117512369.europe-west1.run.app`
 - Active frontend: Vite React in `frontend/`
 - Legacy frontend: Streamlit archived in `frontend/legacy-streamlit/`
-- Database: Cloud SQL `vtsi-postgres` over private IP only
+- Database: Cloud SQL `vtsi-postgres`; backend uses private IP, public IP is enabled only for restricted external access
 - Validation: local backend tests, cloud backend smoke tests, and Playwright cloud UI tests

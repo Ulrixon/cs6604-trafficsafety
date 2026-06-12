@@ -1,5 +1,5 @@
 % ============================================================
-%  VTTSI Refined System Architecture (with SafetyChat Module)
+%  VTTSI Refined System Architecture (Vite Dashboard with SafetyChat)
 %  Usage: \input{system-architecture} inside a figure* environment
 % ============================================================
 \begin{tikzpicture}[
@@ -9,10 +9,10 @@
     user/.style    ={rectangle, draw, rounded corners=4pt, fill=gray!12,
                      minimum width=15cm, minimum height=0.85cm, align=center},
     page/.style    ={rectangle, draw, rounded corners=3pt, fill=blue!9,
-                     minimum width=2.5cm, minimum height=1.35cm,
+                     minimum width=2.2cm, minimum height=1.35cm,
                      align=center, font=\scriptsize},
     chatpage/.style={rectangle, draw, rounded corners=3pt, fill=orange!22,
-                     minimum width=2.5cm, minimum height=1.35cm,
+                     minimum width=2.2cm, minimum height=1.35cm,
                      align=center, font=\scriptsize},
     api/.style     ={rectangle, draw, rounded corners=3pt, fill=green!9,
                      minimum width=7.8cm, minimum height=1.1cm,
@@ -46,21 +46,23 @@
      \enspace(Web Browsers \ | \ Transportation Agencies \ | \
               Traffic Management Centers)};
 
-% ── TIER 1 : Streamlit Frontend pages ────────────────────────────────────────
-\node[page, below=1.3cm of user, xshift=-5.3cm] (p0)
-    {\textbf{Dashboard}\\Geospatial Map\\$\alpha$-Blend};
+% ── TIER 1 : Vite frontend dashboard panels ─────────────────────────────────
+\node[page, below=1.3cm of user, xshift=-5.8cm] (p0)
+    {\textbf{Operations}\\KPIs + Map\\$\alpha$-Blend};
 \node[page, right=0.2cm of p0] (p1)
     {\textbf{Trend}\\Analysis\\Time-Series};
 \node[page, right=0.2cm of p1] (p2)
     {\textbf{Analytics}\\Validation\\Correlations};
 \node[page, right=0.2cm of p2] (p3)
     {\textbf{Sensitivity}\\Analysis\\Perturbation};
-\node[chatpage, right=0.6cm of p3] (p4)
-    {\textbf{SafetyChat}\\NL Query\\Interface};
+\node[page, right=0.2cm of p3] (p4)
+    {\textbf{Database}\\Explorer\\Read-Only SQL};
+\node[chatpage, right=0.6cm of p4] (p5)
+    {\textbf{SafetyChat}\\Persistent\\Chat Dock};
 
-\node[grpbox, fit=(p0)(p1)(p2)(p3)(p4),
+\node[grpbox, fit=(p0)(p1)(p2)(p3)(p4)(p5),
       label={[font=\small\bfseries, fill=white, inner sep=2pt,
-              rounded corners=2pt]above:{Streamlit Frontend (Google Cloud Run)}}]
+              rounded corners=2pt]above:{Vite React Dashboard (Google Cloud Run)}}]
       (fe_box) {};
 
 % ── TIER 2 : Backend API layer ────────────────────────────────────────────────
@@ -76,7 +78,7 @@
     {\textbf{SafetyChat API}\\
      \textit{(Google Cloud Run)}\\[2pt]
      \texttt{POST /api/v1/chat/}\\
-     Schema validation \& dispatch};
+     Schema validation, cache \& dispatch};
 
 \node[grpbox, fit=(api_main)(api_chat),
       label={[font=\small\bfseries, fill=white, inner sep=2pt,
@@ -103,7 +105,7 @@
      \texttt{get\_historical\_baseline}\\
      \texttt{compare\_intersections}\\
      \texttt{get\_trend\_data}\\
-     \texttt{run\_sql\_query}};
+     guarded \texttt{run\_sql\_query}};
 
 \node[llm, right=0.4cm of chatsvc] (llm)
     {\textbf{OpenAI}\\GPT-4o\\[3pt]
@@ -147,7 +149,7 @@
     ([xshift=-0.3cm]api_main.north);
 
 % SafetyChat page → Chat API
-\draw[arr] (p4.south) -- node[right, font=\scriptsize]{HTTPS / REST}
+\draw[arr] (p5.south) -- node[right, font=\scriptsize]{HTTPS / REST}
     (api_chat.north);
 
 % Safety API → MCDM & RT-SI services

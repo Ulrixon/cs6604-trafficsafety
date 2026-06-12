@@ -753,14 +753,14 @@ The Playwright map test verifies at least one tile image completes with non-zero
 
 ---
 
-### Problem: Backend cannot connect to Cloud SQL after public IP removal
+### Problem: Backend cannot connect to Cloud SQL
 
 **Symptom:** Backend health shows degraded DB status or VTTI DB queries fail.
 
 **Current Expected State:**
 
-- Cloud SQL public IP is disabled.
 - Backend uses private IP `10.75.222.3`.
+- Cloud SQL public IP may be enabled for external access, but the production backend should not depend on it.
 - Cloud Run needs Direct VPC egress for private ranges.
 
 **Checks:**
@@ -776,7 +776,7 @@ gcloud sql instances describe vtsi-postgres \
 
 **Fix Direction:**
 
-Do not re-enable public IP as the first fix. Verify Cloud Run VPC egress and `VTTI_DB_HOST=10.75.222.3` first.
+Do not switch the backend to public IP as the first fix. Verify Cloud Run VPC egress and `VTTI_DB_HOST=10.75.222.3` first.
 
 ---
 

@@ -1,3 +1,8 @@
+%% arXiv submission classification (metadata; set on the arXiv submission form):
+%%   Primary:    cs.CY  (Computers and Society)
+%%   Cross-list: stat.AP (Statistics - Applications)
+%%   Optional:   eess.SY (Systems and Control)
+%% Note: cs.SE (Software Engineering) is NOT recommended as primary.
 \documentclass[conference]{IEEEtran}
 \usepackage{textalpha}
 
@@ -419,7 +424,7 @@ over a log-spaced grid
 
 After extending this grid, the optimal value was found to be
 \[
-\lambda^\star = 10000.
+\lambda^\star = 100000.
 \]
 In production we fix $\lambda = \lambda^\star$ and use the corresponding
 $\hat r^{\text{EB}}_{i,t}(\lambda^\star)$ as the stabilized historical component
@@ -454,8 +459,6 @@ H_{i,t} &= \min\!\left(1,\;k_5\frac{V^{\text{veh}}_{i,t}}{\mathrm{capacity}_i}\r
 \mathrm{SI}^{\text{RT}}_{i,t} \;=\; 100 \times
 \frac{\mathrm{COMB}_{i,t}-\min}{\max-\min}.
 \end{equation}
-
----
 
 \subsection{Decision Matrix and Temporal Aggregation}
 
@@ -702,13 +705,12 @@ with $W_E + W_C + W_S = 1$. In the implementation, we set the
 \emph{Safety Score} equal to this hybrid index (no inversion), so higher values
 correspond directly to higher estimated risk for that intersection and
 15-minute time bin, consistent with hybrid MCDM formulations in transportation
-safety~\cite{Amraji2025CombinedSafetyIndex}. 
-
----
+safety~\cite{Amraji2025CombinedSafetyIndex}.
 
 \subsection{Blended Final Index}
 To harmonize real-time safety with long-term prioritization, we define
 \begin{equation}
+\label{eq:blended-final}
 \mathrm{SI}^{\text{Final}}_{i,t} = \alpha \cdot \mathrm{SI}^{\text{RT}}_{i,t} +
 (1-\alpha)\cdot \overline{\mathrm{SI}}^{\text{MCDM}}_i,
 \end{equation}
@@ -717,8 +719,6 @@ where $\alpha$ tunes the emphasis (e.g., $\alpha=0.7$ for driver-facing dashboar
 \subsubsection{Rationale for a Blended Safety Index}
 
 We blend the real-time MCDM with the historically informed RT–SI index because each captures complementary aspects of risk: RT–SI reflects immediate operational turbulence, while the MCDM index integrates long-term crash patterns and structural exposure. The weighted combination reduces volatility, prevents overreaction to noisy inputs, and produces a more stable and interpretable score for deployment~\cite{montella2020systemic, Amraji2025CombinedSafetyIndex}. Full justification is provided in the Appendix.
-
----
 
 \section{System Design}
 \label{sec:systemdesign}
@@ -1045,10 +1045,10 @@ situational awareness for operators and planners~\cite{Amraji2025CombinedSafetyI
 
 \subsection{Sensitivity Analysis}
 
-Parameter perturbation experiments (\(\pm 25\%\) and \(\pm 50\%\)) showed that RT--SI is
+Parameter perturbation experiments (\(\pm 25\%\)) showed that RT--SI is
 robust to moderate changes in uplift-factor weights, with typical deviations less than one
-point on the 0--100 scale. The index becomes more volatile under extreme parameter
-changes or under very low-volume conditions. These results indicate that the chosen
+point on the 0--100 scale. The index becomes more volatile under very low-volume
+conditions. These results indicate that the chosen
 features capture stable operational signals but also highlight regimes where additional
 context (e.g., conflict topology or multimodal interactions) would improve stability
 \cite{gettman2003ssam, wang2021highres}.
@@ -1203,9 +1203,13 @@ Limitations and Future Work section outlines the evolution from flat numerical s
 toward a relational, agentic, and predictive safety-intelligence architecture.
 
 \section*{Acknowledgment}
-This research paper used AI for assistance in generating content.
+The VTTSI system was developed in collaboration with the Virginia Tech
+Transportation Institute (VTTI). Generative AI tools, including OpenAI ChatGPT
+(GPT-4o) and Anthropic Claude, were used to assist in preparing portions of this
+work, including manuscript text, \LaTeX{} formatting, and code snippets. All
+AI-generated content was reviewed, verified, and edited by the authors, who take
+full responsibility for the accuracy and integrity of the submitted manuscript.
 
-\nocite{*}
 \printbibliography
 
 \vspace{0.5em}
@@ -1213,39 +1217,6 @@ This research paper used AI for assistance in generating content.
 \clearpage
 \appendices
 
-\section{Team Member Contribution Report}
-\label{appendix:contributions}
-
-This section summarizes each team member’s contributions to the final project, consistent with the task assignments outlined in Appendix~A. Each member played a distinct role in the development of the Safety Index (SI) system, contributing across areas such as data engineering, interface design, algorithmic modeling, and exploratory research.
-
-\subsection{Cheng-Shun}
-
-Cheng-Shun has led the core software engineering, system integration, and data processing efforts for the project. He developed the complete backend API using \texttt{FastAPI} and implemented the interactive frontend visualization interface using \texttt{Streamlit}. He also designed and deployed the full data-delivery pipeline connecting raw data sources and database, the backend services, and the frontend dashboards and pages except analytics and validation page.
-
-A major component of his contribution is the end-to-end integration of heterogeneous data streams, BSM/PSM telemetry, vehicle and VRU counts, speed distributions, incident detections, and database resident historical crash records—into a unified visualization platform. Cheng-Shun implemented dynamic visualization modules that display temporal trends, statistical summaries, normalized variable comparisons, and permutation-style overlays of safety-relevant signals to support rapid diagnostic analysis of intersections. That means most of the system architecture show in this report is build by his own.
-
-He implemented the full mathematical formulation of the Safety Index proposed in methodology, including the Empirical Bayes baseline, uplift factors, and the CRITIC-weighted multi-criteria decision-making (MCDM) framework (SAW, EDAS, CODAS) used to compute real-time risk scores. He further integrated these algorithms directly into the backend, enabling automated computation of RT--SI, MCDM, and blended indices for every 15-minute interval.
-
-In addition, Cheng-Shun conducted the complete case-study evaluation and validation and sensitivity analysis for the intersections, generating the full suite of trend plots, correlation matrices, normalized comparisons, and interpretive assessments. This analysis demonstrated that the Safety Index behaves coherently with respect to exposure patterns, near-miss activity, speed variance, and operational anomalies.
-
-\subsection{Jason}
-
-Jason contributed to the architectural design, analytical foundations, and conceptual evolution of the Safety Index framework. He extended the system architecture by designing and implementing the \emph{plug-in data ingestion framework}, enabling new data sources—such as traffic camera imagery and weather feeds—to be incorporated seamlessly into the real-time processing pipeline. This flexible ingestion layer forms the basis for future multi-source expansion as described in the Limitations and Future Work.
-
-Jason performed exploratory data mining on the VTTI data portal and established the methodology used to preprocess and structure the historical crash and real-time telemetry datasets. He refined the initial mathematical structure of the Safety Index, identifying which real-time and historical features were most meaningful based on evidence from prior literature. He also attempted an early implementation of the MCDM and CRITIC algorithms in the backend; while this implementation was later superseded, it informed the final structure of the hybrid scoring pipeline.
-
-In addition to analytic contributions, Jason authored the project's \textbf{research questions}, the \textbf{limitations analysis}, and the \textbf{future-work direction}, including the conceptual design of the Agentic Traffic Safety Knowledge Graph (TS--KG). This agentic KG vision provides a roadmap for extending the system beyond flat numerical features toward relational reasoning, multimodal context, and explainable safety intelligence.
-
-Overall, Jason’s contributions shaped both the theoretical underpinnings and the forward-looking architecture of the VTTSI system, helping define the long-term trajectory of the project.
-
-\subsection{Victory}
-
-Victory has contributed through literature synthesis and conceptual support. She has provided insight into the research framing of the project and is investigating potential \textbf{external variables}—such as environmental, temporal, or behavioral factors—that could enhance the predictive capability of the Safety Index model. Her upcoming tasks involve curating these additional factors and testing their correlation strength against the core VTTI datasets.
-
-\subsection{Contribution Wrap}
-Together, the team has established a solid foundation for the project, with all core system components under active development. Backend services and data pipelines are operational, the analytical framework is being refined, and research integration continues to guide the model’s evolution toward a fully functional and interpretable Safety Index system.
-
-\clearpage
 \section{Backend Service Descriptions}
 \label{appendix:backend-services}
 
@@ -1447,8 +1418,17 @@ W_S \,\mathrm{SAW}_{i,t}.
 \]
 
 \subsubsection{Final Blend}
-The current implementation exposes the real-time and MCDM indices separately.  
-No blending parameter $\alpha$ is applied in the released code. The final index range from 0 to 100 which indicate very safe to very dangerous.
+The released backend computes both the real-time (RT--SI) and MCDM indices and
+combines them into the blended Final Safety Index of
+Eq.~\eqref{eq:blended-final},
+$\mathrm{SI}^{\text{Final}}_{i,t} = \alpha\,\mathrm{SI}^{\text{RT}}_{i,t} +
+(1-\alpha)\,\overline{\mathrm{SI}}^{\text{MCDM}}_i$.
+The blend coefficient defaults to $\alpha = 0.7$ and is exposed both as a
+request parameter on the safety-index API endpoint and as an interactive
+slider in the Streamlit frontend, allowing operators to shift continuously
+between the historical-risk pole (RT--SI, $\alpha\!\to\!1$) and the
+operational-anomaly pole (MCDM, $\alpha\!\to\!0$). The final index ranges from
+0 (very safe) to 100 (very dangerous).
 
 \section{Additional Validation Figures}
 \label{appendix:validation}
@@ -1556,9 +1536,9 @@ Additional information of this sections, including other intersections' results 
 
 \subsection{Other intersections' results}
 
-Figure~\ref{fig:perturbed-rt-si-comparison-birch} and figure~\ref{fig:all-variable-normalized-broad} are perturbation results of other intersections.
+Figure~\ref{fig:perturbed-rt-si-comparison-birch} and figure~\ref{fig:perturbed-rt-si-comparison-broad} are perturbation results of other intersections.
 
-Figure~\ref{fig:rt-si-changes-distribution-broad} and figure~\ref{fig:rt-si-changes-distribution-broad} are distribution of deviations of perturbations in other intersections.
+Figure~\ref{fig:rt-si-changes-distribution-birch} and figure~\ref{fig:rt-si-changes-distribution-broad} are distribution of deviations of perturbations in other intersections.
 
 Figure~\ref{fig:weight-importance-rt-si-birch} and figure~\ref{fig:weight-importance-rt-si-broad} shows importances of different weights in other intersections.
 

@@ -204,7 +204,7 @@ The EB stabilized rate is:
 \begin{equation}
 \hat{r}^{\text{EB}}_{i,t}(\lambda) =
 \frac{Y_{i,t} + \lambda\, r_0}{1 + \lambda},
-\quad \lambda^\star = 10{,}000,
+\quad \lambda^\star = 100{,}000,
 \end{equation}
 where $r_0$ is the global mean rate across all site-bins (2017--2024) and
 $\lambda^\star$ is chosen by minimizing Poisson log-loss on a 2025 hold-out
@@ -220,7 +220,7 @@ U_{i,t} = 1 + \beta_1 F^{\text{spd}}_{i,t}
 with $(\beta_1,\beta_2,\beta_3)=(0.3,0.3,0.4)$.
 VRU and vehicle sub-indices are combined with weights
 $(\omega_{\text{vru}}, \omega_{\text{veh}}) = (0.6, 0.4)$
-and min-max scaled to $\mathrm{SI}^{\text{RT}}\in[0,100]$.
+and capped to $\mathrm{SI}^{\text{RT}}\in[0,100]$.
 
 \subsection{MCDM Safety Index}
 

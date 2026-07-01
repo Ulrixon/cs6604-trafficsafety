@@ -17,9 +17,6 @@
 \newcommand{\cmark}{\ding{51}}
 \newcommand{\xmark}{\ding{55}}
 
-\renewcommand{\textfraction}{0.05}
-\renewcommand{\floatpagefraction}{0.8}
-
 %% ─── ACM Rights & Conference Metadata ───────────────────────────────────────
 \setcopyright{acmlicensed}
 \copyrightyear{2026}
@@ -70,8 +67,8 @@ PostGIS spatial database, producing interpretable 0--100 safety scores at
 Falls Church, VA (three currently streaming live telemetry; the remaining
 fifteen are wired into the pipeline and awaiting sensor activation).
 The production dashboard combines live KPI cards, an OpenStreetMap risk map,
-analytics/validation, sensitivity analysis, a database explorer, and the
-chat interface in one operational workspace.
+trend analysis, sensitivity analysis, a database explorer, and the chat
+interface in one operational workspace.
 SafetyChat exposes six typed API tools to the LLM, including a guarded
 read-only SQL tool, grounding all natural language responses in live
 geospatial data and enabling TMC operators, planners, and emergency
@@ -119,36 +116,23 @@ exploration at the conference.
 
 \maketitle
 
-\sloppy
-\raggedbottom
-
 % ─────────────────────────────────────────────────────────
 \section{Introduction}
 \label{sec:intro}
 
-Geospatial intersection safety data are increasingly available through
-connected-vehicle infrastructure, yet a critical gap remains between
-numerical safety scores and actionable insight for operators.
-TMC practitioners must interpret multi-dimensional spatio-temporal indices
-under time pressure, yet existing dashboards present data without explaining
-causality or suggesting actions.
-Tool-augmented LLMs can reason over structured numerical data to produce
-grounded explanations \cite{toolformer2023}, but prior LLM+traffic work
-targets signal control \cite{llmlight2024} or AV motion planning
-\cite{gptdriver2023,drivevlm2024}---not safety-index explanation for
-infrastructure operators.
-
-\textbf{VTTSI-Chat} closes this gap by pairing the VTTSI hybrid scoring
-pipeline with \textbf{SafetyChat}: a GPT-4o module that issues typed function
-calls to live VTTSI endpoints and returns causal safety narratives via natural
-language dialogue.
-The system operates as an \emph{agentic GeoAI} interface: the LLM agent
-queries live PostGIS-backed safety data, reasons over spatio-temporal
-patterns across 18 geospatially registered intersections, and synthesizes
-evidence-grounded narratives for diverse operator roles.
-VTTSI-Chat is the first system to combine a hybrid EB-stabilized crash index
-with real-time MCDM scoring \emph{and} a natural language interface for
-spatial safety data.
+Connected-vehicle infrastructure increasingly produces real-time
+intersection safety signals, but traffic management center (TMC) operators
+still need explanations, not only numeric scores.
+Prior LLM+traffic systems focus on signal control \cite{llmlight2024} or
+AV planning \cite{gptdriver2023,drivevlm2024}; they do not explain live
+infrastructure safety indices.
+\textbf{VTTSI-Chat} fills this gap with an agentic GeoAI interface that
+pairs the Virginia Tech Transportation Safety Index (VTTSI) with
+\textbf{SafetyChat}, a tool-augmented GPT-4o module that calls typed
+PostGIS-backed API endpoints and returns grounded spatial narratives.
+The live system monitors 18 geospatially registered intersections in Falls
+Church, Virginia, exposes a Vite React dashboard, and supports interactive
+queries for operators, planners, responders, and public stakeholders.
 
 % ─────────────────────────────────────────────────────────
 \section{VTTSI System Overview}
@@ -170,25 +154,20 @@ OpenAI function calling, Cloud SQL PostGIS tables, and external VTTI/VDOT
 data sources.}
 \end{figure*}
 
-The VTTSI production deployment consists of a Vite React frontend served from
-Google Cloud Run, a FastAPI backend on Cloud Run, and Cloud SQL for
-PostgreSQL/PostGIS.
-The backend computes two complementary safety indices every 15 minutes and
-exposes them through typed REST endpoints consumed by both dashboard panels
-and SafetyChat tools.
-Frequently requested read endpoints use per-instance caching with a graceful
-in-memory fallback, reducing repeated dashboard and chat lookups without
-introducing an external cache dependency.
-Six real-time tables stream from the VTTI Trino connected-vehicle system into
-Cloud SQL PostGIS: \texttt{bsm} (J2735 Basic Safety Messages: position,
-speed, braking), \texttt{psm} (Personal Safety Messages from VRUs),
+The deployment uses a Vite React frontend, FastAPI backend, and Cloud SQL
+PostgreSQL/PostGIS, all served from Google Cloud Run.
+Six VTTI Trino streams---\texttt{bsm}, \texttt{psm},
 \texttt{vehicle-count}, \texttt{vru-count}, \texttt{speed-distribution},
-and \texttt{safety-event} (red-light running, intersection conflicts,
-near-miss detections).
-All streams are synchronized into 15-minute bins; a separate VDOT crash
-dataset (2017--2024) is spatially joined to intersections at import time via
-a PostGIS \texttt{ST\_Within} predicate using the VDOT LRS centerline
-network.
+and \texttt{safety-event}---are synchronized into 15-minute bins.
+VDOT crash records from 2017--2024 are spatially joined to intersection
+geofences through PostGIS \texttt{ST\_Within}; overlaps are resolved by
+nearest centroid.
+The backend caches frequent read endpoints, computes two complementary
+indices, and serves both dashboard panels and SafetyChat tools. The complete
+RT--SI/MCDM derivation, including uplift-feature definitions, CRITIC weights,
+SAW/EDAS/CODAS normalization, and parameter validation, is documented in the
+companion VTTSI paper \cite{cusati2025agentickg}; this demo paper restates the
+operational equations needed to understand the live system.
 
 \subsection{Real-Time Safety Index (RT--SI)}
 
@@ -199,44 +178,35 @@ The historical crash rate is:
 r_i = \frac{\sum_{s}\, w_s\, C_{i,s}}{E_i},
 \quad w_{\text{Fatal}}=10,\; w_{\text{Inj}}=3,\; w_{\text{PDO}}=1,
 \end{equation}
-where $C_{i,s}$ are crash counts by severity and $E_i$ is vehicle exposure.
+where $C_{i,s}$ are crash counts by severity and $E_i$ is exposure.
 The EB stabilized rate is:
 \begin{equation}
 \hat{r}^{\text{EB}}_{i,t}(\lambda) =
 \frac{Y_{i,t} + \lambda\, r_0}{1 + \lambda},
 \quad \lambda^\star = 100{,}000,
 \end{equation}
-where $r_0$ is the global mean rate across all site-bins (2017--2024) and
-$\lambda^\star$ is chosen by minimizing Poisson log-loss on a 2025 hold-out
-set.
-Real-time uplift factors---bounded to $[0,1]$---adjust this baseline for
-speed deficit ($F^{\text{spd}}$), speed variance ($F^{\text{var}}$), and
-VRU--vehicle conflict exposure ($F^{\text{conf}}$):
+where $r_0$ is the global mean and $\lambda^\star$ minimizes 2025 hold-out
+Poisson log-loss. Bounded real-time uplift factors adjust this baseline for
+speed deficit, speed variance, and VRU--vehicle conflict exposure:
 \begin{equation}
 U_{i,t} = 1 + \beta_1 F^{\text{spd}}_{i,t}
               + \beta_2 F^{\text{var}}_{i,t}
               + \beta_3 F^{\text{conf}}_{i,t},
 \end{equation}
-with $(\beta_1,\beta_2,\beta_3)=(0.3,0.3,0.4)$.
-VRU and vehicle sub-indices are combined with weights
-$(\omega_{\text{vru}}, \omega_{\text{veh}}) = (0.6, 0.4)$
-and capped to $\mathrm{SI}^{\text{RT}}\in[0,100]$.
+with $(\beta_1,\beta_2,\beta_3)=(0.3,0.3,0.4)$; VRU and vehicle sub-indices
+are blended by $(\omega_{\text{vru}}, \omega_{\text{veh}})=(0.6,0.4)$ and
+capped to $\mathrm{SI}^{\text{RT}}\in[0,100]$.
 
 \subsection{MCDM Safety Index}
 
-A CRITIC-weighted multi-criteria pipeline \cite{Amraji2025CombinedSafetyIndex}
-constructs a decision matrix over five real-time criteria
-(vehicle count, VRU count, average speed, speed variance, incident count)
-for each intersection--time-bin pair.
-CRITIC criterion weights are derived from normalized standard deviations and
-inter-criterion Pearson correlations, recomputed every 24 hours.
-Three MCDM scoring methods---SAW, EDAS, and CODAS---are each computed and
-scaled to $[0,100]$; a second-pass CRITIC aggregation yields the hybrid index
-$\mathrm{SI}^{\text{MCDM}}\in[0,100]$ (higher = higher risk).
-Validation over 18 intersections shows that the three methods achieve
-pairwise Pearson correlations $r\approx0.78$--$0.99$, and RT--SI has a mean
-absolute deviation of $\approx 0.09$ under $\pm25\%$ joint parameter
-perturbation \cite{persaud2007}.
+A CRITIC-weighted MCDM pipeline \cite{Amraji2025CombinedSafetyIndex}
+scores each intersection--time bin over vehicle count, VRU count, average
+speed, speed variance, and incident count.
+SAW, EDAS, and CODAS are scaled to $[0,100]$ and combined by a second CRITIC
+pass into $\mathrm{SI}^{\text{MCDM}}$.
+Across 18 intersections, method correlations are $r\approx0.78$--$0.99$;
+RT--SI changes by only $\approx0.09$ mean absolute points under $\pm25\%$
+joint parameter perturbation \cite{persaud2007}.
 
 \subsection{Blended Final Index}
 
@@ -252,79 +222,44 @@ Scores map to risk levels: 0--40 = low, 41--70 = moderate, 71--100 = high.
 
 \subsection{Geospatial Foundation and Dashboard}
 
-Each of the 18 intersections is registered with a centroid
-$(lat_i, lon_i)$ and an axis-aligned bounding box $B_i$
-($\delta\!\approx\!0.001^{\circ}$, $\approx$111\,m) in PostGIS.
-The one-time spatial join materialises per-site counts $C_{i,s}$ (Eq.~(1))
-as a static lookup table.
-The Vite dashboard polls \texttt{/api/v1/safety/index} and renders an
-OpenStreetMap-backed risk map with geocoded intersection markers.
-Marker color encodes risk tier---\textcolor{green!60!black}{green}
-(low), \textcolor{orange!80!black}{amber} (medium), and
-\textcolor{red}{red} (high)---while marker size tracks traffic volume,
-giving operators a dual spatial encoding of risk and exposure.
-An interactive $\alpha$-blending slider lets operators shift the final index
-between the historical-risk (RT--SI) and operational-anomaly (MCDM) poles in
-real time.
-The same workspace exposes trend analysis, crash-proximity validation,
-sensitivity analysis, database exploration, and a persistent SafetyChat dock
+Each intersection has a centroid and bounding-box geofence
+($\delta\!\approx\!0.001^\circ$, $\approx$111 m).
+The Vite dashboard polls \texttt{/api/v1/safety/index}, renders an
+OpenStreetMap risk map, colors markers by risk tier, scales markers by
+traffic volume, and exposes an $\alpha$ slider, trend analysis, sensitivity
+analysis, database exploration, and a persistent SafetyChat dock
 (Figure~\ref{fig:demo-screenshots}).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{vite-dashboard-chat.png}\\[-0.4ex]
+{\scriptsize\textit{(a) Operations dashboard with map and SafetyChat dock.}}\\[0.4ex]
+\includegraphics[width=\columnwidth]{vite-trends.png}\\[-0.4ex]
+{\scriptsize\textit{(b) Trend analysis panel in the same workspace.}}
+\caption{Live VTTSI-Chat demonstration after the Vite migration:
+  (a)~integrated operations dashboard with map and chat combined;
+  (b)~trend-analysis workflow retained inside the same interface.}
+\label{fig:demo-screenshots}
+\Description{Two screenshots of the deployed Vite dashboard. The first shows
+KPI cards, an OpenStreetMap risk map, an alpha blend control, selected-site
+details, a priority queue, and SafetyChat. The second shows the trend
+analysis panel with time-range controls, summary metrics, a safety-index
+trend chart, and SafetyChat.}
+\end{figure}
 
 % ─────────────────────────────────────────────────────────
 \section{SafetyChat: LLM-Powered Explanation Module}
 \label{sec:safetychat}
 
-VTTSI already answers \emph{what} the score is; SafetyChat answers \emph{why}
-and \emph{what to do}.
-GPT-4o is equipped with typed function calls \cite{openai_functioncalling}
-that map to VTTSI REST endpoints, grounding every claim in live geospatial
-data.
-An agentic loop (up to six iterations) enables chained calls---e.g., ranking
-all intersections by spatial risk and then drilling into the top site's
-component breakdown.
-The six tools are:
-(1)~\texttt{get\_safety\_score} --- RT--SI, MCDM, and blended scores with
-uplift factors; optional \texttt{target\_time} for historical queries;
-(2)~\texttt{get\_component\_breakdown} --- CRITIC-weighted criteria for a
-15-min bin;
-(3)~\texttt{get\_historical\_baseline} --- EB prior and 7-year crash severity
-breakdown;
-(4)~\texttt{compare\_intersections} --- ranks all sites by any index
-component;
-(5)~\texttt{get\_trend\_data} --- 7--30 day MCDM trend with sampled
-snapshots;
-(6)~\texttt{run\_sql\_query} --- read-only ad-hoc SQL over the PostGIS
-database, guarded against write/DDL keywords, SQL comments, and multiple
-statements.
-Backend service paths that query the local application database use
-SQLAlchemy statements/models where available; external VTTI and Trino query
-paths use parameter binding, allowlisted identifiers, or literal escaping.
-
-Table~\ref{tbl:comparison} positions VTTSI-Chat against related systems.
-
-\begin{table}[t]
-\centering
-\caption{VTTSI-Chat vs.\ Related Systems}
-\label{tbl:comparison}
-\small
-\setlength{\tabcolsep}{3.5pt}
-\begin{tabularx}{\columnwidth}{@{}l c c c c@{}}
-\toprule
-\textbf{System} &
-\textbf{\shortstack{Hybrid\\Index}} &
-\textbf{\shortstack{Real-Time\\Telemetry}} &
-\textbf{\shortstack{LLM\\Interface}} &
-\textbf{\shortstack{Causal\\Narrative}} \\
-\midrule
-Google / Apple Maps              & \xmark & \cmark & \xmark & \xmark \\
-Waycare / ATSPM                  & \xmark & \cmark & \xmark & \xmark \\
-TrafficGPT \cite{trafficgpt2023} & \xmark & \cmark & \cmark & \xmark \\
-LLMLight \cite{llmlight2024}     & \xmark & \cmark & \cmark & \xmark \\
-GPT-Driver \cite{gptdriver2023}  & \xmark & \cmark & \cmark & \xmark \\
-\textbf{VTTSI-Chat (ours)}       & \cmark & \cmark & \cmark & \cmark \\
-\bottomrule
-\end{tabularx}
-\end{table}
+VTTSI answers \emph{what} the score is; SafetyChat answers \emph{why} and
+\emph{what to do}. GPT-4o uses typed function calls
+\cite{openai_functioncalling} in an agentic loop of up to six tool calls.
+The tools expose RT--SI/MCDM/blended scores, component breakdowns,
+historical EB baselines, intersection comparisons, 7--30 day trends, and
+a guarded read-only SQL interface over PostGIS.
+The SQL tool rejects write/DDL keywords, SQL comments, and multiple
+statements; backend paths use SQLAlchemy, parameter binding, allowlisted
+identifiers, or literal escaping as appropriate.
 
 % ─────────────────────────────────────────────────────────
 \section{Demonstration}
@@ -333,164 +268,67 @@ GPT-Driver \cite{gptdriver2023}  & \xmark & \cmark & \cmark & \xmark \\
 \subsection{Demo Setup}
 
 The live demo runs against the production VTTSI deployment monitoring 18
-intersections in Falls Church, VA (three currently streaming live
-connected-vehicle telemetry; the remaining fifteen are spatially registered
-and pipelined but awaiting sensor activation).
-Conference attendees interact directly with the Vite dashboard in a browser:
-the operations view shows live KPIs, the network risk map, selected-site
-details, and a priority queue, while the right-side SafetyChat dock remains
-available across analysis panels.
-Four canonical use cases guide the session.
-
-\begin{figure*}[t]
-\centering
-\begin{minipage}[t]{0.48\textwidth}
-  \includegraphics[width=\textwidth]{vite-dashboard-chat.png}\\[-0.2ex]
-  {\small\textit{(a) Integrated Vite dashboard: KPI cards, OpenStreetMap
-  network risk map, selected-site details, priority queue, $\alpha$-blend
-  control, and persistent SafetyChat dock.}}
-\end{minipage}\hfill
-\begin{minipage}[t]{0.48\textwidth}
-  \includegraphics[width=\textwidth]{vite-validation.png}\\[-0.2ex]
-  {\small\textit{(b) Validation panel: crash matching radius, risk threshold,
-  Pearson/Spearman correlation checks, and direct access to SafetyChat in the
-  same operational workspace.}}
-\end{minipage}
-\caption{Live VTTSI-Chat demonstration after the Vite migration:
-  (a)~integrated operations dashboard with map and chat combined;
-  (b)~analytics/validation workflow retained inside the same interface.}
-\label{fig:demo-screenshots}
-\Description{Two screenshots of the deployed Vite dashboard. The first shows
-KPI cards, an OpenStreetMap risk map, an alpha blend control, selected-site
-details, a priority queue, and SafetyChat. The second shows the validation
-panel with risk threshold and crash matching controls next to SafetyChat.}
-\end{figure*}
-
-\subsection{UC1: TMC Operator Morning Briefing}
-\textit{Query:} \emph{``Give me a morning safety briefing for all
-intersections.''}
-SafetyChat chains \texttt{compare\_intersections} and
-\texttt{get\_component\_breakdown} for the two highest-ranked sites,
-delivering a situational-awareness narrative identifying peak-risk windows
-and dominant criteria (e.g., speed variance, VRU counts).
-Where a dashboard alone requires navigating multiple spatial charts,
-SafetyChat synthesizes multi-intersection data into a single paragraph.
-If the LLM backend is unavailable, this use case degrades gracefully to a
-deterministic briefing computed directly from the latest safety scores, so
-it remains demonstrable even during an API outage.
-
-\subsection{UC2: Causal Safety Explanation for Planners}
-\textit{Query:} \emph{``Why did E.~Broad--N.~Washington score above 70
-yesterday at 5\,PM?''}
-SafetyChat queries \texttt{get\_safety\_score} and
-\texttt{get\_component\_breakdown} at the historical time-bin, identifies
-criteria in the 90th percentile, and traces the elevated score to concurrent
-peak vehicle volume and incident activity.
-
-\subsection{UC3: Emergency Responder Routing}
-\textit{Query:} \emph{``Which of Glebe--Potomac or Birch--W.~Broad has lower
-current risk?''}
-SafetyChat compares live RT--SI, MCDM, and blended indices for both
-intersections and recommends the lower-risk route with reasoning grounded in
-VRU counts and speed variance.
-
-\subsection{UC4: Public Stakeholder Trend Engagement}
-\textit{Query:} \emph{``Is the Glebe--Potomac intersection getting safer over
-time?''}
-SafetyChat calls \texttt{get\_trend\_data} (30-day window) and translates
-mean/max/min MCDM scores into plain-language risk levels with a trend
-direction indicator, making geospatial safety data accessible to
-non-technical stakeholders.
-
-\subsection{Operational Hardening and Test Coverage}
-
-The current implementation includes regression tests for both local and
-cloud-deployed behavior.
-Backend tests cover the chat tool dispatcher, the guarded SQL tool,
-SQL-injection regressions, cache behavior, configuration, and API service
-paths.
-Cloud smoke tests exercise health, OpenAPI, safety-index retrieval,
-intersection catalog, range queries, and chat tools against the production
-Cloud Run endpoint.
-Playwright cloud UI tests verify that the Vite dashboard loads live backend
-data, the OpenStreetMap tile layer and markers render, top-level UI regions
-do not overlap, and all major panels remain reachable.
-The latest local backend suite contains 73 passing tests, while the cloud
-test sets contain 7 backend smoke tests and 4 frontend UI tests.
+Falls Church intersections. Attendees interact with the Vite dashboard in a
+browser; the operations view shows KPIs, network risk, selected-site details,
+priority queue, and SafetyChat, while analysis panels preserve the chat dock.
 
 \begin{table}[t]
 \centering
 \caption{Summary of Demonstration Use Cases}
 \label{tbl:usecases}
 \small
-\begin{tabularx}{\columnwidth}{@{}l X l@{}}
+\begin{tabularx}{\columnwidth}{@{}l X@{}}
 \toprule
-\textbf{Use Case} & \textbf{Key Tool Calls} & \textbf{User} \\
+\textbf{Use Case} & \textbf{Interaction and grounded response} \\
 \midrule
-Morning briefing     & compare + breakdown        & TMC Operator \\
-Causal explanation   & score(t) + breakdown(t)    & Planner \\
-Responder routing    & score $\times$ 2           & Dispatcher \\
-Trend engagement     & get\_trend\_data(30d)      & Official/Public \\
+Morning briefing & Ranks all intersections, drills into the top sites, and
+summarizes peak-risk windows and dominant factors. \\
+Causal explanation & Replays a historical bin and traces a high score to
+vehicle volume, incidents, speed variance, or VRU exposure. \\
+Responder routing & Compares two candidate crossings and recommends the
+lower-risk option using live blended scores. \\
+Trend engagement & Converts 30-day trend statistics into plain-language
+risk direction for public or planning users. \\
 \bottomrule
 \end{tabularx}
 \end{table}
+
+If GPT-4o is unavailable, the briefing degrades to deterministic text from
+latest safety scores. Regression coverage includes 73 local backend tests,
+7 cloud backend smoke tests, and 4 Playwright cloud UI tests checking live
+backend data, map markers, panel reachability, and layout overlap.
 
 % ─────────────────────────────────────────────────────────
 \section{Related Work}
 \label{sec:related}
 
-\textbf{Crash-based and hybrid safety indices.}
-VTTSI's scoring builds on EB-stabilized crash models
-\cite{persaud2007,montella2020systemic}, MCDM-based indices
-\cite{Amraji2025CombinedSafetyIndex,asadamraji2025combined}, and surrogate
-safety indicators \cite{schultz2025_surrogate,gettman2003ssam}.
-Existing hybrid indices produce numerical outputs only, with no conversational
-or geospatial explanation layer.
-
-\textbf{LLMs in transportation.}
+VTTSI builds on EB crash models \cite{persaud2007,montella2020systemic},
+MCDM safety indices \cite{Amraji2025CombinedSafetyIndex,asadamraji2025combined},
+and surrogate safety indicators \cite{schultz2025_surrogate,gettman2003ssam}.
 TrafficGPT \cite{trafficgpt2023}, LLMLight \cite{llmlight2024}, and
-GPT-Driver/DriveVLM \cite{gptdriver2023,drivevlm2024} address flow analysis,
-signal control, and AV planning respectively---none provides a safety-index
-explanation interface for infrastructure operators or operates over a
-PostGIS-backed spatio-temporal dataset.
-
-\textbf{Positioning.}
-VTTSI-Chat is differentiated by combining: (i) a \emph{validated hybrid
-geospatial safety index} fusing long-term crash history with 15-minute
-connected-vehicle telemetry; (ii) a \emph{tool-augmented LLM} that accesses
-live PostGIS-backed API data; and (iii) \emph{causal spatial narratives}
-that trace score components back to raw geospatial signals.
-No existing system offers all three, placing VTTSI-Chat squarely in the
-emerging area of agentic GeoAI and natural language interfaces for spatial
-data.
+GPT-Driver/DriveVLM \cite{gptdriver2023,drivevlm2024} address traffic
+foundation models, signal control, and AV planning, but not conversational
+explanation of a live PostGIS-backed infrastructure safety index.
+VTTSI-Chat uniquely combines a validated hybrid geospatial safety index,
+tool-augmented LLM access to live API data, and causal spatial narratives.
 
 % ─────────────────────────────────────────────────────────
 \section{Conclusion}
 \label{sec:conclusion}
 
-VTTSI-Chat demonstrates a working agentic GeoAI system that delivers causally
-grounded, natural language safety narratives over live spatio-temporal
-intersection data.
-By grounding all LLM outputs in six typed API calls to a PostGIS-backed
-safety pipeline, SafetyChat avoids hallucination while retaining the
-flexibility of conversational interaction over spatial data.
-The spatially-joined crash baseline, bounding-box intersection registry, and
-live 15-minute telemetry together form the \emph{foundational geospatial
-layer} for future work integrating the Agentic Traffic Safety Knowledge Graph
-(TS--KG) \cite{cusati2025agentickg}---enabling the LLM to reason over
-intersection geometry, conflict topology, and causal trajectory motifs,
-advancing the vision of trustworthy, explainable GeoAI for public safety.
+VTTSI-Chat is a working agentic GeoAI system for grounded natural language
+safety narratives over live spatio-temporal intersection data.
+Its spatially joined crash baseline, 15-minute telemetry, guarded LLM tools,
+and Vite dashboard provide a deployable foundation for grounded conversational
+traffic-safety reasoning.
 
 %% Acknowledgments ─────────────────────────────────────────────────────────
 \begin{acks}
-The VTTSI system was developed in collaboration with the Virginia Tech
-Transportation Institute (VTTI).
-Generative AI tools, including OpenAI ChatGPT (GPT-4o) and Anthropic Claude,
-were utilized to assist in generating portions of this work, including
-manuscript text, \LaTeX\ formatting, and code snippets.
-All AI-generated content was reviewed, verified, and edited by the authors,
-who take full responsibility for the accuracy and integrity of the submitted
-manuscript.
+The VTTSI system was developed with the Virginia Tech Transportation
+Institute. Generative AI tools, including OpenAI ChatGPT, GPT-4o, and
+Anthropic Claude, assisted with manuscript text, \LaTeX\ formatting, and
+code snippets. All AI-generated content was reviewed, verified, and edited
+by the authors, who take full responsibility for the submitted manuscript.
 \end{acks}
 
 %% Bibliography ────────────────────────────────────────────────────────────

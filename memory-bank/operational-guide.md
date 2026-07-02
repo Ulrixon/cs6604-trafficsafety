@@ -1,7 +1,7 @@
 # Operational Guide - Traffic Safety Index System
 
-**Last Updated**: 2026-05-27  
-**Status**: Cloud Run production active | Vite frontend active | FastAPI backend active | Cloud SQL private backend path + restricted public IP
+**Last Updated**: 2026-07-02  
+**Status**: Cloud Run production active | Vite frontend active | FastAPI backend active | Cloud SQL private backend path + restricted public IP | SIGSPATIAL demo paper ready
 
 ---
 
@@ -28,6 +28,37 @@ Cloud SQL: vtsi-postgres
 ```
 
 Legacy Streamlit is retained only at `frontend/legacy-streamlit/` for reference.
+
+---
+
+## Demo Paper Submission State
+
+- Active draft: `files/acmart-primary/vttsi-chat-demo.tex`
+- Active PDF: `files/acmart-primary/vttsi-chat-demo.pdf`
+- Venue target: SIGSPATIAL 2026 Demo Track
+- Format state: ACM `sigconf`, two-column, `[Demo]` title suffix, 4 pages including references
+- Public demo URL in paper: `https://safety-index-frontend-180117512369.europe-west1.run.app/`
+- Figure 2 screenshots:
+  - `files/acmart-primary/vite-dashboard-chat.png`
+  - `files/acmart-primary/vite-trends.png`
+- Avoid using the old validation screenshot as primary evidence unless the validation panel is rechecked and completed.
+- Full VTTSI math is not duplicated in the demo paper. The paper summarizes operational RT--SI/MCDM equations and points to `cusati2025agentickg` / arXiv `2606.21154` for the full derivation.
+
+Compile:
+
+```bash
+cd files/acmart-primary
+pdflatex -interaction=nonstopmode -halt-on-error vttsi-chat-demo.tex
+```
+
+Final paper checks:
+
+```bash
+pdfinfo files/acmart-primary/vttsi-chat-demo.pdf
+rg -n "undefined|Rerun|Citation.*undefined|There were undefined|Fatal|Emergency stop" files/acmart-primary/vttsi-chat-demo.log
+```
+
+Known acceptable compile noise: a minor LaTeX vbox warning may remain. Do not accept unresolved citations, cross-reference rerun warnings, missing screenshots, or a PDF longer than 4 pages.
 
 ---
 

@@ -14,7 +14,7 @@ Success is defined as a fully operational API capable of collecting real-time tr
 
 ## Current Production Shape
 
-As of 2026-05-27, the project has a deployed Cloud Run backend and a deployed Vite React dashboard:
+As of 2026-07-02, the project has a deployed Cloud Run backend, a deployed Vite React dashboard, and a submission-ready SIGSPATIAL 2026 demo paper:
 
 - Backend: `https://cs6604-trafficsafety-180117512369.europe-west1.run.app`
 - Frontend: `https://safety-index-frontend-180117512369.europe-west1.run.app`
@@ -22,3 +22,5 @@ As of 2026-05-27, the project has a deployed Cloud Run backend and a deployed Vi
 - Legacy frontend: Streamlit archived in `frontend/legacy-streamlit/`
 - Database: Cloud SQL `vtsi-postgres`; backend uses private IP, public IP is enabled only for restricted external access
 - Validation: local backend tests, cloud backend smoke tests, and Playwright cloud UI tests
+- Demo paper: `files/acmart-primary/vttsi-chat-demo.tex` and `files/acmart-primary/vttsi-chat-demo.pdf`
+- Paper state: ACM `sigconf`, `[Demo]` title suffix, 4 pages including references, GCP-hosted live demo link, Vite dashboard/trends screenshots, and explicit citation to the VTTSI arXiv paper for full RT--SI/MCDM math

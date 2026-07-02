@@ -1,7 +1,7 @@
 # Active Context
 
-**Last Updated**: 2026-05-27  
-**Status**: Production Cloud Run system active | Vite frontend live | FastAPI backend live | Cloud SQL private backend path + restricted public IP | per-instance cache enabled
+**Last Updated**: 2026-07-02  
+**Status**: Production Cloud Run system active | Vite frontend live | FastAPI backend live | Cloud SQL private backend path + restricted public IP | SIGSPATIAL 2026 demo paper submission-ready
 
 ---
 
@@ -43,6 +43,20 @@
 - Production frontend defaults to backend API base `https://cs6604-trafficsafety-180117512369.europe-west1.run.app/api/v1` at build/deploy time.
 - Network risk map uses OpenStreetMap raster tiles and intersection markers in `frontend/src/App.tsx`.
 
+### Demo Paper
+
+- Active submission draft: `files/acmart-primary/vttsi-chat-demo.tex`
+- Active compiled PDF: `files/acmart-primary/vttsi-chat-demo.pdf`
+- Target venue: SIGSPATIAL 2026 Demo Track.
+- Current verified format: ACM `sigconf`, two-column, title includes `[Demo]`, exactly 4 pages including references.
+- Demo URL in paper is hosted on GCP Cloud Run, not local: `https://safety-index-frontend-180117512369.europe-west1.run.app/`
+- Figure 2 uses current Vite UI screenshots:
+  - `files/acmart-primary/vite-dashboard-chat.png`
+  - `files/acmart-primary/vite-trends.png`
+- The previous validation screenshot was removed from Figure 2 because that feature was not fully implemented enough to highlight in the submission.
+- The paper summarizes the operational RT--SI/MCDM formulas and explicitly cites the companion VTTSI arXiv paper for the full derivation: `https://arxiv.org/abs/2606.21154`.
+- The companion citation is `cusati2025agentickg` in `files/reference.bib` and should remain attached to the mechanism/formula discussion, not only to future-work wording.
+
 ### Backend SQL Safety
 
 - Local app database API paths have been refactored away from raw SQL strings toward SQLAlchemy models/statements.
@@ -56,7 +70,18 @@
 
 ## Recent Completed Work
 
-### 1. Vite Frontend Migration and UI Consolidation
+### 1. SIGSPATIAL 2026 Demo Paper Finalization
+
+- Condensed the ACM demo paper to the 4-page SIGSPATIAL demo limit, including references.
+- Verified the title suffix `[Demo]` is present.
+- Preserved live GCP deployment URL, architecture figure, Vite screenshots, use cases, SafetyChat description, testing/hardening summary, AI disclosure, and arXiv VTTSI citation.
+- Replaced the incomplete validation-panel screenshot with a deployed Vite Trends screenshot showing loaded trend data and SafetyChat.
+- Updated architecture wording from `Analytics / Validation / Correlations` to `Analytics / Metrics / Correlations` to avoid foregrounding unfinished validation work.
+- Removed paper text that treated validation as a primary demo feature; current paper emphasizes operations, trend analysis, sensitivity analysis, database exploration, and SafetyChat.
+- Added an explicit pointer near the system/mechanism section to the VTTSI arXiv paper for full RT--SI/MCDM math details.
+- Final local PDF checks showed 4 pages, no unresolved citations, no cross-reference rerun warnings, and only minor LaTeX vbox warnings.
+
+### 2. Vite Frontend Migration and UI Consolidation
 
 - Replaced the production dashboard with Vite React.
 - Kept the original functional areas:
@@ -70,7 +95,7 @@
 - Streamlit is separated into `frontend/legacy-streamlit/`.
 - Build verified with `npm run build`.
 
-### 2. Frontend Map and UI Verification
+### 3. Frontend Map and UI Verification
 
 - Network risk map now renders OpenStreetMap road/city tile background.
 - Added Playwright cloud UI tests under `frontend/e2e/`.
@@ -84,7 +109,7 @@ npm run test:e2e:cloud
 
 Latest verified result: `4 passed`.
 
-### 3. Backend Cloud API Test Set
+### 4. Backend Cloud API Test Set
 
 - Added Cloud Run backend smoke tests under `tests/cloud/`.
 - Tests are skipped by default and enabled with `RUN_CLOUD_TESTS=1`.
@@ -96,13 +121,14 @@ RUN_CLOUD_TESTS=1 python -m pytest tests/cloud -q
 
 Latest verified result against deployed backend: `7 passed`.
 
-### 4. Validation Logic
+### 5. Validation Logic
 
 - Frontend validation panel no longer collapses to placeholder zeros when backend summary metrics are empty.
 - Frontend derives validation metrics from returned scatter/time-series rows when backend summary metrics are missing or unusable.
 - Backend validation endpoints still provide primary analytics where available.
+- Do not highlight the validation panel as the core public demo unless it is rechecked and completed; the paper currently avoids using it as Figure 2 evidence.
 
-### 5. SQL Injection Hardening
+### 6. SQL Injection Hardening
 
 - Refactored local backend DB service paths to SQLAlchemy statements.
 - Hardened database explorer table/column access with allowlists plus `psycopg2.sql.Identifier`.
@@ -111,7 +137,7 @@ Latest verified result against deployed backend: `7 passed`.
 - Added regression tests in `tests/backend/test_sql_safety.py`.
 - Latest local backend verification: `python -m pytest tests/backend -q` passed with `48 passed`.
 
-### 6. Cloud Cost Controls
+### 7. Cloud Cost Controls
 
 - Duplicate Cloud SQL instance `vttsi` removed.
 - Public IP re-enabled on `vtsi-postgres` for external project access while preserving restricted authorized networks.
@@ -154,6 +180,20 @@ cd frontend
 npm run build
 ```
 
+### Demo Paper Compile
+
+```bash
+cd files/acmart-primary
+pdflatex -interaction=nonstopmode -halt-on-error vttsi-chat-demo.tex
+```
+
+Optional final checks:
+
+```bash
+pdfinfo files/acmart-primary/vttsi-chat-demo.pdf
+rg -n "undefined|Rerun|Citation.*undefined|There were undefined|Fatal|Emergency stop" files/acmart-primary/vttsi-chat-demo.log
+```
+
 ---
 
 ## Important Defaults and URLs
@@ -186,8 +226,10 @@ npx playwright install chromium
 
 ## Next Best Actions
 
-1. Keep the production frontend on Vite and avoid adding new Streamlit production features.
-2. If changing backend endpoints, update both local unit tests and cloud smoke tests.
-3. If changing map rendering, run `npm run test:e2e:cloud` and inspect map tile/marker assertions.
-4. If changing database connectivity, preserve private-IP Cloud SQL access for the backend and keep public authorized networks narrow.
-5. Consider a follow-up cleanup for Pydantic V2 warnings and npm audit findings.
+1. Submit `files/acmart-primary/vttsi-chat-demo.pdf` through the SIGSPATIAL 2026 Demo Track portal before the deadline.
+2. Keep the production frontend on Vite and avoid adding new Streamlit production features.
+3. If changing the paper again, recompile and confirm it remains 4 pages including references.
+4. If changing backend endpoints, update both local unit tests and cloud smoke tests.
+5. If changing map rendering or paper screenshots, run `npm run test:e2e:cloud` and inspect map tile/marker assertions.
+6. If changing database connectivity, preserve private-IP Cloud SQL access for the backend and keep public authorized networks narrow.
+7. Consider a follow-up cleanup for Pydantic V2 warnings and npm audit findings.
